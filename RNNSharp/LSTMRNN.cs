@@ -240,15 +240,34 @@ namespace RNNSharp
             fo.Close();
         }
 
+
+        double activationFunctionH(double x)
+        {
+            //sigmoid function return a bounded output between [-2,2]
+            //return (4 / (1 + Math.Exp(-x))) - 2;
+            return Math.Tanh(x);
+        }
+
+        double hPrime(double x)
+        {
+            //  return 4 * activationFunctionF(x) * (1 - activationFunctionF(x));
+            double tmp = Math.Tanh(x);
+            return 1 - tmp * tmp;
+        }
+
+
         double activationFunctionG(double x)
         {
             //sigmoid function return a bounded output between [-2,2]
-            return (4 / (1 + Math.Exp(-x))) - 2;
+            //return (4 / (1 + Math.Exp(-x))) - 2;
+            return Math.Tanh(x);
         }
 
         double gPrime(double x)
         {
-            return 4 * activationFunctionF(x) * (1 - activationFunctionF(x));
+          //  return 4 * activationFunctionF(x) * (1 - activationFunctionF(x));
+            double tmp = Math.Tanh(x);
+            return 1 - tmp * tmp;
         }
 
         double activationFunctionF(double x)
@@ -507,10 +526,10 @@ namespace RNNSharp
               }
 
               //using the error find the gradient of the output gate
-              c.gradientOutputGate = fPrime(c.netOut) * c.cellState * weightedSum;
+              c.gradientOutputGate = fPrime(c.netOut) * activationFunctionH(c.cellState) * weightedSum;
 
               //internal cell state error
-              c.cellStateError = c.yOut * weightedSum;
+              c.cellStateError = c.yOut * weightedSum * hPrime(c.cellState);
 
               //weight updates
 
@@ -725,7 +744,7 @@ namespace RNNSharp
                 //squash output gate 
                 cell_j.yOut = activationFunctionF(cell_j.netOut);
 
-                cell_j.cellOutput = cell_j.cellState * cell_j.yOut;
+                cell_j.cellOutput = activationFunctionH(cell_j.cellState) * cell_j.yOut;
 
 
                 neuHidden[j] = cell_j;

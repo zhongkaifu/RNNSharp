@@ -15,8 +15,17 @@ namespace RNNSharp
         {
             if (modeltype == 0)
             {
-                forwardRNN = new SimpleRNN();
-                backwardRNN = new SimpleRNN();
+                SimpleRNN s_forwardRNN = new SimpleRNN();
+                SimpleRNN s_backwardRNN = new SimpleRNN();
+
+                s_forwardRNN.setBPTT(4 + 1);
+                s_forwardRNN.setBPTTBlock(30);
+
+                s_backwardRNN.setBPTT(4 + 1);
+                s_backwardRNN.setBPTTBlock(30);
+
+                forwardRNN = s_forwardRNN;
+                backwardRNN = s_backwardRNN;
             }
             else
             {
@@ -69,13 +78,6 @@ namespace RNNSharp
             backwardRNN.SetMaxIter(_nMaxIter);
         }
 
-        public override void SetDynAlpha(bool b)
-        {
-            m_bDynAlpha = b;
-
-            forwardRNN.SetDynAlpha(b);
-            backwardRNN.SetDynAlpha(b);
-        }
 
         public override void SetCRFTraining(bool b)
         {
@@ -133,7 +135,6 @@ namespace RNNSharp
             }
 
             m_tagBigramTransition = new Matrix(L2, L2);
-            m_tagBigramTransition_alpha = new Matrix(L2, L2);
             m_DeltaBigramLM = new Matrix(L2, L2);
 
             forwardRNN.initMem();
@@ -154,34 +155,40 @@ namespace RNNSharp
             netReset();
             int numStates = pSequence.GetSize();
             predicted_fnn = new int[numStates];
-
-            //Computing forward RNN
-            Matrix mForward = new Matrix(numStates, forwardRNN.L2);
-            for (int curState = 0; curState < numStates; curState++)
-            {
-                State state = pSequence.Get(curState);
-                forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
-                forwardRNN.computeNet(state, mForward[curState]);      //compute probability distribution
-
-                predicted_fnn[curState] = forwardRNN.GetBestOutputIndex();
-
-                forwardRNN.copyHiddenLayerToInput();
-            }
-
-            //Computing backward RNN
             predicted_bnn = new int[numStates];
+            Matrix mForward = new Matrix(numStates, forwardRNN.L2);
             Matrix mBackward = new Matrix(numStates, backwardRNN.L2);
-            for (int curState = numStates - 1; curState >= 0; curState--)
+
+
+
+            Parallel.Invoke(() =>
             {
-                State state = pSequence.Get(curState);
-                backwardRNN.setInputLayer(state, curState, numStates, predicted_bnn, false);
-                backwardRNN.computeNet(state, mBackward[curState]);      //compute probability distribution
+                //Computing forward RNN
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    State state = pSequence.Get(curState);
+                    forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
+                    forwardRNN.computeNet(state, mForward[curState]);      //compute probability distribution
 
-                predicted_bnn[curState] = backwardRNN.GetBestOutputIndex();
+                    predicted_fnn[curState] = forwardRNN.GetBestOutputIndex();
 
-                backwardRNN.copyHiddenLayerToInput();
-            }
+                    forwardRNN.copyHiddenLayerToInput();
+                }
+            },
+             () =>
+             {
+                 //Computing backward RNN
+                 for (int curState = numStates - 1; curState >= 0; curState--)
+                 {
+                     State state = pSequence.Get(curState);
+                     backwardRNN.setInputLayer(state, curState, numStates, predicted_bnn, false);
+                     backwardRNN.computeNet(state, mBackward[curState]);      //compute probability distribution
 
+                     predicted_bnn[curState] = backwardRNN.GetBestOutputIndex();
+
+                     backwardRNN.copyHiddenLayerToInput();
+                 }
+             });
 
             //Merge forward and backward
             Matrix m = new Matrix(numStates, forwardRNN.L2);
@@ -230,31 +237,39 @@ namespace RNNSharp
             forwardRNN.m_Diff = m_Diff;
             backwardRNN.m_Diff = m_Diff;
 
-            double[] output = new double[L2];
-            //Learn forward network
-            for (int curState = 0; curState < numStates; curState++)
+            double[] output_fnn = new double[L2];
+            double[] output_bnn = new double[L2];
+
+
+            Parallel.Invoke(() =>
             {
-                // error propogation
-                State state = pSequence.Get(curState);
-                forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
-                forwardRNN.computeNet(state, output);      //compute probability distribution
+                //Learn forward network
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    // error propogation
+                    State state = pSequence.Get(curState);
+                    forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
+                    forwardRNN.computeNet(state, output_fnn);      //compute probability distribution
 
-                forwardRNN.learnNet(state, curState);
-                forwardRNN.LearnBackTime(state, numStates, curState);
-                forwardRNN.copyHiddenLayerToInput();
-            }
+                    forwardRNN.learnNet(state, curState);
+                    forwardRNN.LearnBackTime(state, numStates, curState);
+                    forwardRNN.copyHiddenLayerToInput();
+                }
+            },
+             () =>
+             {
+                 for (int curState = numStates - 1; curState >= 0; curState--)
+                 {
+                     // error propogation
+                     State state = pSequence.Get(curState);
+                     backwardRNN.setInputLayer(state, curState, numStates, predicted_bnn, false);
+                     backwardRNN.computeNet(state, output_bnn);      //compute probability distribution
 
-            for (int curState = numStates - 1; curState >= 0; curState--)
-            {
-                // error propogation
-                State state = pSequence.Get(curState);
-                backwardRNN.setInputLayer(state, curState, numStates, predicted_bnn, false);
-                backwardRNN.computeNet(state, output);      //compute probability distribution
-
-                backwardRNN.learnNet(state, curState);
-                backwardRNN.LearnBackTime(state, numStates, curState);
-                backwardRNN.copyHiddenLayerToInput();
-            }
+                     backwardRNN.learnNet(state, curState);
+                     backwardRNN.LearnBackTime(state, numStates, curState);
+                     backwardRNN.copyHiddenLayerToInput();
+                 }
+             });
 
             return predicted;
         }

@@ -20,7 +20,6 @@ namespace RNNSharp
 
         protected Matrix mat_bptt_synf = new Matrix();
         protected Matrix mat_hiddenBpttWeight = new Matrix();
-        protected Matrix mat_hiddenBpttWeight_alpha = new Matrix();
 
         public SimpleRNN()
         {
@@ -156,15 +155,14 @@ namespace RNNSharp
                 for (int a = 0; a < L1; a++)
                 {
                     double dg = neuOutput[c].er * neuHidden[a].ac;
-                    double dlr = calcAlpha(mat_hidden2output_alpha, c, a, dg);
 
                     if ((counter % 10) == 0)	//regularization is done every 10. step
                     {
-                        mat_hidden2output[c][a] += dlr * (dg - mat_hidden2output[c][a] * beta);
+                        mat_hidden2output[c][a] += alpha * (dg - mat_hidden2output[c][a] * beta);
                     }
                     else
                     {
-                        mat_hidden2output[c][a] += dlr * dg;
+                        mat_hidden2output[c][a] += alpha * dg;
                     }
                 }
             });
@@ -177,15 +175,14 @@ namespace RNNSharp
                     for (int a = 0; a < fea_size; a++)
                     {
                         double dg = neuOutput[c].er * neuFeatures[a].ac;
-                        double dlr = calcAlpha(mat_feature2output_alpha, c, a, dg);
 
                         if ((counter % 10) == 0)	//regularization is done every 10. step
                         {
-                            mat_feature2output[c][a] += dlr * (dg - mat_feature2output[c][a] * beta);
+                            mat_feature2output[c][a] += alpha * (dg - mat_feature2output[c][a] * beta);
                         }
                         else
                         {
-                            mat_feature2output[c][a] += dlr * dg;
+                            mat_feature2output[c][a] += alpha * dg;
                         }
                     }
                     // probably also need to do regularization
@@ -274,11 +271,11 @@ namespace RNNSharp
             }
 
 
-            UpdateWeights(mat_hiddenBpttWeight, mat_bptt_syn0_ph, mat_hiddenBpttWeight_alpha);
+            UpdateWeights(mat_hiddenBpttWeight, mat_bptt_syn0_ph);
 
             if (fea_size > 0)
             {
-                UpdateWeights(mat_feature2hidden, mat_bptt_synf, mat_feature2hidden_alpha);
+                UpdateWeights(mat_feature2hidden, mat_bptt_synf);
             }
 
             Parallel.For(0, L1, parallelOption, b =>
@@ -292,16 +289,13 @@ namespace RNNSharp
                     for (int i = 0; i < sparse.GetNumberOfEntries(); i++)
                     {
                         int pos = sparse.GetEntry(i).Key;
-
-                        double dlr = calcAlpha(mat_input2hidden_alpha, b, pos, mat_bptt_syn0_w[b][pos]);
-
                         if ((counter % 10) == 0)
                         {
-                            mat_input2hidden[b][pos] += dlr * (mat_bptt_syn0_w[b][pos] - mat_input2hidden[b][pos] * beta);
+                            mat_input2hidden[b][pos] += alpha * (mat_bptt_syn0_w[b][pos] - mat_input2hidden[b][pos] * beta);
                         }
                         else
                         {
-                            mat_input2hidden[b][pos] += dlr * mat_bptt_syn0_w[b][pos];
+                            mat_input2hidden[b][pos] += alpha * mat_bptt_syn0_w[b][pos];
                         }
 
                         mat_bptt_syn0_w[b][pos] = 0;
@@ -364,8 +358,6 @@ namespace RNNSharp
                     mat_hiddenBpttWeight[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
                 }
             }
-
-            mat_hiddenBpttWeight_alpha = new Matrix(L1, L1);
 
             if (bptt > 0)
             {

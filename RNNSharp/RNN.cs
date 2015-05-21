@@ -47,7 +47,6 @@ namespace RNNSharp
         protected MODELTYPE m_modeltype;
         protected MODELDIRECTION m_modeldirection;
         protected string m_strModelFile;
-        protected bool m_bDynAlpha = true;
 
         static Random rand = new Random(DateTime.Now.Millisecond);
 
@@ -73,16 +72,9 @@ namespace RNNSharp
         protected int counterTokenForLM;
 
         protected Matrix mat_input2hidden = new Matrix();
-        protected Matrix mat_input2hidden_alpha = new Matrix();
-        
         protected Matrix mat_hidden2output = new Matrix();
-        protected Matrix mat_hidden2output_alpha = new Matrix();
-
         protected Matrix mat_feature2hidden = new Matrix();
-        protected Matrix mat_feature2hidden_alpha = new Matrix();
-
         protected Matrix mat_feature2output = new Matrix();
-        protected Matrix mat_feature2output_alpha = new Matrix();
 
 
         protected double md_beta = 1.0;
@@ -92,7 +84,6 @@ namespace RNNSharp
 
         // for Viterbi decoding
         public Matrix m_tagBigramTransition;
-        public Matrix m_tagBigramTransition_alpha;
 
         /// for sequence training
         public Matrix m_DeltaBigramLM; // different of tag output tag transition probability, saving p(u|v) in a sparse matrix
@@ -113,7 +104,6 @@ namespace RNNSharp
                 for (int j = 0; j < L2; j++)
                     m_tagBigramTransition[i][j] = m[i][j];
 
-            m_tagBigramTransition_alpha = new Matrix(L2, L2);
         }
 
         //Save matrix into file as binary format
@@ -235,7 +225,6 @@ namespace RNNSharp
         public virtual void SetRegularization(double newBeta) { beta = newBeta; }
         public virtual void SetHiddenLayerSize(int newsize) { L1 = newsize; if (null != m_TrainingSet) L0 = (int)m_TrainingSet.GetSparseDimension() + L1; }
         public virtual void SetModelFile(string strModelFile) { m_strModelFile = strModelFile; }
-        public virtual void SetDynAlpha(bool b) { m_bDynAlpha = b; }
 
         public bool IsCRFModel()
         {
@@ -345,35 +334,20 @@ namespace RNNSharp
                 return predicted;
         }
 
-        // update learning rate per element
-        public double calcAlpha(Matrix mg, int i, int j, double fg)
-        {
-            if (m_bDynAlpha == true)
-            {
-                double dg = mg[i][j] + fg * fg;
-                mg[i][j] = dg;
-                return alpha / (md_beta + Math.Sqrt(dg));
-            }
-            else
-            {
-                return alpha;
-            }
-        }
 
-        public void UpdateWeights(Matrix weights, Matrix delta, Matrix weights_alpha)
+        public void UpdateWeights(Matrix weights, Matrix delta)
         {
             Parallel.For(0, weights.GetHeight(), parallelOption, b =>
             {
                 for (int a = 0; a < weights.GetWidth(); a++)
                 {
-                    double dlr = calcAlpha(weights_alpha, b, a, delta[b][a]);
                     if ((counterTokenForLM % 10) == 0)
                     {
-                        weights[b][a] += dlr * (delta[b][a] - weights[b][a] * beta);
+                        weights[b][a] += alpha * (delta[b][a] - weights[b][a] * beta);
                     }
                     else
                     {
-                        weights[b][a] += dlr * delta[b][a];
+                        weights[b][a] += alpha * delta[b][a];
                     }
 
                     delta[b][a] = 0;
@@ -405,7 +379,7 @@ namespace RNNSharp
             counterTokenForLM++;
 
             //Update tag Bigram LM
-            UpdateWeights(m_tagBigramTransition, m_DeltaBigramLM, m_tagBigramTransition_alpha);
+            UpdateWeights(m_tagBigramTransition, m_DeltaBigramLM);
         }
 
         public int GetBestZIndex(int currStatus)
@@ -628,13 +602,9 @@ namespace RNNSharp
             CreateCells();
 
             mat_input2hidden = new Matrix(L1, L0 - L1);
-            mat_input2hidden_alpha = new Matrix(L1, L0 - L1);
             mat_feature2hidden = new Matrix(L1, fea_size);
-            mat_feature2hidden_alpha = new Matrix(L1, fea_size);
             mat_feature2output = new Matrix(L2, fea_size);
-            mat_feature2output_alpha = new Matrix(L2, fea_size);
             mat_hidden2output = new Matrix(L2, L1);
-            mat_hidden2output_alpha = new Matrix(L2, L1);
 
             Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
             initWeights();
@@ -645,7 +615,6 @@ namespace RNNSharp
             }
 
             m_tagBigramTransition = new Matrix(L2, L2);
-            m_tagBigramTransition_alpha = new Matrix(L2, L2);
             m_DeltaBigramLM = new Matrix(L2, L2);
 
         }

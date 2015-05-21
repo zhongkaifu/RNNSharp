@@ -19,7 +19,7 @@ namespace RNNSharp
         SparseVector m_SparseData = new SparseVector();
 
         //Store dense features, such as word embedding
-        Vector m_spDenseData = new Vector();
+        Vector m_spDenseData = null;
 
         //Store run time features
         PriviousLabelFeature[] m_RuntimeFeatures;

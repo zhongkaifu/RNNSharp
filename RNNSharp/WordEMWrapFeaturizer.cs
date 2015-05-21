@@ -9,8 +9,8 @@ namespace RNNSharp
     public class WordEMWrapFeaturizer
     {
         public int vectorSize;
-        public Dictionary<string, Vector> m_WordEmbedding;
-        public Vector m_UnkEmbedding;
+        public Dictionary<string, SingleVector> m_WordEmbedding;
+        public SingleVector m_UnkEmbedding;
 
         public WordEMWrapFeaturizer(string filename)
         {
@@ -20,8 +20,8 @@ namespace RNNSharp
             string[] terms = decoder.GetAllTerms();
             vectorSize = decoder.GetVectorSize();
 
-            m_WordEmbedding = new Dictionary<string, Vector>();
-            m_UnkEmbedding = new Vector(vectorSize);
+            m_WordEmbedding = new Dictionary<string, SingleVector>();
+            m_UnkEmbedding = new SingleVector(vectorSize);
 
             foreach (string term in terms)
             {
@@ -29,7 +29,7 @@ namespace RNNSharp
 
                 if (vector != null)
                 {
-                    Vector spVector = new Vector(vectorSize, vector);
+                    SingleVector spVector = new SingleVector(vectorSize, vector);
 
                     spVector.Normalize();
 
@@ -43,7 +43,7 @@ namespace RNNSharp
             return vectorSize;
         }
 
-        public Vector GetTermVector(string strTerm)
+        public SingleVector GetTermVector(string strTerm)
         {
             if (m_WordEmbedding.ContainsKey(strTerm) == true)
             {

@@ -67,7 +67,6 @@ namespace RNNSharp
             rnn.SetModelFile(m_modelSetting.GetModelFile());
             rnn.SetSaveStep(m_modelSetting.GetSaveStep());
             rnn.SetMaxIter(m_modelSetting.GetMaxIteration());
-            rnn.SetDynAlpha(m_modelSetting.GetIsDynAlpha());
             rnn.SetCRFTraining(m_modelSetting.IsCRFTraining());
             rnn.SetLearningRate(m_modelSetting.GetLearningRate());
             rnn.SetGradientCutoff(15.0);

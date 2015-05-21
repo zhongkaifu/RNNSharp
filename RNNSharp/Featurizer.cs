@@ -252,14 +252,18 @@ namespace RNNSharp
                     return m_WordEmbedding.GetTermVector(strKey);
                 }
 
-                Vector dense = new Vector(m_WordEmbedding.GetDimension() * v.Count);
+                CombinedVector dense = new CombinedVector();
                 for (int j = 0;j < v.Count;j++)
                 {
                     int offset = currentState + v[j];
                     if (offset >= 0 && offset < numStates)
                     {
                         string strKey = features[offset][m_WordEmbeddingCloumn];
-                        dense.Set(m_WordEmbedding.GetTermVector(strKey), m_WordEmbedding.GetDimension() * j);
+                        dense.Append(m_WordEmbedding.GetTermVector(strKey));
+                    }
+                    else
+                    {
+                        dense.Append(m_WordEmbedding.m_UnkEmbedding);
                     }
                 }
 
@@ -267,7 +271,7 @@ namespace RNNSharp
                 return dense;
             }
 
-            return new Vector();
+            return new SingleVector();
         }
 
 

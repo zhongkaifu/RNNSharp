@@ -36,9 +36,6 @@ namespace RNNSharp
         public virtual bool IsCRFTraining() { return m_bCRFTraining; }
         public void SetCRFTraining(bool s) { m_bCRFTraining = s; }
 
-        public bool GetIsDynAlpha() { return m_bDynAlpha; }
-        public void SetIsDynAlpha(bool b) { m_bDynAlpha = b; }
-
         public void SetDir(int dir)
         {
             m_iDir = dir;
@@ -69,7 +66,6 @@ namespace RNNSharp
         bool m_bCRFTraining;
         long m_SaveStep;
         int m_ModelType;
-        bool m_bDynAlpha;
         int m_iDir;
 
         public void DumpSetting()
@@ -99,7 +95,6 @@ namespace RNNSharp
             Console.WriteLine("Max Iteration: {0}", m_MaxIteration);
             Console.WriteLine("Hidden layer size： {0}", m_NumHidden);
             Console.WriteLine("RNN-CRF: {0}", m_bCRFTraining);
-            Console.WriteLine("Dynamic Learning Rate: {0}", m_bDynAlpha);
             if (m_bCRFTraining == true)
             {
                 Console.WriteLine("Tag Transition Weight: {0}", m_tagTransitionWeight);

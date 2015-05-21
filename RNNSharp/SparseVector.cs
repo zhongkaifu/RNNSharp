@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace RNNSharp
 {
-    public class SparseVector : Vector
+    public class SparseVector : SingleVector
     {
         KeyValuePair<int, double>[] m_Data;
         int m_Dimension;

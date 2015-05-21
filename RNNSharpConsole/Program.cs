@@ -25,7 +25,6 @@ namespace RNNSharpConsole
         static double beta = 0.0000001;
         static int bptt = 4;
         static int modelType = 0;
-        static bool bDynAlpha = false;
         static int nBest = 1;
         static int iDir = 0;
 
@@ -88,9 +87,6 @@ namespace RNNSharpConsole
             
             Console.WriteLine(" -savestep <int>");
             Console.WriteLine("\tSave temporary model after every <int> sentence, default is 0");
-
-            Console.WriteLine(" -alphatype <int>");
-            Console.WriteLine("\tLearning rate type, 0 is static, 1 is dynamic. default is 0");
             
             Console.WriteLine();
             Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0");
@@ -143,7 +139,6 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-beta", args)) >= 0) beta = double.Parse(args[i + 1]);
             if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1]);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-alphatype", args)) >= 0) bDynAlpha = (int.Parse(args[i + 1]) == 1) ? true : false;
             if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
@@ -441,7 +436,6 @@ namespace RNNSharpConsole
             RNNConfig.SetNumHidden(layersize);
             RNNConfig.SetCRFTraining((iCRF == 1) ? true : false);
             RNNConfig.SetDir(iDir);
-            RNNConfig.SetIsDynAlpha(bDynAlpha);
             RNNConfig.SetModelType(modelType);
             RNNConfig.SetMaxIteration(maxIter);
             RNNConfig.SetSaveStep(savestep);
