@@ -196,7 +196,7 @@ namespace RNNSharp
             {
                 for (int i = 0; i < forwardRNN.L2; i++)
                 {
-                    m[curState][i] = (mForward[curState][i] + mBackward[curState][i]) / 2.0;
+                    m[curState][i] = mForward[curState][i] + mBackward[curState][i];
                 }
             }
 

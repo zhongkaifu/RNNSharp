@@ -74,7 +74,6 @@ namespace RNNSharp
         protected Matrix mat_input2hidden = new Matrix();
         protected Matrix mat_hidden2output = new Matrix();
         protected Matrix mat_feature2hidden = new Matrix();
-        protected Matrix mat_feature2output = new Matrix();
 
 
         protected double md_beta = 1.0;
@@ -502,15 +501,6 @@ namespace RNNSharp
 
             for (b = 0; b < L2; b++)
             {
-                for (a = 0; a < fea_size; a++)
-                {
-                    mat_feature2output[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
-
-                }
-            }
-
-            for (b = 0; b < L2; b++)
-            {
                 for (a = 0; a < L1; a++)
                 {
                     mat_hidden2output[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
@@ -603,7 +593,6 @@ namespace RNNSharp
 
             mat_input2hidden = new Matrix(L1, L0 - L1);
             mat_feature2hidden = new Matrix(L1, fea_size);
-            mat_feature2output = new Matrix(L2, fea_size);
             mat_hidden2output = new Matrix(L2, L1);
 
             Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug

@@ -173,8 +173,6 @@ namespace RNNSharp
             {
                 //weight fea->hidden
                 mat_feature2hidden = loadLSTMWeight(br);
-                //weight fea->output
-                mat_feature2output = loadMatrixBin(br);
             }
 
             //weight hidden->output
@@ -224,8 +222,6 @@ namespace RNNSharp
             {
                 //weight fea->hidden
                 saveLSTMWeight(mat_feature2hidden, fo);
-                //weight fea->output
-                saveMatrixBin(mat_feature2output, fo);
             }
 
             //weight hidden->output
@@ -243,14 +239,11 @@ namespace RNNSharp
 
         double activationFunctionH(double x)
         {
-            //sigmoid function return a bounded output between [-2,2]
-            //return (4 / (1 + Math.Exp(-x))) - 2;
             return Math.Tanh(x);
         }
 
         double hPrime(double x)
         {
-            //  return 4 * activationFunctionF(x) * (1 - activationFunctionF(x));
             double tmp = Math.Tanh(x);
             return 1 - tmp * tmp;
         }
@@ -258,14 +251,11 @@ namespace RNNSharp
 
         double activationFunctionG(double x)
         {
-            //sigmoid function return a bounded output between [-2,2]
-            //return (4 / (1 + Math.Exp(-x))) - 2;
             return Math.Tanh(x);
         }
 
         double gPrime(double x)
         {
-          //  return 4 * activationFunctionF(x) * (1 - activationFunctionF(x));
             double tmp = Math.Tanh(x);
             return 1 - tmp * tmp;
         }
@@ -620,33 +610,6 @@ namespace RNNSharp
                   }
               }
           });
-
-
-
-
-            //direct fea size weights update
-            if (fea_size > 0)
-            {
-                Parallel.For(0, L2, parallelOption, c =>
-                {
-                    if ((counter % 10) == 0)	//regularization is done every 10. step
-                    {
-                        for (int a = 0; a < fea_size; a++)
-                        {
-                            mat_feature2output[c][a] += alpha * neuOutput[c].er * neuFeatures[a].ac - mat_feature2output[c][a] * beta2;
-                        }
-                    }
-                    else
-                    {
-                        for (int a = 0; a < fea_size; a++)
-                        {
-                            mat_feature2output[c][a] += alpha * neuOutput[c].er * neuFeatures[a].ac;
-                        }
-                    }
-
-                    // probably also need to do regularization
-                });
-            }
         }
 
 
@@ -703,8 +666,6 @@ namespace RNNSharp
                 //squash input
                 cell_j.yIn = activationFunctionF(cell_j.netIn);
 
-
-
                 cell_j.netForget = 0;
                 //reset each netCell state to zero
                 cell_j.netCellState = 0;
@@ -758,14 +719,6 @@ namespace RNNSharp
             }
 
             matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1);
-
-            //fea to out word
-            if (fea_size > 0)
-            {
-                matrixXvectorADD(neuOutput, neuFeatures, mat_feature2output, 0, L2, 0, fea_size, 0);
-            }
-
-
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)

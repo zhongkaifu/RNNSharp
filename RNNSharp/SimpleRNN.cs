@@ -88,14 +88,6 @@ namespace RNNSharp
             }
 
             matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1, 0);
-
-            //fea to out word
-            if (fea_size > 0)
-            {
-                matrixXvectorADD(neuOutput, neuFeatures, mat_feature2output, 0, L2, 0, fea_size, 0);
-            }
-
-
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
@@ -166,28 +158,6 @@ namespace RNNSharp
                     }
                 }
             });
-
-            //direct fea size weights update
-            if (fea_size > 0)
-            {
-                Parallel.For(0, L2, parallelOption, c =>
-                {
-                    for (int a = 0; a < fea_size; a++)
-                    {
-                        double dg = neuOutput[c].er * neuFeatures[a].ac;
-
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
-                        {
-                            mat_feature2output[c][a] += alpha * (dg - mat_feature2output[c][a] * beta);
-                        }
-                        else
-                        {
-                            mat_feature2output[c][a] += alpha * dg;
-                        }
-                    }
-                    // probably also need to do regularization
-                });
-            }
         }
 
 
@@ -473,7 +443,6 @@ namespace RNNSharp
             mat_hiddenBpttWeight = loadMatrixBin(br);
 
             mat_feature2hidden = loadMatrixBin(br);
-            mat_feature2output = loadMatrixBin(br);
             mat_hidden2output = loadMatrixBin(br);
 
 
@@ -522,9 +491,6 @@ namespace RNNSharp
 
             //weight fea->hidden
             saveMatrixBin(mat_feature2hidden, fo);
-
-            //weight fea->output
-            saveMatrixBin(mat_feature2output, fo);
 
             //weight hidden->output
             saveMatrixBin(mat_hidden2output, fo);
