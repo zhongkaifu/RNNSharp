@@ -7,7 +7,7 @@ using System.IO;
 
 namespace RNNSharp
 {
-    public struct LSTMCell
+    public class LSTMCell
     {
         //input gate
         public double netIn;
@@ -163,7 +163,7 @@ namespace RNNSharp
 
             //Create cells of each layer
             CreateCells();
-            CreateHiddenLayerCells();
+            CreateHiddenLayerCells(br);
 
             //Load weight matrix between each two layer pairs
             //weight input->hidden
@@ -191,6 +191,18 @@ namespace RNNSharp
 
             sr.Close();
         }
+
+
+        public void SaveHiddenLayerWeights(BinaryWriter fo)
+        {
+            for (int i = 0; i < L1 + 1; i++)
+            {
+                fo.Write(neuHidden[i].wCellIn);
+                fo.Write(neuHidden[i].wCellForget);
+                fo.Write(neuHidden[i].wCellOut);
+            }
+        }
+
         // save model as binary format
         public override void saveNetBin(string filename)
         {
@@ -214,10 +226,12 @@ namespace RNNSharp
             fo.Write(L2);
             fo.Write(fea_size);
 
+            //Save hidden layer weights
+            SaveHiddenLayerWeights(fo);
+
             //weight input->hidden
             saveLSTMWeight(mat_input2hidden, fo);
-
-            
+  
             if (fea_size > 0)
             {
                 //weight fea->hidden
@@ -334,9 +348,8 @@ namespace RNNSharp
             }
         }
 
-        public LSTMCell LSTMCellInit(bool type)
+        public void LSTMCellInit(bool type, LSTMCell c)
         {
-            LSTMCell c;
             if (type)
             {
                 //input gate
@@ -352,12 +365,6 @@ namespace RNNSharp
                 c.previousCellState = 0; //this is important
                 c.cellState = 0;
                 c.cellStateError = 0;
-
-                //internal weights, also important
-                double internalRand = 1 / Math.Sqrt(3);
-                c.wCellIn = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
-                c.wCellForget = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
-                c.wCellOut = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
 
                 //partial derivatives
                 c.dSWCellIn = 0;
@@ -388,11 +395,6 @@ namespace RNNSharp
                 c.cellState = 0;
                 c.cellStateError = 0;
 
-                //internal weights
-                c.wCellIn = 0;
-                c.wCellForget = 0;
-                c.wCellOut = 0;
-
                 //partial derivatives
                 c.dSWCellIn = 0;
                 c.dSWCellForget = 0;
@@ -405,28 +407,56 @@ namespace RNNSharp
                 //cell output
                 c.cellOutput = -1;
             }
-
-            return c;
         }
 
         public override void initMem()
         {
             base.initMem();
 
-            CreateHiddenLayerCells();
+            CreateHiddenLayerCells(null);
 
             initWeights();
         }
 
-        private void CreateHiddenLayerCells()
+        private void CreateHiddenLayerCells(BinaryReader br)
         {
             neuHidden = new LSTMCell[L1 + 1];
 
             for (int i = 0; i < L1; i++)
             {
-                neuHidden[i] = LSTMCellInit(NORMAL);
+                neuHidden[i] = new LSTMCell();
+                LSTMCellInit(NORMAL, neuHidden[i]);
             }
-            neuHidden[L1] = LSTMCellInit(BIAS);
+            neuHidden[L1] = new LSTMCell();
+            LSTMCellInit(BIAS, neuHidden[L1]);
+
+            if (br != null)
+            {
+                //Load weight from input file
+                for (int i = 0; i < L1 + 1; i++)
+                {
+                    neuHidden[i].wCellIn = br.ReadDouble();
+                    neuHidden[i].wCellForget = br.ReadDouble();
+                    neuHidden[i].wCellOut = br.ReadDouble();
+                }
+            }
+            else
+            {
+                //Initialize weight by random number
+                double internalRand = 1 / Math.Sqrt(3);
+                for (int i = 0; i < L1; i++)
+                {
+                    //internal weights, also important
+                    neuHidden[i].wCellIn = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
+                    neuHidden[i].wCellForget = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
+                    neuHidden[i].wCellOut = (((double)((rand() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
+                }
+
+                //internal weights
+                neuHidden[L1].wCellIn = 0;
+                neuHidden[L1].wCellForget = 0;
+                neuHidden[L1].wCellOut = 0;
+            }
         }
 
         public void matrixXvectorADD(neuron[] dest, LSTMCell[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2)
@@ -485,6 +515,47 @@ namespace RNNSharp
                 neuOutput[state.GetLabel()].er = 1 - neuOutput[state.GetLabel()].ac;
             }
 
+            //Get sparse feature and apply it into hidden layer
+            var sparse = state.GetSparseData();
+            int sparseFeatureSize = sparse.GetNumberOfEntries();
+
+            //put variables for derivaties in weight class and cell class
+            Parallel.For(0, L1, parallelOption, i =>
+            {
+                LSTMWeight[] w_i = mat_input2hidden[i];
+                LSTMCell c = neuHidden[i];
+                for (int k = 0; k < sparseFeatureSize; k++)
+                {
+                    var entry = sparse.GetEntry(k);
+                    LSTMWeight w = w_i[entry.Key];
+                    w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * entry.Value;
+                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * entry.Value;
+                    w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * entry.Value;
+
+                }
+
+                if (fea_size > 0)
+                {
+                    w_i = mat_feature2hidden[i];
+                    for (int j = 0; j < fea_size; j++)
+                    {
+                        LSTMWeight w = w_i[j];
+                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j].ac;
+                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * neuFeatures[j].ac;
+                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j].ac;
+
+                    }
+                }
+
+                //partial derivatives for internal connections
+                c.dSWCellIn = c.dSWCellIn * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * c.cellState;
+
+                //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
+                c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * fPrime(c.netForget) * c.previousCellState;
+
+
+                neuHidden[i] = c;
+            });
 
 
             //for all output neurons
@@ -497,11 +568,6 @@ namespace RNNSharp
                     deltaHiddenOutput[j][k] = alpha * neuHidden[j].cellOutput * er;
                 }
             }
-
-
-            //Get sparse feature and apply it into hidden layer
-            var sparse = state.GetSparseData();
-            int sparseFeatureSize = sparse.GetNumberOfEntries();
 
             //for each hidden neuron
             Parallel.For(0, L1, parallelOption, i =>
@@ -616,17 +682,6 @@ namespace RNNSharp
         // forward process. output layer consists of tag value
         public override void computeNet(State state, double[] doutput)
         {
-            //erase activations
-            for (int a = 0; a < L1; a++)
-                neuHidden[a].netIn = 0;
-
-            //hidden(t-1) -> hidden(t)
-            for (int a = 0; a < L1; a++)
-            {
-                neuHidden[a].previousCellState = neuHidden[a].cellState;
-            }
-
-
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
             var sparse = state.GetSparseData();
@@ -638,6 +693,9 @@ namespace RNNSharp
           {
               //rest the value of the net input to zero
               neuHidden[j].netIn = 0;
+
+              //hidden(t-1) -> hidden(t)
+              neuHidden[j].previousCellState = neuHidden[j].cellState;
 
               //for each input neuron
               for (int i = 0; i < sparseFeatureSize; i++)
@@ -742,47 +800,6 @@ namespace RNNSharp
             {
                 neuOutput[c].ac /= sum;
             }
-
-
-            //put variables for derivaties in weight class and cell class
-
-
-            Parallel.For(0, L1, parallelOption, i =>
-           {
-               LSTMWeight[] w_i = mat_input2hidden[i];
-               LSTMCell c = neuHidden[i];
-               for (int k = 0; k < sparseFeatureSize; k++)
-               {
-                   var entry = sparse.GetEntry(k);
-                   LSTMWeight w = w_i[entry.Key];
-                   w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * entry.Value;
-                   w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * entry.Value;
-                   w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * entry.Value;
-
-               }
-
-               if (fea_size > 0)
-               {
-                   w_i = mat_feature2hidden[i];
-                   for (int j = 0; j < fea_size; j++)
-                   {
-                       LSTMWeight w = w_i[j];
-                       w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j].ac;
-                       w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * neuFeatures[j].ac;
-                       w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j].ac;
-
-                   }
-               }
-
-               //partial derivatives for internal connections
-               c.dSWCellIn = c.dSWCellIn * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * c.cellState;
-
-               //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-               c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * fPrime(c.netForget) * c.previousCellState;
-
-
-               neuHidden[i] = c;
-           });
         }
 
         public override void netFlush()   //cleans all activations and error vectors
@@ -802,9 +819,9 @@ namespace RNNSharp
 
             for (int i = 0; i < L1; i++)
             {
-                neuHidden[i] = LSTMCellInit(NORMAL);
+                LSTMCellInit(NORMAL, neuHidden[i]);
             }
-            neuHidden[L1] = LSTMCellInit(BIAS);
+            LSTMCellInit(BIAS, neuHidden[L1]);
 
             for (a = 0; a < L2; a++)
             {
@@ -824,14 +841,10 @@ namespace RNNSharp
         {
             for (int i = 0; i < L1; i++)
             {
-                neuHidden[i] = LSTMCellInit(NORMAL);
+                LSTMCellInit(NORMAL, neuHidden[i]);
             }
-            neuHidden[L1] = LSTMCellInit(BIAS);
-
+            LSTMCellInit(BIAS, neuHidden[L1]);
         }
-
-
-     
 
         public override void copyHiddenLayerToInput()
         {
