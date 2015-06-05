@@ -350,63 +350,31 @@ namespace RNNSharp
 
         public void LSTMCellInit(bool type, LSTMCell c)
         {
-            if (type)
-            {
-                //input gate
-                c.netIn = 0;
-                c.yIn = 0;
+            //input gate
+            c.netIn = 0;
+            c.yIn = 0;
 
-                //forget gate
-                c.netForget = 0;
-                c.yForget = 0;
+            //forget gate
+            c.netForget = 0;
+            c.yForget = 0;
 
-                //cell state
-                c.netCellState = 0;
-                c.previousCellState = 0; //this is important
-                c.cellState = 0;
-                c.cellStateError = 0;
+            //cell state
+            c.netCellState = 0;
+            c.previousCellState = 0; //this is important
+            c.cellState = 0;
+            c.cellStateError = 0;
 
-                //partial derivatives
-                c.dSWCellIn = 0;
-                c.dSWCellForget = 0;
+            //partial derivatives
+            c.dSWCellIn = 0;
+            c.dSWCellForget = 0;
 
-                //output gate
-                c.netOut = 0;
-                c.yOut = 0;
-                c.gradientOutputGate = 0;
+            //output gate
+            c.netOut = 0;
+            c.yOut = 0;
+            c.gradientOutputGate = 0;
 
-                //cell output
-                c.cellOutput = 0;
-            }
-            else
-            {
-                //This seperate initialisation is so that the final cell is a bias cell.
-                //input gate
-                c.netIn = 0;
-                c.yIn = 0;
-
-                //forget gate
-                c.netForget = 0;
-                c.yForget = 0;
-
-                //cell state
-                c.netCellState = 0;
-                c.previousCellState = 0; //this is important
-                c.cellState = 0;
-                c.cellStateError = 0;
-
-                //partial derivatives
-                c.dSWCellIn = 0;
-                c.dSWCellForget = 0;
-
-                //output gate
-                c.netOut = 0;
-                c.yOut = 0;
-                c.gradientOutputGate = 0;
-
-                //cell output
-                c.cellOutput = -1;
-            }
+            //cell output
+            c.cellOutput = (type == true) ? 0 : -1;
         }
 
         public override void initMem()

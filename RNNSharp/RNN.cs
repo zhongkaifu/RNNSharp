@@ -66,7 +66,7 @@ namespace RNNSharp
         public neuron[] neuOutput;		//neurons in output layer
 
 
-        protected const int MAX_RNN_HIST = 128;
+        protected const int MAX_RNN_HIST = 512;
 
         protected Matrix m_RawOutput;
         protected int counterTokenForLM;
