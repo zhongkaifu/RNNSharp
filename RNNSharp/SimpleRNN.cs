@@ -48,12 +48,21 @@ namespace RNNSharp
         public void setBPTTBlock(int newval) { bptt_block = newval; }
 
 
+        public override void GetHiddenLayer(Matrix m, int curStatus)
+        {
+            for (int i = 0; i < L1; i++)
+            {
+                m[curStatus][i] = neuHidden[i].cellOutput;
+            }
+        }
+
+
         // forward process. output layer consists of tag value
         public override void computeNet(State state, double[] doutput)
         {
             //erase activations
             for (int a = 0; a < L1; a++)
-                neuHidden[a].ac = 0;
+                neuHidden[a].cellOutput = 0;
 
             //hidden(t-1) -> hidden(t)
             matrixXvectorADD(neuHidden, neuInput, mat_hiddenBpttWeight, 0, L1, L0 - L1, L0, 0);
@@ -68,7 +77,7 @@ namespace RNNSharp
                 var entry = sparse.GetEntry(i);
                 for (int b = 0; b < L1; b++)
                 {
-                    neuHidden[b].ac += entry.Value * mat_input2hidden[b][entry.Key];
+                    neuHidden[b].cellOutput += entry.Value * mat_input2hidden[b][entry.Key];
                 }
             }
 
@@ -84,7 +93,7 @@ namespace RNNSharp
             //initialize output nodes
             for (int c = 0; c < L2; c++)
             {
-                neuOutput[c].ac = 0;
+                neuOutput[c].cellOutput = 0;
             }
 
             matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1, 0);
@@ -92,76 +101,49 @@ namespace RNNSharp
             {
                 for (int i = 0; i < L2; i++)
                 {
-                    doutput[i] = neuOutput[i].ac;
+                    doutput[i] = neuOutput[i].cellOutput;
                 }
             }
 
             //activation 2   --softmax on words
-            double sum = 0;   //sum is used for normalization: it's better to have larger precision as many numbers are summed together here
-            for (int c = 0; c < L2; c++)
-            {
-                if (neuOutput[c].ac > 50) neuOutput[c].ac = 50;  //for numerical stability
-                if (neuOutput[c].ac < -50) neuOutput[c].ac = -50;  //for numerical stability
-                double val = Math.Exp(neuOutput[c].ac);
-                sum += val;
-                neuOutput[c].ac = val;
-            }
-
-            for (int c = 0; c < L2; c++)
-            {
-                neuOutput[c].ac /= sum;
-            }
+            SoftmaxLayer(neuOutput);
         }
 
      
 
-        public override void learnNet(State state, int timeat)
+        public override void learnNet(State state, int timeat, bool biRNN = false)
         {
-            if (m_bCRFTraining == true)
+            if (biRNN == false)
             {
-                //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
-                for (int c = 0; c < L2; c++)
-                {
-                    neuOutput[c].er = -m_Diff[timeat][c];
-                }
-                neuOutput[state.GetLabel()].er = 1 - m_Diff[timeat][state.GetLabel()];
-            }
-            else
-            {
-                //For standard RNN
-                for (int c = 0; c < L2; c++)
-                {
-                    neuOutput[c].er = -neuOutput[c].ac;
-                }
-                neuOutput[state.GetLabel()].er = 1 - neuOutput[state.GetLabel()].ac;
+                CalculateOutputLayerError(state, timeat);
             }
 
             for (int a = 0; a < L1; a++)
             {
                 neuHidden[a].er = 0;
             }
-            matrixXvectorADD(neuHidden, neuOutput, mat_hidden2output, 0, L2, 0, L1, 1);	//error output->hidden for words from specific class    	
+            matrixXvectorADD(neuHidden, neuOutput, mat_hidden2output, 0, L1, 0, L2, 1);	//error output->hidden for words from specific class    	
 
-            Parallel.For(0, L2, parallelOption, c =>
+            if (biRNN == false)
             {
                 for (int a = 0; a < L1; a++)
                 {
-                    double dg = neuOutput[c].er * neuHidden[a].ac;
+                    for (int c = 0; c < L2; c++)
+                    {
+                        double dg = neuOutput[c].er * neuHidden[a].cellOutput;
 
-                    if ((counter % 10) == 0)	//regularization is done every 10. step
-                    {
-                        mat_hidden2output[c][a] += alpha * (dg - mat_hidden2output[c][a] * beta);
-                    }
-                    else
-                    {
-                        mat_hidden2output[c][a] += alpha * dg;
+                        if ((counter % 10) == 0)	//regularization is done every 10. step
+                        {
+                            mat_hidden2output[c][a] += alpha * (dg - mat_hidden2output[c][a] * beta);
+                        }
+                        else
+                        {
+                            mat_hidden2output[c][a] += alpha * dg;
+                        }
                     }
                 }
-            });
+            }
         }
-
-
-
 
         void learnBptt(State state)
         {
@@ -173,7 +155,7 @@ namespace RNNSharp
                 // compute hidden layter gradient
                 for (int a = 0; a < L1; a++)
                 {
-                    neuHidden[a].er *= neuHidden[a].ac * (1 - neuHidden[a].ac);
+                    neuHidden[a].er *= neuHidden[a].cellOutput * (1 - neuHidden[a].cellOutput);
                 }
 
                 //weight update fea->0
@@ -183,7 +165,7 @@ namespace RNNSharp
                     {
                         for (int a = 0; a < fea_size; a++)
                         {
-                            mat_bptt_synf[b][a] += neuHidden[b].er * bptt_fea[a + step * fea_size].ac;
+                            mat_bptt_synf[b][a] += neuHidden[b].er * bptt_fea[a + step * fea_size].cellOutput;
                         }
                     });
                 }
@@ -204,13 +186,13 @@ namespace RNNSharp
                     neuInput[a].er = 0;
                 }
 
-                matrixXvectorADD(neuInput, neuHidden, mat_hiddenBpttWeight, 0, L1, L0 - L1, L0, 1);		//propagates errors hidden->input to the recurrent part
+                matrixXvectorADD(neuInput, neuHidden, mat_hiddenBpttWeight, L0 - L1, L0, 0, L1, 1);		//propagates errors hidden->input to the recurrent part
 
                 Parallel.For(0, L1, parallelOption, b =>
                 {
                     for (int a = 0; a < L1; a++)
                     {
-                        mat_bptt_syn0_ph[b][a] += neuHidden[b].er * neuInput[L0 - L1 + a].ac;
+                        mat_bptt_syn0_ph[b][a] += neuHidden[b].er * neuInput[L0 - L1 + a].cellOutput;
                     }
                 });
 
@@ -224,8 +206,8 @@ namespace RNNSharp
                 {
                     for (int a = 0; a < L1; a++)
                     {
-                        neuHidden[a].ac = bptt_hidden[(step + 1) * L1 + a].ac;
-                        neuInput[a + L0 - L1].ac = bptt_hidden[(step + 2) * L1 + a].ac;
+                        neuHidden[a].cellOutput = bptt_hidden[(step + 1) * L1 + a].cellOutput;
+                        neuInput[a + L0 - L1].cellOutput = bptt_hidden[(step + 2) * L1 + a].cellOutput;
                     }
                 }
             }
@@ -237,7 +219,7 @@ namespace RNNSharp
 
             for (int b = 0; b < L1; b++)
             {
-                neuHidden[b].ac = bptt_hidden[b].ac;		//restore hidden layer after bptt
+                neuHidden[b].cellOutput = bptt_hidden[b].cellOutput;		//restore hidden layer after bptt
             }
 
 
@@ -277,7 +259,7 @@ namespace RNNSharp
         public override void copyHiddenLayerToInput()
         {
             for (int a = 0; a < L1; a++)
-                neuInput[a + L0 - L1].ac = neuHidden[a].ac;
+                neuInput[a + L0 - L1].cellOutput = neuHidden[a].cellOutput;
         }
 
 
@@ -300,13 +282,13 @@ namespace RNNSharp
             bptt_hidden = new neuron[(bptt + bptt_block + 1) * L1];
             for (int a = 0; a < (bptt + bptt_block) * L1; a++)
             {
-                bptt_hidden[a].ac = 0;
+                bptt_hidden[a].cellOutput = 0;
                 bptt_hidden[a].er = 0;
             }
 
             bptt_fea = new neuron[(bptt + bptt_block + 2) * fea_size];
             for (int a = 0; a < (bptt + bptt_block) * fea_size; a++)
-                bptt_fea[a].ac = 0;
+                bptt_fea[a].cellOutput = 0;
 
             mat_bptt_syn0_w = new Matrix(L1, L0 - L1);
             mat_bptt_syn0_ph = new Matrix(L1, L1);
@@ -338,7 +320,7 @@ namespace RNNSharp
         public override void netReset()   //cleans hidden layer activation + bptt history
         {
             for (int a = 0; a < L1; a++)
-                neuHidden[a].ac = 1.0;
+                neuHidden[a].cellOutput = 1.0;
 
             copyHiddenLayerToInput();
 
@@ -348,7 +330,7 @@ namespace RNNSharp
                 {
                     for (int b = 0; b < L1; b++)
                     {
-                        bptt_hidden[a * L1 + b].ac = 0;
+                        bptt_hidden[a * L1 + b].cellOutput = 0;
                         bptt_hidden[a * L1 + b].er = 0;
                     }
                 }
@@ -356,7 +338,7 @@ namespace RNNSharp
                 for (int a = 0; a < bptt + bptt_block; a++)
                 {
                     for (int b = 0; b < fea_size; b++)
-                        bptt_fea[a * fea_size + b].ac = 0;
+                        bptt_fea[a * fea_size + b].cellOutput = 0;
                 }
             }
         }
@@ -383,7 +365,7 @@ namespace RNNSharp
                 {
                     for (int b = 0; b < fea_size; b++)
                     {
-                        bptt_fea[a * fea_size + b].ac = bptt_fea[(a - 1) * fea_size + b].ac;
+                        bptt_fea[a * fea_size + b].cellOutput = bptt_fea[(a - 1) * fea_size + b].cellOutput;
                     }
                 }
             }
@@ -395,7 +377,7 @@ namespace RNNSharp
             }
             for (int b = 0; b < fea_size; b++)
             {
-                bptt_fea[b].ac = neuFeatures[b].ac;
+                bptt_fea[b].cellOutput = neuFeatures[b].cellOutput;
             }
 
             // time to learn bptt

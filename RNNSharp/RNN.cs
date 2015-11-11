@@ -48,11 +48,10 @@ namespace RNNSharp
         protected MODELDIRECTION m_modeldirection;
         protected string m_strModelFile;
 
-        static Random rand = new Random(DateTime.Now.Millisecond);
-
+        protected static Random rand = new Random(DateTime.Now.Millisecond);
         //multiple processor declaration
         protected int L0;
-        protected int L1;
+        public int L1;
         public int L2;
         protected int fea_size;
 
@@ -72,7 +71,7 @@ namespace RNNSharp
         protected int counterTokenForLM;
 
         protected Matrix mat_input2hidden = new Matrix();
-        protected Matrix mat_hidden2output = new Matrix();
+        public Matrix mat_hidden2output = new Matrix();
         protected Matrix mat_feature2hidden = new Matrix();
 
 
@@ -148,6 +147,12 @@ namespace RNNSharp
             // set runtime feature
             for (int i = 0; i < state.GetNumRuntimeFeature(); i++)
             {
+                for (int j = 0;j < L2;j++)
+                {
+                    //Clean up run time feature value and then set a new one
+                    state.SetRuntimeFeature(i, j, 0);
+                }
+
                 int pos = curState + ((forward == true) ? 1 : -1) * state.GetRuntimeFeature(i).OffsetToCurrentState;
                 if (pos >= 0 && pos < numStates)
                 {
@@ -158,7 +163,7 @@ namespace RNNSharp
             var dense = state.GetDenseData();
             for (int i = 0; i < dense.GetDimension(); i++)
             {
-                neuFeatures[i].ac = dense[i];
+                neuFeatures[i].cellOutput = dense[i];
             }
         }
 
@@ -248,7 +253,7 @@ namespace RNNSharp
                 setInputLayer(state, curState, numStates, predicted);
 
                 computeNet(state, null);      //compute probability distribution neu2[...].ac
-                logp += Math.Log10(neuOutput[state.GetLabel()].ac);
+                logp += Math.Log10(neuOutput[state.GetLabel()].cellOutput);
 
                 predicted[curState] = GetBestOutputIndex();
 
@@ -266,15 +271,34 @@ namespace RNNSharp
             return predicted;
         }
 
+
+        public void SoftmaxLayer(neuron[] layer)
+        {
+            //activation 2   --softmax on words
+            double sum = 0;   //sum is used for normalization: it's better to have larger precision as many numbers are summed together here
+            for (int c = 0; c < L2; c++)
+            {
+                if (layer[c].cellOutput > 50) layer[c].cellOutput = 50;  //for numerical stability
+                if (layer[c].cellOutput < -50) layer[c].cellOutput = -50;  //for numerical stability
+                double val = Math.Exp(layer[c].cellOutput);
+                sum += val;
+                layer[c].cellOutput = val;
+            }
+            for (int c = 0; c < L2; c++)
+            {
+                layer[c].cellOutput /= sum;
+            }
+        }
+
         public int GetBestOutputIndex()
         {
             int imax = 0;
-            double dmax = neuOutput[0].ac;
+            double dmax = neuOutput[0].cellOutput;
             for (int k = 1; k < L2; k++)
             {
-                if (neuOutput[k].ac > dmax)
+                if (neuOutput[k].cellOutput > dmax)
                 {
-                    dmax = neuOutput[k].ac;
+                    dmax = neuOutput[k].cellOutput;
                     imax = k;
                 }
             }
@@ -292,7 +316,6 @@ namespace RNNSharp
             m_RawOutput = new Matrix(numStates, L2);// new double[numStates][];
             for (int curState = 0; curState < numStates; curState++)
             {
-         //       m_RawOutput[curState] = new double[L2];
                 State state = pSequence.Get(curState);
 
                 setInputLayer(state, curState, numStates, predicted_nn);
@@ -310,7 +333,6 @@ namespace RNNSharp
             {
                 State state = pSequence.Get(i);
                 logp += Math.Log10(m_Diff[i][state.GetLabel()]);
-                counter++;
 
                 predicted[i] = GetBestZIndex(i);
             }
@@ -324,6 +346,8 @@ namespace RNNSharp
                 State state = pSequence.Get(curState);
                 setInputLayer(state, curState, numStates, predicted_nn);
                 computeNet(state, m_RawOutput[curState]);      //compute probability distribution
+
+                counter++;
 
                 learnNet(state, curState);
                 LearnBackTime(state, numStates, curState);
@@ -472,9 +496,9 @@ namespace RNNSharp
         {
             for (int a = 0; a < L1; a++)
             {
-                if (neuHidden[a].ac > 50) neuHidden[a].ac = 50;  //for numerical stability
-                if (neuHidden[a].ac < -50) neuHidden[a].ac = -50;  //for numerical stability
-                neuHidden[a].ac = 1.0 / (1.0 + Math.Exp(-neuHidden[a].ac));
+                if (neuHidden[a].cellOutput > 50) neuHidden[a].cellOutput = 50;  //for numerical stability
+                if (neuHidden[a].cellOutput < -50) neuHidden[a].cellOutput = -50;  //for numerical stability
+                neuHidden[a].cellOutput = 1.0 / (1.0 + Math.Exp(-neuHidden[a].cellOutput));
             }
         }
 
@@ -499,7 +523,7 @@ namespace RNNSharp
                 }
             }
 
-            for (b = 0; b < L2; b++)
+            for (b = 0; b < mat_hidden2output.GetHeight(); b++)
             {
                 for (a = 0; a < L1; a++)
                 {
@@ -513,7 +537,7 @@ namespace RNNSharp
             return rand.NextDouble() * (max - min) + min;
         }
 
-        public abstract void learnNet(State state, int timeat);
+        public abstract void learnNet(State state, int timeat, bool biRNN = false);
         public abstract void LearnBackTime(State state, int numStates, int curState);
 
         public virtual void TrainNet()
@@ -587,6 +611,11 @@ namespace RNNSharp
             Console.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
         }
 
+        public int randNext()
+        {
+            return rand.Next();
+        }
+
         public virtual void initMem()
         {
             CreateCells();
@@ -618,25 +647,25 @@ namespace RNNSharp
 
             for (int a = 0; a < L0; a++)
             {
-                neuInput[a].ac = 0;
+                neuInput[a].cellOutput = 0;
                 neuInput[a].er = 0;
             }
 
             for (int a = 0; a < fea_size; a++)
             {
-                neuFeatures[a].ac = 0;
+                neuFeatures[a].cellOutput = 0;
                 neuFeatures[a].er = 0;
             }
 
             for (int a = 0; a < L1; a++)
             {
-                neuHidden[a].ac = 0;
+                neuHidden[a].cellOutput = 0;
                 neuHidden[a].er = 0;
             }
 
             for (int a = 0; a < L2; a++)
             {
-                neuOutput[a].ac = 0;
+                neuOutput[a].cellOutput = 0;
                 neuOutput[a].er = 0;
             }
         }
@@ -644,6 +673,8 @@ namespace RNNSharp
 
         public abstract void saveNetBin(string filename);
         public abstract void loadNetBin(string filename);
+
+        public abstract void GetHiddenLayer(Matrix m, int curStatus);
 
         public static MODELTYPE CheckModelFileType(string filename)
         {
@@ -664,24 +695,24 @@ namespace RNNSharp
                 {
                     for (int j = 0; j < to2 - from2; j++)
                     {
-                        dest[i + from].ac += srcvec[j + from2].ac * srcmatrix[i][j];
+                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
                     }
                 });
 
             }
             else
             {
-                Parallel.For(0, (to2 - from2), parallelOption, i =>
+                Parallel.For(0, (to - from), parallelOption, i =>
                 {
-                    for (int j = 0; j < to - from; j++)
+                    for (int j = 0; j < to2 - from2; j++)
                     {
-                        dest[i + from2].er += srcvec[j + from].er * srcmatrix[j][i];
+                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
                     }
                 });
 
                 if (gradient_cutoff > 0)
                 {
-                    for (int i = from2; i < to2; i++)
+                    for (int i = from; i < to; i++)
                     {
                         if (dest[i].er > gradient_cutoff)
                             dest[i].er = gradient_cutoff;
@@ -697,26 +728,26 @@ namespace RNNSharp
             int a;
             for (a = 0; a < L0 - L1; a++)
             {
-                neuInput[a].ac = 0;
+                neuInput[a].cellOutput = 0;
                 neuInput[a].er = 0;
             }
 
             for (a = L0 - L1; a < L0; a++)
             {   
                 //last hidden layer is initialized to vector of 0.1 values to prevent unstability
-                neuInput[a].ac = 0.1;
+                neuInput[a].cellOutput = 0.1;
                 neuInput[a].er = 0;
             }
 
             for (a = 0; a < L1; a++)
             {
-                neuHidden[a].ac = 0;
+                neuHidden[a].cellOutput = 0;
                 neuHidden[a].er = 0;
             }
 
             for (a = 0; a < L2; a++)
             {
-                neuOutput[a].ac = 0;
+                neuOutput[a].cellOutput = 0;
                 neuOutput[a].er = 0;
             }
         }
@@ -925,6 +956,30 @@ namespace RNNSharp
 
             return tknErrCnt;
         }
+
+        public void CalculateOutputLayerError(State state, int timeat)
+        {
+            if (m_bCRFTraining == true)
+            {
+                //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
+                for (int c = 0; c < L2; c++)
+                {
+                    neuOutput[c].er = -m_Diff[timeat][c];
+                }
+                neuOutput[state.GetLabel()].er = 1 - m_Diff[timeat][state.GetLabel()];
+            }
+            else
+            {
+                //For standard RNN
+                for (int c = 0; c < L2; c++)
+                {
+                    neuOutput[c].er = -neuOutput[c].cellOutput;
+                }
+                neuOutput[state.GetLabel()].er = 1 - neuOutput[state.GetLabel()].cellOutput;
+            }
+
+        }
+
 
         public virtual bool ValidateNet()
         {
