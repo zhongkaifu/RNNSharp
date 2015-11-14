@@ -245,19 +245,7 @@ namespace RNNSharp
         }
 
 
-        double activationFunctionH(double x)
-        {
-            return Math.Tanh(x);
-        }
-
-        double hPrime(double x)
-        {
-            double tmp = Math.Tanh(x);
-            return 1 - tmp * tmp;
-        }
-
-
-        double activationFunctionG(double x)
+        double TanH(double x)
         {
             return Math.Tanh(x);
         }
@@ -490,7 +478,7 @@ namespace RNNSharp
                     var entry = sparse.GetEntry(k);
                     LSTMWeight w = w_i[entry.Key];
                     w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * entry.Value;
-                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * entry.Value;
+                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * entry.Value;
                     w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * entry.Value;
 
                 }
@@ -502,18 +490,17 @@ namespace RNNSharp
                     {
                         LSTMWeight w = w_i[j];
                         w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j];
-                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * neuFeatures[j];
+                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * neuFeatures[j];
                         w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j];
 
                     }
                 }
 
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * c.cellState;
+                c.dSWCellIn = c.dSWCellIn * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * c.cellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
                 c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * fPrime(c.netForget) * c.previousCellState;
-
 
                 neuHidden[i] = c;
             });
@@ -531,10 +518,10 @@ namespace RNNSharp
               }
 
               //using the error find the gradient of the output gate
-              double gradientOutputGate = fPrime(c.netOut) * activationFunctionH(c.cellState) * weightedSum;
+              double gradientOutputGate = fPrime(c.netOut) * TanH(c.cellState) * weightedSum;
 
               //internal cell state error
-              double cellStateError = c.yOut * weightedSum * hPrime(c.cellState);
+              double cellStateError = c.yOut * weightedSum * gPrime(c.cellState);
 
               //weight updates
 
@@ -673,12 +660,6 @@ namespace RNNSharp
             {
                 LSTMCell cell_j = neuHidden[j];
 
-                //include internal connection multiplied by the previous cell state
-                cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;
-
-                //squash input
-                cell_j.yIn = activationFunctionF(cell_j.netIn);
-
                 cell_j.netForget = 0;
                 //reset each netCell state to zero
                 cell_j.netCellState = 0;
@@ -706,19 +687,26 @@ namespace RNNSharp
                 }
 
                 //include internal connection multiplied by the previous cell state
+                cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;
+                //include internal connection multiplied by the previous cell state
                 cell_j.netForget += cell_j.previousCellState * cell_j.wCellForget;
+                cell_j.netOut += cell_j.previousCellState * cell_j.wCellOut;
+
+                //squash input
+                cell_j.yIn = activationFunctionF(cell_j.netIn);
                 cell_j.yForget = activationFunctionF(cell_j.netForget);
-      
-                //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
-                cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * activationFunctionG(cell_j.netCellState);
-
-                //include the internal connection multiplied by the CURRENT cell state
-                cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
-
                 //squash output gate 
                 cell_j.yOut = activationFunctionF(cell_j.netOut);
 
-                cell_j.cellOutput = activationFunctionH(cell_j.cellState) * cell_j.yOut;
+                //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
+                cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * TanH(cell_j.netCellState);
+
+                ////include the internal connection multiplied by the CURRENT cell state
+                //cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
+
+
+
+                cell_j.cellOutput = TanH(cell_j.cellState) * cell_j.yOut;
 
 
                 neuHidden[j] = cell_j;
