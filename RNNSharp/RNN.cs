@@ -54,28 +54,18 @@ namespace RNNSharp
         public int L1;
         public int L2;
         protected int fea_size;
-
         protected float randrng;
-
         protected int final_stop;
 
-        protected neuron[] neuInput;		//neurons in input layer
-        protected neuron[] neuFeatures;		//features in input layer
-        protected neuron[] neuHidden;		//neurons in hidden layer
-        public neuron[] neuOutput;		//neurons in output layer
 
+        protected double[] neuFeatures;		//features in input layer
+        public neuron[] neuOutput;		//neurons in output layer
+        public Matrix mat_hidden2output;
 
         protected const int MAX_RNN_HIST = 512;
 
         protected Matrix m_RawOutput;
         protected int counterTokenForLM;
-
-        protected Matrix mat_input2hidden = new Matrix();
-        public Matrix mat_hidden2output = new Matrix();
-        protected Matrix mat_feature2hidden = new Matrix();
-
-
-        protected double md_beta = 1.0;
 
         protected DataSet m_TrainingSet;
         protected DataSet m_ValidationSet;
@@ -163,7 +153,7 @@ namespace RNNSharp
             var dense = state.GetDenseData();
             for (int i = 0; i < dense.GetDimension(); i++)
             {
-                neuFeatures[i].cellOutput = dense[i];
+                neuFeatures[i] = dense[i];
             }
         }
 
@@ -198,9 +188,7 @@ namespace RNNSharp
 
             fea_size = 0;
 
-            neuInput = null;
             neuFeatures = null;
-            neuHidden = null;
             neuOutput = null;
         }
 
@@ -492,45 +480,9 @@ namespace RNNSharp
             }
         }
 
-        public void computeHiddenActivity()
-        {
-            for (int a = 0; a < L1; a++)
-            {
-                if (neuHidden[a].cellOutput > 50) neuHidden[a].cellOutput = 50;  //for numerical stability
-                if (neuHidden[a].cellOutput < -50) neuHidden[a].cellOutput = -50;  //for numerical stability
-                neuHidden[a].cellOutput = 1.0 / (1.0 + Math.Exp(-neuHidden[a].cellOutput));
-            }
-        }
-
-        public virtual void initWeights()
-        {
-            int b, a;
-            for (b = 0; b < L1; b++)
-            {
-                for (a = 0; a < L0 - L1; a++)
-                {
-                    mat_input2hidden[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
-                }
-            }
 
 
-            for (b = 0; b < L1; b++)
-            {
-                for (a = 0; a < fea_size; a++)
-                {
-                    mat_feature2hidden[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
-
-                }
-            }
-
-            for (b = 0; b < mat_hidden2output.GetHeight(); b++)
-            {
-                for (a = 0; a < L1; a++)
-                {
-                    mat_hidden2output[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
-                }
-            }
-        }
+        public abstract void initWeights();
 
         public double random(double min, double max)
         {
@@ -616,60 +568,7 @@ namespace RNNSharp
             return rand.Next();
         }
 
-        public virtual void initMem()
-        {
-            CreateCells();
-
-            mat_input2hidden = new Matrix(L1, L0 - L1);
-            mat_feature2hidden = new Matrix(L1, fea_size);
-            mat_hidden2output = new Matrix(L2, L1);
-
-            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
-            initWeights();
-
-            for (int i = 0; i < MAX_RNN_HIST; i++)
-            {
-                m_Diff[i] = new double[L2];
-            }
-
-            m_tagBigramTransition = new Matrix(L2, L2);
-            m_DeltaBigramLM = new Matrix(L2, L2);
-
-        }
-
-        protected void CreateCells()
-        {
-
-            neuInput = new neuron[L0];
-            neuFeatures = new neuron[fea_size];
-            neuHidden = new neuron[L1];
-            neuOutput = new neuron[L2];
-
-            for (int a = 0; a < L0; a++)
-            {
-                neuInput[a].cellOutput = 0;
-                neuInput[a].er = 0;
-            }
-
-            for (int a = 0; a < fea_size; a++)
-            {
-                neuFeatures[a].cellOutput = 0;
-                neuFeatures[a].er = 0;
-            }
-
-            for (int a = 0; a < L1; a++)
-            {
-                neuHidden[a].cellOutput = 0;
-                neuHidden[a].er = 0;
-            }
-
-            for (int a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
-            }
-        }
-
+        public abstract void initMem();
 
         public abstract void saveNetBin(string filename);
         public abstract void loadNetBin(string filename);
@@ -684,6 +583,18 @@ namespace RNNSharp
             MODELTYPE type = (MODELTYPE)br.ReadInt32();
 
             return type;
+        }
+
+        public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2)
+        {
+            //ac mod
+            Parallel.For(0, (to - from), parallelOption, i =>
+            {
+                for (int j = 0; j < to2 - from2; j++)
+                {
+                    dest[i + from].cellOutput += srcvec[j + from2] * srcmatrix[i][j];
+                }
+            });
         }
 
         public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2, int type)
@@ -723,34 +634,7 @@ namespace RNNSharp
             }
         }
 
-        public virtual void netFlush()   //cleans all activations and error vectors
-        {
-            int a;
-            for (a = 0; a < L0 - L1; a++)
-            {
-                neuInput[a].cellOutput = 0;
-                neuInput[a].er = 0;
-            }
-
-            for (a = L0 - L1; a < L0; a++)
-            {   
-                //last hidden layer is initialized to vector of 0.1 values to prevent unstability
-                neuInput[a].cellOutput = 0.1;
-                neuInput[a].er = 0;
-            }
-
-            for (a = 0; a < L1; a++)
-            {
-                neuHidden[a].cellOutput = 0;
-                neuHidden[a].er = 0;
-            }
-
-            for (a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
-            }
-        }
+        public abstract void netFlush();
 
         public int[] DecodeNN(Sequence seq)
         {

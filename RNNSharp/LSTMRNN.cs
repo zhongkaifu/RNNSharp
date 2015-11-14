@@ -57,9 +57,9 @@ namespace RNNSharp
 
     public class LSTMRNN : RNN
     {
-        public new LSTMCell[] neuHidden;		//neurons in hidden layer
-        protected new LSTMWeight[][] mat_input2hidden;
-        protected new LSTMWeight[][] mat_feature2hidden;
+        public LSTMCell[] neuHidden;		//neurons in hidden layer
+        protected LSTMWeight[][] mat_input2hidden;
+        protected LSTMWeight[][] mat_feature2hidden;
 
         //for LSTM layer
         const bool NORMAL = true;
@@ -157,8 +157,7 @@ namespace RNNSharp
             fea_size = br.ReadInt32();
 
             //Create cells of each layer
-            CreateCells();
-            CreateHiddenLayerCells(br);
+            CreateCell(br);
 
             //Load weight matrix between each two layer pairs
             //weight input->hidden
@@ -369,17 +368,34 @@ namespace RNNSharp
 
         public override void initMem()
         {
-            base.initMem();
+            CreateCell(null);
 
-            CreateHiddenLayerCells(null);
+            mat_hidden2output = new Matrix(L2, L1);
 
+            for (int i = 0; i < MAX_RNN_HIST; i++)
+            {
+                m_Diff[i] = new double[L2];
+            }
+
+            m_tagBigramTransition = new Matrix(L2, L2);
+            m_DeltaBigramLM = new Matrix(L2, L2);
+
+            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
             initWeights();
         }
 
-        private void CreateHiddenLayerCells(BinaryReader br)
+        private void CreateCell(BinaryReader br)
         {
-            neuHidden = new LSTMCell[L1 + 1];
+            neuFeatures = new double[fea_size];
+            neuOutput = new neuron[L2];
 
+            for (int a = 0; a < L2; a++)
+            {
+                neuOutput[a].cellOutput = 0;
+                neuOutput[a].er = 0;
+            }
+
+            neuHidden = new LSTMCell[L1 + 1];
             for (int i = 0; i < L1; i++)
             {
                 neuHidden[i] = new LSTMCell();
@@ -429,14 +445,14 @@ namespace RNNSharp
             });
         }
 
-        public void matrixXvectorADD(LSTMCell[] dest, neuron[] srcvec, LSTMWeight[][] srcmatrix, int from, int to, int from2, int to2)
+        public void matrixXvectorADD(LSTMCell[] dest, double[] srcvec, LSTMWeight[][] srcmatrix, int from, int to, int from2, int to2)
         {
             //ac mod
             Parallel.For(0, (to - from), parallelOption, i =>
             {
                 for (int j = 0; j < to2 - from2; j++)
                 {
-                    dest[i + from].netIn += srcvec[j + from2].cellOutput * srcmatrix[i][j].wInputInputGate;
+                    dest[i + from].netIn += srcvec[j + from2] * srcmatrix[i][j].wInputInputGate;
                 }
             });
         }
@@ -485,9 +501,9 @@ namespace RNNSharp
                     for (int j = 0; j < fea_size; j++)
                     {
                         LSTMWeight w = w_i[j];
-                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j].cellOutput;
-                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * neuFeatures[j].cellOutput;
-                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j].cellOutput;
+                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j];
+                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + activationFunctionG(c.netCellState) * fPrime(c.netIn) * neuFeatures[j];
+                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j];
 
                     }
                 }
@@ -560,14 +576,14 @@ namespace RNNSharp
                           w_i[j].wInputCell += alpha * cellStateError * w_i[j].dSInputCell - w_i[j].wInputCell * beta2;
                           w_i[j].wInputInputGate += alpha * cellStateError * w_i[j].dSInputInputGate - w_i[j].wInputInputGate * beta2;
                           w_i[j].wInputForgetGate += alpha * cellStateError * w_i[j].dSInputForgetGate - w_i[j].wInputForgetGate * beta2;
-                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j].cellOutput - w_i[j].wInputOutputGate * beta2;
+                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j] - w_i[j].wInputOutputGate * beta2;
                       }
                       else
                       {
                           w_i[j].wInputCell += alpha * cellStateError * w_i[j].dSInputCell;
                           w_i[j].wInputInputGate += alpha * cellStateError * w_i[j].dSInputInputGate;
                           w_i[j].wInputForgetGate += alpha * cellStateError * w_i[j].dSInputForgetGate;
-                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j].cellOutput;
+                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j];
                       }
 
                   }
@@ -683,9 +699,9 @@ namespace RNNSharp
                     for (int i = 0; i < fea_size; i++)
                     {
                         LSTMWeight w = mat_feature2hidden[j][i];
-                        cell_j.netForget += neuFeatures[i].cellOutput * w.wInputForgetGate;
-                        cell_j.netCellState += neuFeatures[i].cellOutput * w.wInputCell;
-                        cell_j.netOut += neuFeatures[i].cellOutput * w.wInputOutputGate;
+                        cell_j.netForget += neuFeatures[i] * w.wInputForgetGate;
+                        cell_j.netCellState += neuFeatures[i] * w.wInputCell;
+                        cell_j.netOut += neuFeatures[i] * w.wInputOutputGate;
                     }
                 }
 
@@ -731,16 +747,9 @@ namespace RNNSharp
         public override void netFlush()   //cleans all activations and error vectors
         {
             int a;
-            for (a = 0; a < L0; a++)
-            {
-                neuInput[a].cellOutput = 0;
-                neuInput[a].er = 0;
-            }
-
             for (a = 0; a < fea_size; a++)
             {
-                neuFeatures[a].cellOutput = 0;
-                neuFeatures[a].er = 0;
+                neuFeatures[a] = 0;
             }
 
             for (int i = 0; i < L1; i++)

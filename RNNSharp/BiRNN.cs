@@ -46,6 +46,12 @@ namespace RNNSharp
             backwardRNN.SetTrainingSet(train);
         }
 
+        public override void initWeights()
+        {
+            forwardRNN.initWeights();
+            backwardRNN.initWeights();
+
+        }
         public override void SetValidationSet(DataSet validation)
         {
             m_ValidationSet = validation;
