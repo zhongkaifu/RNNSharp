@@ -297,7 +297,6 @@ namespace RNNSharp
         {
             //Reset the network
             netReset();
-
             int numStates = pSequence.GetSize();
 
             int[] predicted_nn = new int[numStates];

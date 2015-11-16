@@ -331,6 +331,7 @@ namespace RNNSharp
 
                 //Copy output result to forward net work's output
                 forwardRNN.neuOutput = seqOutput[curState];
+                forwardRNN.mat_hidden2output = mat_hidden2output;
 
                 forwardRNN.learnNet(state, curState, true);
                 forwardRNN.LearnBackTime(state, numStates, curState);
@@ -343,6 +344,7 @@ namespace RNNSharp
 
                 //Copy output result to forward net work's output
                 backwardRNN.neuOutput = seqOutput[curState2];
+                backwardRNN.mat_hidden2output = mat_hidden2output;
 
                 backwardRNN.learnNet(state2, curState2, true);
                 backwardRNN.LearnBackTime(state2, numStates, curState2);
@@ -419,6 +421,7 @@ namespace RNNSharp
 
                 //Copy output result to forward net work's output
                 forwardRNN.neuOutput = seqOutput[curState];
+                forwardRNN.mat_hidden2output = mat_hidden2output;
 
                 forwardRNN.learnNet(state, curState, true);
                 forwardRNN.LearnBackTime(state, numStates, curState);
@@ -431,6 +434,7 @@ namespace RNNSharp
 
                 //Copy output result to forward net work's output
                 backwardRNN.neuOutput = seqOutput[curState2];
+                backwardRNN.mat_hidden2output = mat_hidden2output;
 
                 backwardRNN.learnNet(state2, curState2, true);
                 backwardRNN.LearnBackTime(state2, numStates, curState2);

@@ -250,20 +250,20 @@ namespace RNNSharp
             return Math.Tanh(x);
         }
 
-        double gPrime(double x)
+        double TanHDerivative(double x)
         {
             double tmp = Math.Tanh(x);
             return 1 - tmp * tmp;
         }
 
-        double activationFunctionF(double x)
+        double Sigmoid(double x)
         {
             return (1 / (1 + Math.Exp(-x)));
         }
 
-        double fPrime(double x)
+        double SigmoidDerivative(double x)
         {
-            return activationFunctionF(x) * (1 - activationFunctionF(x));
+            return Sigmoid(x) * (1 - Sigmoid(x));
         }
 
 
@@ -357,8 +357,6 @@ namespace RNNSharp
         public override void initMem()
         {
             CreateCell(null);
-
-            mat_hidden2output = new Matrix(L2, L1);
 
             for (int i = 0; i < MAX_RNN_HIST; i++)
             {
@@ -477,9 +475,9 @@ namespace RNNSharp
                 {
                     var entry = sparse.GetEntry(k);
                     LSTMWeight w = w_i[entry.Key];
-                    w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * entry.Value;
-                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * entry.Value;
-                    w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * entry.Value;
+                    w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + TanHDerivative(c.netCellState) * c.yIn * entry.Value;
+                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * entry.Value;
+                    w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * entry.Value;
 
                 }
 
@@ -489,18 +487,18 @@ namespace RNNSharp
                     for (int j = 0; j < fea_size; j++)
                     {
                         LSTMWeight w = w_i[j];
-                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + gPrime(c.netCellState) * c.yIn * neuFeatures[j];
-                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * neuFeatures[j];
-                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * fPrime(c.netForget) * neuFeatures[j];
+                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + TanHDerivative(c.netCellState) * c.yIn * neuFeatures[j];
+                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * neuFeatures[j];
+                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * neuFeatures[j];
 
                     }
                 }
 
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget + TanH(c.netCellState) * fPrime(c.netIn) * c.cellState;
+                c.dSWCellIn = c.dSWCellIn * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * c.cellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * fPrime(c.netForget) * c.previousCellState;
+                c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * c.cellState;
 
                 neuHidden[i] = c;
             });
@@ -518,10 +516,11 @@ namespace RNNSharp
               }
 
               //using the error find the gradient of the output gate
-              double gradientOutputGate = fPrime(c.netOut) * TanH(c.cellState) * weightedSum;
+              double gradientOutputGate = SigmoidDerivative(c.netOut) * TanH(c.cellState) * weightedSum;
 
               //internal cell state error
-              double cellStateError = c.yOut * weightedSum * gPrime(c.cellState);
+              double cellStateError = c.yOut* weightedSum;
+
 
               //weight updates
 
@@ -688,23 +687,22 @@ namespace RNNSharp
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;
+                //squash input
+                cell_j.yIn = Sigmoid(cell_j.netIn);
+
                 //include internal connection multiplied by the previous cell state
                 cell_j.netForget += cell_j.previousCellState * cell_j.wCellForget;
-                cell_j.netOut += cell_j.previousCellState * cell_j.wCellOut;
-
-                //squash input
-                cell_j.yIn = activationFunctionF(cell_j.netIn);
-                cell_j.yForget = activationFunctionF(cell_j.netForget);
-                //squash output gate 
-                cell_j.yOut = activationFunctionF(cell_j.netOut);
+                cell_j.yForget = Sigmoid(cell_j.netForget);
+               
 
                 //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
                 cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * TanH(cell_j.netCellState);
 
                 ////include the internal connection multiplied by the CURRENT cell state
-                //cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
+                cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
 
-
+                //squash output gate 
+                cell_j.yOut = Sigmoid(cell_j.netOut);
 
                 cell_j.cellOutput = TanH(cell_j.cellState) * cell_j.yOut;
 
@@ -719,7 +717,7 @@ namespace RNNSharp
                 neuOutput[c].cellOutput = 0;
             }
 
-            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1);
+            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1 + 1);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
