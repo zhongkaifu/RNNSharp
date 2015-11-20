@@ -15,16 +15,16 @@ namespace RNNSharp
         protected neuron[] bptt_fea;
         protected SparseVector[] bptt_inputs = new SparseVector[MAX_RNN_HIST];    // TODO: add const constraint
 
-        protected Matrix mat_bptt_syn0_w = new Matrix();
-        protected Matrix mat_bptt_syn0_ph = new Matrix();
+        protected Matrix<double> mat_bptt_syn0_w = new Matrix<double>();
+        protected Matrix<double> mat_bptt_syn0_ph = new Matrix<double>();
 
-        protected Matrix mat_bptt_synf = new Matrix();
-        protected Matrix mat_hiddenBpttWeight = new Matrix();
+        protected Matrix<double> mat_bptt_synf = new Matrix<double>();
+        protected Matrix<double> mat_hiddenBpttWeight = new Matrix<double>();
 
         protected neuron[] neuInput;		//neurons in input layer
         protected neuron[] neuHidden;		//neurons in hidden layer
-        protected Matrix mat_input2hidden = new Matrix();
-        protected Matrix mat_feature2hidden = new Matrix();
+        protected Matrix<double> mat_input2hidden = new Matrix<double>();
+        protected Matrix<double> mat_feature2hidden = new Matrix<double>();
 
         public SimpleRNN()
         {
@@ -91,7 +91,7 @@ namespace RNNSharp
             }
         }
 
-        public override void GetHiddenLayer(Matrix m, int curStatus)
+        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
         {
             for (int i = 0; i < L1; i++)
             {
@@ -342,30 +342,30 @@ namespace RNNSharp
             for (int a = 0; a < (bptt + bptt_block) * fea_size; a++)
                 bptt_fea[a].cellOutput = 0;
 
-            mat_bptt_syn0_w = new Matrix(L1, L0 - L1);
-            mat_bptt_syn0_ph = new Matrix(L1, L1);
-            mat_bptt_synf = new Matrix(L1, fea_size);
+            mat_bptt_syn0_w = new Matrix<double>(L1, L0 - L1);
+            mat_bptt_syn0_ph = new Matrix<double>(L1, L1);
+            mat_bptt_synf = new Matrix<double>(L1, fea_size);
         }
 
         public override void initMem()
         {
             CreateCells();
 
-            mat_hidden2output = new Matrix(L2, L1);
+            mat_hidden2output = new Matrix<double>(L2, L1);
 
             for (int i = 0; i < MAX_RNN_HIST; i++)
             {
                 m_Diff[i] = new double[L2];
             }
 
-            m_tagBigramTransition = new Matrix(L2, L2);
-            m_DeltaBigramLM = new Matrix(L2, L2);
+            m_tagBigramTransition = new Matrix<double>(L2, L2);
+            m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
 
-            mat_input2hidden = new Matrix(L1, L0 - L1);
-            mat_feature2hidden = new Matrix(L1, fea_size);
+            mat_input2hidden = new Matrix<double>(L1, L0 - L1);
+            mat_feature2hidden = new Matrix<double>(L1, fea_size);
 
-            mat_hiddenBpttWeight = new Matrix(L1, L1);
+            mat_hiddenBpttWeight = new Matrix<double>(L1, L1);
 
 
             Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
@@ -526,7 +526,7 @@ namespace RNNSharp
                 {
                     m_Diff[i] = new double[L2];
                 }
-                m_DeltaBigramLM = new Matrix(L2, L2);
+                m_DeltaBigramLM = new Matrix<double>(L2, L2);
             }
 
             sr.Close();

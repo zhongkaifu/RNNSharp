@@ -60,21 +60,21 @@ namespace RNNSharp
 
         protected double[] neuFeatures;		//features in input layer
         public neuron[] neuOutput;		//neurons in output layer
-        public Matrix mat_hidden2output;
+        public Matrix<double> mat_hidden2output;
 
         protected const int MAX_RNN_HIST = 512;
 
-        protected Matrix m_RawOutput;
+        protected Matrix<double> m_RawOutput;
         protected int counterTokenForLM;
 
         protected DataSet m_TrainingSet;
         protected DataSet m_ValidationSet;
 
         // for Viterbi decoding
-        public Matrix m_tagBigramTransition;
+        public Matrix<double> m_tagBigramTransition;
 
         /// for sequence training
-        public Matrix m_DeltaBigramLM; // different of tag output tag transition probability, saving p(u|v) in a sparse matrix
+        public Matrix<double> m_DeltaBigramLM; // different of tag output tag transition probability, saving p(u|v) in a sparse matrix
         public double[][] m_Diff = new double[MAX_RNN_HIST][];
         public double m_dTagBigramTransitionWeight = 1.0; // tag bigram transition probability weight
 
@@ -86,7 +86,7 @@ namespace RNNSharp
         public virtual void setTagBigramTransition(List<List<double>> m)
         {
             if (null == m_tagBigramTransition)
-                m_tagBigramTransition = new Matrix(L2, L2);
+                m_tagBigramTransition = new Matrix<double>(L2, L2);
 
             for (int i = 0; i < L2; i++)
                 for (int j = 0; j < L2; j++)
@@ -95,7 +95,7 @@ namespace RNNSharp
         }
 
         //Save matrix into file as binary format
-        protected void saveMatrixBin(Matrix mat, BinaryWriter fo)
+        protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo)
         {
             int width = mat.GetWidth();
             int height = mat.GetHeight();
@@ -114,12 +114,12 @@ namespace RNNSharp
             }
         }
 
-        protected Matrix loadMatrixBin(BinaryReader br)
+        protected Matrix<double> loadMatrixBin(BinaryReader br)
         {
             int width = br.ReadInt32();
             int height = br.ReadInt32();
 
-            Matrix m = new Matrix(height, width);
+            Matrix<double> m = new Matrix<double>(height, width);
 
             for (int r = 0; r < height; r++)
             {
@@ -300,7 +300,7 @@ namespace RNNSharp
             int numStates = pSequence.GetSize();
 
             int[] predicted_nn = new int[numStates];
-            m_RawOutput = new Matrix(numStates, L2);// new double[numStates][];
+            m_RawOutput = new Matrix<double>(numStates, L2);// new double[numStates][];
             for (int curState = 0; curState < numStates; curState++)
             {
                 State state = pSequence.Get(curState);
@@ -345,7 +345,7 @@ namespace RNNSharp
         }
 
 
-        public void UpdateWeights(Matrix weights, Matrix delta)
+        public void UpdateWeights(Matrix<double> weights, Matrix<double> delta)
         {
             Parallel.For(0, weights.GetHeight(), parallelOption, b =>
             {
@@ -408,7 +408,7 @@ namespace RNNSharp
             return imax;
         }
 
-        public void ForwardBackward(int numStates, Matrix m_RawOutput)
+        public void ForwardBackward(int numStates, Matrix<double> m_RawOutput)
         {
             //forward
             double[][] alphaSet = new double[numStates][];
@@ -572,7 +572,7 @@ namespace RNNSharp
         public abstract void saveNetBin(string filename);
         public abstract void loadNetBin(string filename);
 
-        public abstract void GetHiddenLayer(Matrix m, int curStatus);
+        public abstract void GetHiddenLayer(Matrix<double> m, int curStatus);
 
         public static MODELTYPE CheckModelFileType(string filename)
         {
@@ -584,7 +584,7 @@ namespace RNNSharp
             return type;
         }
 
-        public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2)
+        public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
         {
             //ac mod
             Parallel.For(0, (to - from), parallelOption, i =>
@@ -596,7 +596,7 @@ namespace RNNSharp
             });
         }
 
-        public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2, int type)
+        public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
         {
             if (type == 0)
             {		
@@ -637,7 +637,7 @@ namespace RNNSharp
 
         public int[] DecodeNN(Sequence seq)
         {
-            Matrix ys = InnerDecode(seq);
+            Matrix<double> ys = InnerDecode(seq);
             int n = seq.GetSize();
             int[] output = new int[n];
 
@@ -654,11 +654,11 @@ namespace RNNSharp
         {
 
             //ys contains the output of RNN for each word
-            Matrix ys = InnerDecode(seq);
+            Matrix<double> ys = InnerDecode(seq);
 
             int n = seq.GetSize();
             int K = L2;
-            Matrix STP = m_tagBigramTransition;
+            Matrix<double> STP = m_tagBigramTransition;
             PAIR<int, int>[, ,] vPath = new PAIR<int, int>[n, K, N];
             int DUMP_LABEL = -1;
             double[,] vPreAlpha = new double[K, N];
@@ -746,11 +746,11 @@ namespace RNNSharp
         public int[] DecodeCRF(Sequence seq)
         {
             //ys contains the output of RNN for each word
-            Matrix ys = InnerDecode(seq);
+            Matrix<double> ys = InnerDecode(seq);
 
             int n = seq.GetSize();
             int K = L2;
-            Matrix STP = m_tagBigramTransition;
+            Matrix<double> STP = m_tagBigramTransition;
             int[,] vPath = new int[n, K];
 
             double[] vPreAlpha = new double[K];
@@ -803,13 +803,13 @@ namespace RNNSharp
         }
 
 
-        public virtual Matrix InnerDecode(Sequence pSequence)
+        public virtual Matrix<double> InnerDecode(Sequence pSequence)
         {
             //Reset the network
             netReset();
             int numStates = pSequence.GetSize();
 
-            Matrix m = new Matrix(numStates, L2);
+            Matrix<double> m = new Matrix<double>(numStates, L2);
             int[] predicted = new int[numStates];
             for (int curState = 0; curState < numStates; curState++)
             {

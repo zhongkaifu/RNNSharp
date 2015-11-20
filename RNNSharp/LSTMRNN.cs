@@ -71,7 +71,7 @@ namespace RNNSharp
         }
 
 
-        public override void GetHiddenLayer(Matrix m, int curStatus)
+        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
         {
             for (int i = 0; i <= L1; i++)
             {
@@ -180,7 +180,7 @@ namespace RNNSharp
                 {
                     m_Diff[i] = new double[L2];
                 }
-                m_DeltaBigramLM = new Matrix(L2, L2);
+                m_DeltaBigramLM = new Matrix<double>(L2, L2);
             }
 
             sr.Close();
@@ -316,7 +316,7 @@ namespace RNNSharp
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
             double hiddenOutputRand = 1 / Math.Sqrt((double)L1);
-            mat_hidden2output = new Matrix(L2, L1 + 1);
+            mat_hidden2output = new Matrix<double>(L2, L1 + 1);
 
             for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
             {
@@ -363,8 +363,8 @@ namespace RNNSharp
                 m_Diff[i] = new double[L2];
             }
 
-            m_tagBigramTransition = new Matrix(L2, L2);
-            m_DeltaBigramLM = new Matrix(L2, L2);
+            m_tagBigramTransition = new Matrix<double>(L2, L2);
+            m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
             Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
             initWeights();
@@ -419,7 +419,7 @@ namespace RNNSharp
             }
         }
 
-        public void matrixXvectorADD(neuron[] dest, LSTMCell[] srcvec, Matrix srcmatrix, int from, int to, int from2, int to2)
+        public void matrixXvectorADD(neuron[] dest, LSTMCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
         {
             //ac mod
             Parallel.For(0, (to - from), parallelOption, i =>
