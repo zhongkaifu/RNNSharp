@@ -309,58 +309,7 @@ namespace RNNSharp
                 seqOutput[curState][state.GetLabel()].er = 1 - m_Diff[curState][state.GetLabel()];
             }
 
-            double[] output = new double[L2];
-            //Learn forward network
-            for (int curState = 0; curState < numStates; curState++)
-            {
-                counter++;
-
-                int curState2 = numStates - 1 - curState;
-
-                // error propogation
-                State state = pSequence.Get(curState);
-                forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
-                forwardRNN.computeNet(state, output);      //compute probability distribution
-
-                //Copy output result to forward net work's output
-                forwardRNN.neuOutput = seqOutput[curState];
-                forwardRNN.mat_hidden2output = mat_hidden2output;
-
-                forwardRNN.learnNet(state, curState, true);
-                forwardRNN.LearnBackTime(state, numStates, curState);
-                forwardRNN.copyHiddenLayerToInput();
-
-                // error propogation
-                State state2 = pSequence.Get(curState2);
-                backwardRNN.setInputLayer(state2, curState2, numStates, predicted_bnn, false);
-                backwardRNN.computeNet(state2, output);      //compute probability distribution
-
-                //Copy output result to forward net work's output
-                backwardRNN.neuOutput = seqOutput[curState2];
-                backwardRNN.mat_hidden2output = mat_hidden2output;
-
-                backwardRNN.learnNet(state2, curState2, true);
-                backwardRNN.LearnBackTime(state2, numStates, curState2);
-                backwardRNN.copyHiddenLayerToInput();
-
-                for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
-                {
-                    //update weights for hidden to output layer
-
-                    for (int k = 0; k < mat_hidden2output.GetWidth(); k++)
-                    {
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
-                        {
-                            mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er - mat_hidden2output[i][k] * beta);
-                        }
-                        else
-                        {
-                            mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
-                        }
-                    }
-                }
-
-            }
+            LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
 
             return predicted;
         }
@@ -399,25 +348,20 @@ namespace RNNSharp
                 seqOutput[curState][state.GetLabel()].er = 1 - seqOutput[curState][state.GetLabel()].cellOutput;
             }
 
+            LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+
+            return predicted;
+        }
+
+        private void LearnTwoRNN(Sequence pSequence, Matrix<neuron> mergedHiddenLayer, neuron[][] seqOutput)
+        {
+            int numStates = pSequence.GetSize();
             double[] output = new double[L2];
-            //Learn forward network
+            forwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
+            backwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
+
             for (int curState = 0; curState < numStates; curState++)
             {
-                counter++;
-
-                // error propogation
-                State state = pSequence.Get(curState);
-                forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
-                forwardRNN.computeNet(state, output);      //compute probability distribution
-
-                //Copy output result to forward net work's output
-                forwardRNN.neuOutput = seqOutput[curState];
-                forwardRNN.mat_hidden2output = mat_hidden2output;
-
-                forwardRNN.learnNet(state, curState, true);
-                forwardRNN.LearnBackTime(state, numStates, curState);
-                forwardRNN.copyHiddenLayerToInput();
-
                 for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
                 {
                     //update weights for hidden to output layer
@@ -434,42 +378,88 @@ namespace RNNSharp
                         }
                     }
                 }
+            }
 
-                int curState2 = numStates - 1 - curState;
+            Parallel.Invoke(() =>
+            {
 
-                // error propogation
-                State state2 = pSequence.Get(curState2);
-                backwardRNN.setInputLayer(state2, curState2, numStates, predicted_bnn, false);
-                backwardRNN.computeNet(state2, output);      //compute probability distribution
-
-                //Copy output result to forward net work's output
-                backwardRNN.neuOutput = seqOutput[curState2];
-                backwardRNN.mat_hidden2output = mat_hidden2output;
-
-                backwardRNN.learnNet(state2, curState2, true);
-                backwardRNN.LearnBackTime(state2, numStates, curState2);
-                backwardRNN.copyHiddenLayerToInput();
-
-
-                for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
+                //Learn forward network
+                for (int curState = 0; curState < numStates; curState++)
                 {
-                    //update weights for hidden to output layer
+                    counter++;
 
-                    for (int k = 0; k < mat_hidden2output.GetWidth(); k++)
+                    // error propogation
+                    State state = pSequence.Get(curState);
+                    forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
+                    forwardRNN.computeNet(state, output);      //compute probability distribution
+
+                    //Copy output result to forward net work's output
+                    forwardRNN.neuOutput = seqOutput[curState];
+                    // forwardRNN.mat_hidden2output = mat_hidden2output;
+
+                    forwardRNN.learnNet(state, curState, true);
+                    forwardRNN.LearnBackTime(state, numStates, curState);
+                    forwardRNN.copyHiddenLayerToInput();
+
+                    for (int i = 0; i < forwardRNN.mat_hidden2output.GetHeight(); i++)
                     {
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
+                        //update weights for hidden to output layer
+
+                        for (int k = 0; k < forwardRNN.mat_hidden2output.GetWidth(); k++)
                         {
-                            mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er - mat_hidden2output[i][k] * beta);
-                        }
-                        else
-                        {
-                            mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er;
+                            if ((counter % 10) == 0)	//regularization is done every 10. step
+                            {
+                                forwardRNN.mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er - forwardRNN.mat_hidden2output[i][k] * beta);
+                            }
+                            else
+                            {
+                                forwardRNN.mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
+                            }
                         }
                     }
                 }
-            }
+            },
+            () =>
+            {
 
-            return predicted;
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    counter++;
+
+                    int curState2 = numStates - 1 - curState;
+
+                    // error propogation
+                    State state2 = pSequence.Get(curState2);
+                    backwardRNN.setInputLayer(state2, curState2, numStates, predicted_bnn, false);
+                    backwardRNN.computeNet(state2, output);      //compute probability distribution
+
+                    //Copy output result to forward net work's output
+                    backwardRNN.neuOutput = seqOutput[curState2];
+                    // backwardRNN.mat_hidden2output = mat_hidden2output;
+
+                    backwardRNN.learnNet(state2, curState2, true);
+                    backwardRNN.LearnBackTime(state2, numStates, curState2);
+                    backwardRNN.copyHiddenLayerToInput();
+
+
+                    for (int i = 0; i < backwardRNN.mat_hidden2output.GetHeight(); i++)
+                    {
+                        //update weights for hidden to output layer
+
+                        for (int k = 0; k < backwardRNN.mat_hidden2output.GetWidth(); k++)
+                        {
+                            if ((counter % 10) == 0)	//regularization is done every 10. step
+                            {
+                                backwardRNN.mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er - backwardRNN.mat_hidden2output[i][k] * beta);
+                            }
+                            else
+                            {
+                                backwardRNN.mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er;
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         public int GetBestOutputIndex(Matrix<double> m, int curState)

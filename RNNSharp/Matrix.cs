@@ -63,5 +63,20 @@ namespace RNNSharp
         {
             return m_nHeight;
         }
+
+        public Matrix<T> CopyTo()
+        {
+            Matrix<T> m = new Matrix<T>(m_nHeight, m_nWidth);
+
+            for (int i = 0; i < m_nHeight; i++)
+            {
+                for (int j = 0; j < m_nWidth; j++)
+                {
+                    m[i][j] = m_saData[i][j];
+                }
+            }
+
+            return m;
+        }
     }
 }
