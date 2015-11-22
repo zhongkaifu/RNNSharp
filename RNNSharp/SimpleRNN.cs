@@ -378,7 +378,7 @@ namespace RNNSharp
             }
         }
 
-        public override void netReset()   //cleans hidden layer activation + bptt history
+        public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
             for (int a = 0; a < L1; a++)
                 neuHidden[a].cellOutput = 1.0;

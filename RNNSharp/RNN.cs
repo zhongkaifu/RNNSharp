@@ -225,7 +225,7 @@ namespace RNNSharp
 
         public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
 
-        public abstract void netReset();
+        public abstract void netReset(bool updateNet = false);
         public abstract void copyHiddenLayerToInput();
         public abstract void computeNet(State state, double[] doutput);
 
@@ -234,7 +234,7 @@ namespace RNNSharp
         {
             int numStates = pSequence.GetSize();
             int[] predicted = new int[numStates];
-            netReset();
+            netReset(true);
             for (int curState = 0; curState < numStates; curState++)
             {
                 State state = pSequence.Get(curState);
@@ -296,7 +296,7 @@ namespace RNNSharp
         public virtual int[] learnSentenceForRNNCRF(Sequence pSequence)
         {
             //Reset the network
-            netReset();
+            netReset(false);
             int numStates = pSequence.GetSize();
 
             int[] predicted_nn = new int[numStates];
@@ -326,7 +326,7 @@ namespace RNNSharp
 
             UpdateBigramTransition(pSequence);
 
-            netReset();
+            netReset(true);
             for (int curState = 0; curState < numStates;curState++)
             {
                 // error propogation
@@ -806,7 +806,7 @@ namespace RNNSharp
         public virtual Matrix<double> InnerDecode(Sequence pSequence)
         {
             //Reset the network
-            netReset();
+            netReset(false);
             int numStates = pSequence.GetSize();
 
             Matrix<double> m = new Matrix<double>(numStates, L2);

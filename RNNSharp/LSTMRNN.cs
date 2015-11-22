@@ -448,10 +448,6 @@ namespace RNNSharp
         {
         }
 
-
-    
-
-
         public override void learnNet(State state, int timeat, bool biRNN = false)
         {
             //create delta list
@@ -498,7 +494,7 @@ namespace RNNSharp
                 c.dSWCellIn = c.dSWCellIn * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * c.cellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * c.cellState;
+                c.dSWCellForget = c.dSWCellForget * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * c.previousCellState;
 
                 neuHidden[i] = c;
             });
@@ -516,7 +512,7 @@ namespace RNNSharp
               }
 
               //using the error find the gradient of the output gate
-              double gradientOutputGate = SigmoidDerivative(c.netOut) * TanH(c.cellState) * weightedSum;
+              double gradientOutputGate = SigmoidDerivative(c.netOut) * c.cellState * weightedSum;
 
               //internal cell state error
               double cellStateError = c.yOut* weightedSum;
@@ -751,13 +747,40 @@ namespace RNNSharp
             }
         }
 
-        public override void netReset()   //cleans hidden layer activation + bptt history
+        public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
             for (int i = 0; i < L1; i++)
             {
                 LSTMCellInit(NORMAL, neuHidden[i]);
             }
             LSTMCellInit(BIAS, neuHidden[L1]);
+
+            if (updateNet == true)
+            {
+                int INPUT = m_TrainingSet.GetSparseDimension();
+                Parallel.For(0, L1, parallelOption, i =>
+                {
+                    for (int j = 0; j <= INPUT; j++)
+                    {
+                        mat_input2hidden[i][j].dSInputCell = 0;
+                        mat_input2hidden[i][j].dSInputForgetGate = 0;
+                        mat_input2hidden[i][j].dSInputInputGate = 0;
+                    }
+                });
+
+                if (fea_size > 0)
+                {
+                    Parallel.For(0, L1, parallelOption, i =>
+                    {
+                        for (int j = 0; j < fea_size; j++)
+                        {
+                            mat_feature2hidden[i][j].dSInputCell = 0;
+                            mat_feature2hidden[i][j].dSInputForgetGate = 0;
+                            mat_feature2hidden[i][j].dSInputInputGate = 0;
+                        }
+                    });
+                }
+            }
         }
 
         public override void copyHiddenLayerToInput()
