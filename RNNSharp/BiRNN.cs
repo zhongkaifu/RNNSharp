@@ -39,7 +39,7 @@ namespace RNNSharp
         {
             m_TrainingSet = train;
             fea_size = m_TrainingSet.GetDenseDimension();
-            L0 = m_TrainingSet.GetSparseDimension() + L1;
+            L0 = m_TrainingSet.GetSparseDimension();
             L2 = m_TrainingSet.GetTagSize();
 
             forwardRNN.SetTrainingSet(train);
@@ -122,7 +122,7 @@ namespace RNNSharp
 
         public override void SetHiddenLayerSize(int newsize)
         {
-            L1 = newsize; if (null != m_TrainingSet) L0 = (int)m_TrainingSet.GetSparseDimension() + L1;
+            L1 = newsize;
 
             forwardRNN.SetHiddenLayerSize(newsize);
             backwardRNN.SetHiddenLayerSize(newsize);
@@ -210,8 +210,6 @@ namespace RNNSharp
                     forwardRNN.GetHiddenLayer(mForward, curState);
 
                     predicted_fnn[curState] = forwardRNN.GetBestOutputIndex();
-
-                    forwardRNN.copyHiddenLayerToInput();
                 }
             },
              () =>
@@ -226,8 +224,6 @@ namespace RNNSharp
                      backwardRNN.GetHiddenLayer(mBackward, curState);
 
                      predicted_bnn[curState] = backwardRNN.GetBestOutputIndex();
-
-                     backwardRNN.copyHiddenLayerToInput();
                  }
              });
 
@@ -394,7 +390,6 @@ namespace RNNSharp
 
                     forwardRNN.learnNet(state, curState, true);
                     forwardRNN.LearnBackTime(state, numStates, curState);
-                    forwardRNN.copyHiddenLayerToInput();
 
                     for (int i = 0; i < forwardRNN.mat_hidden2output.GetHeight(); i++)
                     {
@@ -433,7 +428,6 @@ namespace RNNSharp
 
                     backwardRNN.learnNet(state2, curState2, true);
                     backwardRNN.LearnBackTime(state2, numStates, curState2);
-                    backwardRNN.copyHiddenLayerToInput();
 
 
                     for (int i = 0; i < backwardRNN.mat_hidden2output.GetHeight(); i++)
@@ -497,11 +491,6 @@ namespace RNNSharp
         }
 
         public override void computeNet(State state, double[] doutput)
-        {
-
-        }
-
-        public override void copyHiddenLayerToInput()
         {
 
         }

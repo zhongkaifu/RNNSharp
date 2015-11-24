@@ -48,18 +48,24 @@ namespace RNNSharp
         public double wInputForgetGate;
         public double wInputOutputGate;
 
+    }
+
+    public struct LSTMWeightDerivative
+    {
         //partial derivatives. dont need partial derivative for output gate as it uses BP not RTRL
         public double dSInputCell;
         public double dSInputInputGate;
         public double dSInputForgetGate;
     }
 
-
     public class LSTMRNN : RNN
     {
         public LSTMCell[] neuHidden;		//neurons in hidden layer
-        protected LSTMWeight[][] mat_input2hidden;
-        protected LSTMWeight[][] mat_feature2hidden;
+        protected LSTMWeight[][] input2hidden;
+        protected LSTMWeight[][] feature2hidden;
+
+        protected LSTMWeightDerivative[][] input2hiddenDeri;
+        protected LSTMWeightDerivative[][] feature2hiddenDeri;
 
         //for LSTM layer
         const bool NORMAL = true;
@@ -161,12 +167,12 @@ namespace RNNSharp
 
             //Load weight matrix between each two layer pairs
             //weight input->hidden
-            mat_input2hidden = loadLSTMWeight(br);
+            input2hidden = loadLSTMWeight(br);
 
             if (fea_size > 0)
             {
                 //weight fea->hidden
-                mat_feature2hidden = loadLSTMWeight(br);
+                feature2hidden = loadLSTMWeight(br);
             }
 
             //weight hidden->output
@@ -224,12 +230,12 @@ namespace RNNSharp
             SaveHiddenLayerWeights(fo);
 
             //weight input->hidden
-            saveLSTMWeight(mat_input2hidden, fo);
+            saveLSTMWeight(input2hidden, fo);
   
             if (fea_size > 0)
             {
                 //weight fea->hidden
-                saveLSTMWeight(mat_feature2hidden, fo);
+                saveLSTMWeight(feature2hidden, fo);
             }
 
             //weight hidden->output
@@ -279,11 +285,6 @@ namespace RNNSharp
             w.wInputForgetGate = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
             w.wInputOutputGate = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
 
-            //partial derivatives
-            w.dSInputCell = 0;
-            w.dSInputInputGate = 0;
-            w.dSInputForgetGate = 0;
-
             return w;
         }
 
@@ -291,25 +292,25 @@ namespace RNNSharp
         {
             int INPUT = m_TrainingSet.GetSparseDimension();
             //create and initialise the weights from input to hidden layer
-            mat_input2hidden = new LSTMWeight[L1][];
+            input2hidden = new LSTMWeight[L1][];
             for (int i = 0; i < L1; i++)
             {
-                mat_input2hidden[i] = new LSTMWeight[INPUT + 1];
+                input2hidden[i] = new LSTMWeight[INPUT + 1];
                 for (int j = 0; j <= INPUT; j++)
                 {
-                    mat_input2hidden[i][j] = LSTMWeightInit(INPUT);
+                    input2hidden[i][j] = LSTMWeightInit(INPUT);
                 }
             }
 
             if (fea_size > 0)
             {
-                mat_feature2hidden = new LSTMWeight[L1][];
+                feature2hidden = new LSTMWeight[L1][];
                 for (int i = 0; i < L1; i++)
                 {
-                    mat_feature2hidden[i] = new LSTMWeight[fea_size];
+                    feature2hidden[i] = new LSTMWeight[fea_size];
                     for (int j = 0; j < fea_size; j++)
                     {
-                        mat_feature2hidden[i][j] = LSTMWeightInit(INPUT);
+                        feature2hidden[i][j] = LSTMWeightInit(INPUT);
                     }
                 }
             }
@@ -465,12 +466,12 @@ namespace RNNSharp
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, L1, parallelOption, i =>
             {
-                LSTMWeight[] w_i = mat_input2hidden[i];
+                LSTMWeightDerivative[] w_i = input2hiddenDeri[i];
                 LSTMCell c = neuHidden[i];
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
-                    LSTMWeight w = w_i[entry.Key];
+                    LSTMWeightDerivative w = w_i[entry.Key];
                     w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + TanHDerivative(c.netCellState) * c.yIn * entry.Value;
                     w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * entry.Value;
                     w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * entry.Value;
@@ -479,10 +480,10 @@ namespace RNNSharp
 
                 if (fea_size > 0)
                 {
-                    w_i = mat_feature2hidden[i];
+                    w_i = feature2hiddenDeri[i];
                     for (int j = 0; j < fea_size; j++)
                     {
-                        LSTMWeight w = w_i[j];
+                        LSTMWeightDerivative w = w_i[j];
                         w_i[j].dSInputCell = w.dSInputCell * c.yForget + TanHDerivative(c.netCellState) * c.yIn * neuFeatures[j];
                         w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + TanH(c.netCellState) * SigmoidDerivative(c.netIn) * neuFeatures[j];
                         w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + c.previousCellState * SigmoidDerivative(c.netForget) * neuFeatures[j];
@@ -512,7 +513,7 @@ namespace RNNSharp
               }
 
               //using the error find the gradient of the output gate
-              double gradientOutputGate = SigmoidDerivative(c.netOut) * c.cellState * weightedSum;
+              double gradientOutputGate = SigmoidDerivative(c.netOut) * TanHDerivative(c.cellState) * weightedSum;
 
               //internal cell state error
               double cellStateError = c.yOut* weightedSum;
@@ -524,23 +525,24 @@ namespace RNNSharp
 
               //output gates. for each connection to the hidden layer
               //to the input layer
-              LSTMWeight[] w_i = mat_input2hidden[i];
+              LSTMWeight[] w_i = input2hidden[i];
+              LSTMWeightDerivative[] wd_i = input2hiddenDeri[i];
               for (int k = 0; k < sparseFeatureSize; k++)
               {
                   var entry = sparse.GetEntry(k);
                   //updates weights for input to hidden layer
                   if ((counter % 10) == 0)	//regularization is done every 10. step
                   {
-                      w_i[entry.Key].wInputCell += alpha * cellStateError * w_i[entry.Key].dSInputCell - w_i[entry.Key].wInputCell * beta2;
-                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * w_i[entry.Key].dSInputInputGate - w_i[entry.Key].wInputInputGate * beta2;
-                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * w_i[entry.Key].dSInputForgetGate - w_i[entry.Key].wInputForgetGate * beta2;
+                      w_i[entry.Key].wInputCell += alpha * cellStateError * wd_i[entry.Key].dSInputCell - w_i[entry.Key].wInputCell * beta2;
+                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * wd_i[entry.Key].dSInputInputGate - w_i[entry.Key].wInputInputGate * beta2;
+                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * wd_i[entry.Key].dSInputForgetGate - w_i[entry.Key].wInputForgetGate * beta2;
                       w_i[entry.Key].wInputOutputGate += alpha * gradientOutputGate * entry.Value - w_i[entry.Key].wInputOutputGate * beta2;
                   }
                   else
                   {
-                      w_i[entry.Key].wInputCell += alpha * cellStateError * w_i[entry.Key].dSInputCell;
-                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * w_i[entry.Key].dSInputInputGate;
-                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * w_i[entry.Key].dSInputForgetGate;
+                      w_i[entry.Key].wInputCell += alpha * cellStateError * wd_i[entry.Key].dSInputCell;
+                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * wd_i[entry.Key].dSInputInputGate;
+                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * wd_i[entry.Key].dSInputForgetGate;
                       w_i[entry.Key].wInputOutputGate += alpha * gradientOutputGate * entry.Value;
                   }
               }
@@ -548,23 +550,24 @@ namespace RNNSharp
 
               if (fea_size > 0)
               {
-                  w_i = mat_feature2hidden[i];
+                  w_i = feature2hidden[i];
+                  wd_i = feature2hiddenDeri[i];
                   for (int j = 0; j < fea_size; j++)
                   {
                       //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
                       //update connection weights
                       if ((counter % 10) == 0)	//regularization is done every 10. step
                       {
-                          w_i[j].wInputCell += alpha * cellStateError * w_i[j].dSInputCell - w_i[j].wInputCell * beta2;
-                          w_i[j].wInputInputGate += alpha * cellStateError * w_i[j].dSInputInputGate - w_i[j].wInputInputGate * beta2;
-                          w_i[j].wInputForgetGate += alpha * cellStateError * w_i[j].dSInputForgetGate - w_i[j].wInputForgetGate * beta2;
+                          w_i[j].wInputCell += alpha * cellStateError * wd_i[j].dSInputCell - w_i[j].wInputCell * beta2;
+                          w_i[j].wInputInputGate += alpha * cellStateError * wd_i[j].dSInputInputGate - w_i[j].wInputInputGate * beta2;
+                          w_i[j].wInputForgetGate += alpha * cellStateError * wd_i[j].dSInputForgetGate - w_i[j].wInputForgetGate * beta2;
                           w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j] - w_i[j].wInputOutputGate * beta2;
                       }
                       else
                       {
-                          w_i[j].wInputCell += alpha * cellStateError * w_i[j].dSInputCell;
-                          w_i[j].wInputInputGate += alpha * cellStateError * w_i[j].dSInputInputGate;
-                          w_i[j].wInputForgetGate += alpha * cellStateError * w_i[j].dSInputForgetGate;
+                          w_i[j].wInputCell += alpha * cellStateError * wd_i[j].dSInputCell;
+                          w_i[j].wInputInputGate += alpha * cellStateError * wd_i[j].dSInputInputGate;
+                          w_i[j].wInputForgetGate += alpha * cellStateError * wd_i[j].dSInputForgetGate;
                           w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j];
                       }
 
@@ -640,7 +643,7 @@ namespace RNNSharp
               for (int i = 0; i < sparseFeatureSize; i++)
               {
                   var entry = sparse.GetEntry(i);
-                  neuHidden[j].netIn += entry.Value * mat_input2hidden[j][entry.Key].wInputInputGate;
+                  neuHidden[j].netIn += entry.Value * input2hidden[j][entry.Key].wInputInputGate;
               }
 
           });
@@ -648,7 +651,7 @@ namespace RNNSharp
             //fea(t) -> hidden(t) 
             if (fea_size > 0)
             {
-                matrixXvectorADD(neuHidden, neuFeatures, mat_feature2hidden, 0, L1, 0, fea_size);
+                matrixXvectorADD(neuHidden, neuFeatures, feature2hidden, 0, L1, 0, fea_size);
             }
 
             Parallel.For(0, L1, parallelOption, j =>
@@ -663,7 +666,7 @@ namespace RNNSharp
                 for (int i = 0; i < sparseFeatureSize; i++)
                 {
                     var entry = sparse.GetEntry(i);
-                    LSTMWeight w = mat_input2hidden[j][entry.Key];
+                    LSTMWeight w = input2hidden[j][entry.Key];
                     //loop through all forget gates in hiddden layer
                     cell_j.netForget += entry.Value * w.wInputForgetGate;
                     cell_j.netCellState += entry.Value * w.wInputCell;
@@ -674,7 +677,7 @@ namespace RNNSharp
                 {
                     for (int i = 0; i < fea_size; i++)
                     {
-                        LSTMWeight w = mat_feature2hidden[j][i];
+                        LSTMWeight w = feature2hidden[j][i];
                         cell_j.netForget += neuFeatures[i] * w.wInputForgetGate;
                         cell_j.netCellState += neuFeatures[i] * w.wInputCell;
                         cell_j.netOut += neuFeatures[i] * w.wInputOutputGate;
@@ -758,34 +761,21 @@ namespace RNNSharp
             if (updateNet == true)
             {
                 int INPUT = m_TrainingSet.GetSparseDimension();
-                Parallel.For(0, L1, parallelOption, i =>
+                input2hiddenDeri = new LSTMWeightDerivative[L1][];
+                for (int i = 0; i < L1; i++)
                 {
-                    for (int j = 0; j <= INPUT; j++)
-                    {
-                        mat_input2hidden[i][j].dSInputCell = 0;
-                        mat_input2hidden[i][j].dSInputForgetGate = 0;
-                        mat_input2hidden[i][j].dSInputInputGate = 0;
-                    }
-                });
+                    input2hiddenDeri[i] = new LSTMWeightDerivative[INPUT];
+                }
 
                 if (fea_size > 0)
                 {
-                    Parallel.For(0, L1, parallelOption, i =>
+                    feature2hiddenDeri = new LSTMWeightDerivative[L1][];
+                    for (int i = 0; i < L1; i++)
                     {
-                        for (int j = 0; j < fea_size; j++)
-                        {
-                            mat_feature2hidden[i][j].dSInputCell = 0;
-                            mat_feature2hidden[i][j].dSInputForgetGate = 0;
-                            mat_feature2hidden[i][j].dSInputInputGate = 0;
-                        }
-                    });
+                        feature2hiddenDeri[i] = new LSTMWeightDerivative[fea_size];
+                    }
                 }
             }
-        }
-
-        public override void copyHiddenLayerToInput()
-        {
-
         }
     }
 

@@ -201,7 +201,7 @@ namespace RNNSharp
         {
             m_TrainingSet = train;
             fea_size = m_TrainingSet.GetDenseDimension();
-            L0 = m_TrainingSet.GetSparseDimension() + L1;
+            L0 = m_TrainingSet.GetSparseDimension();
             L2 = m_TrainingSet.GetTagSize();
         }
 
@@ -215,7 +215,7 @@ namespace RNNSharp
         public virtual void SetGradientCutoff(double newGradient) { gradient_cutoff = newGradient; }
         public virtual void SetLearningRate(double newAlpha) { alpha = newAlpha; }
         public virtual void SetRegularization(double newBeta) { beta = newBeta; }
-        public virtual void SetHiddenLayerSize(int newsize) { L1 = newsize; if (null != m_TrainingSet) L0 = (int)m_TrainingSet.GetSparseDimension() + L1; }
+        public virtual void SetHiddenLayerSize(int newsize) { L1 = newsize;}
         public virtual void SetModelFile(string strModelFile) { m_strModelFile = strModelFile; }
 
         public bool IsCRFModel()
@@ -226,7 +226,6 @@ namespace RNNSharp
         public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
 
         public abstract void netReset(bool updateNet = false);
-        public abstract void copyHiddenLayerToInput();
         public abstract void computeNet(State state, double[] doutput);
 
 
@@ -250,10 +249,6 @@ namespace RNNSharp
                 // error propogation
                 learnNet(state, curState);
                 LearnBackTime(state, numStates, curState);
-
-
-                copyHiddenLayerToInput();
-
             }
 
             return predicted;
@@ -309,7 +304,6 @@ namespace RNNSharp
                 computeNet(state, m_RawOutput[curState]);      //compute probability distribution
 
                 predicted_nn[curState] = GetBestOutputIndex();
-                copyHiddenLayerToInput();
             }
 
             ForwardBackward(numStates, m_RawOutput);
@@ -338,7 +332,6 @@ namespace RNNSharp
 
                 learnNet(state, curState);
                 LearnBackTime(state, numStates, curState);
-                copyHiddenLayerToInput();
             }
 
                 return predicted;
@@ -817,7 +810,6 @@ namespace RNNSharp
                 setInputLayer(state, curState, numStates, predicted);
                 computeNet(state, m[curState]);      //compute probability distribution
 
-                copyHiddenLayerToInput();
                 predicted[curState] = GetBestOutputIndex();
             }
 

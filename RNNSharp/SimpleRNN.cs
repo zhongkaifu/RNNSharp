@@ -21,7 +21,7 @@ namespace RNNSharp
         protected Matrix<double> mat_bptt_synf = new Matrix<double>();
         protected Matrix<double> mat_hiddenBpttWeight = new Matrix<double>();
 
-        protected neuron[] neuInput;		//neurons in input layer
+        protected neuron[] neuLastHidden;		//neurons in input layer
         protected neuron[] neuHidden;		//neurons in hidden layer
         protected Matrix<double> mat_input2hidden = new Matrix<double>();
         protected Matrix<double> mat_feature2hidden = new Matrix<double>();
@@ -43,7 +43,7 @@ namespace RNNSharp
 
             fea_size = 0;
 
-            neuInput = null;
+            neuLastHidden = null;
             neuFeatures = null;
             neuHidden = null;
             neuOutput = null;
@@ -58,7 +58,7 @@ namespace RNNSharp
             int b, a;
             for (b = 0; b < L1; b++)
             {
-                for (a = 0; a < L0 - L1; a++)
+                for (a = 0; a < L0; a++)
                 {
                     mat_input2hidden[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
                 }
@@ -112,12 +112,16 @@ namespace RNNSharp
         // forward process. output layer consists of tag value
         public override void computeNet(State state, double[] doutput)
         {
-            //erase activations
+            //keep last hidden layer and erase activations
+            neuLastHidden = new neuron[L1];
             for (int a = 0; a < L1; a++)
-                neuHidden[a].cellOutput = 0;
+            {
+                neuLastHidden[a].cellOutput = neuHidden[a].cellOutput;
+            }
 
             //hidden(t-1) -> hidden(t)
-            matrixXvectorADD(neuHidden, neuInput, mat_hiddenBpttWeight, 0, L1, L0 - L1, L0, 0);
+            neuHidden = new neuron[L1];
+            matrixXvectorADD(neuHidden, neuLastHidden, mat_hiddenBpttWeight, 0, L1, 0, L1, 0);
 
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
@@ -233,25 +237,25 @@ namespace RNNSharp
                     }
                 });
 
-                for (int a = L0 - L1; a < L0; a++)
+                for (int a = 0; a < L1; a++)
                 {
-                    neuInput[a].er = 0;
+                    neuLastHidden[a].er = 0;
                 }
 
-                matrixXvectorADD(neuInput, neuHidden, mat_hiddenBpttWeight, L0 - L1, L0, 0, L1, 1);		//propagates errors hidden->input to the recurrent part
+                matrixXvectorADD(neuLastHidden, neuHidden, mat_hiddenBpttWeight, 0, L1, 0, L1, 1);		//propagates errors hidden->input to the recurrent part
 
                 Parallel.For(0, L1, parallelOption, b =>
                 {
                     for (int a = 0; a < L1; a++)
                     {
-                        mat_bptt_syn0_ph[b][a] += neuHidden[b].er * neuInput[L0 - L1 + a].cellOutput;
+                        mat_bptt_syn0_ph[b][a] += neuHidden[b].er * neuLastHidden[a].cellOutput;
                     }
                 });
 
                 for (int a = 0; a < L1; a++)
                 {
                     //propagate error from time T-n to T-n-1
-                    neuHidden[a].er = neuInput[a + L0 - L1].er + bptt_hidden[(step + 1) * L1 + a].er;
+                    neuHidden[a].er = neuLastHidden[a].er + bptt_hidden[(step + 1) * L1 + a].er;
                 }
 
                 if (step < bptt + bptt_block - 3)
@@ -259,7 +263,7 @@ namespace RNNSharp
                     for (int a = 0; a < L1; a++)
                     {
                         neuHidden[a].cellOutput = bptt_hidden[(step + 1) * L1 + a].cellOutput;
-                        neuInput[a + L0 - L1].cellOutput = bptt_hidden[(step + 2) * L1 + a].cellOutput;
+                        neuLastHidden[a].cellOutput = bptt_hidden[(step + 2) * L1 + a].cellOutput;
                     }
                 }
             }
@@ -308,12 +312,6 @@ namespace RNNSharp
             });
         }
 
-        public override void copyHiddenLayerToInput()
-        {
-            for (int a = 0; a < L1; a++)
-                neuInput[a + L0 - L1].cellOutput = neuHidden[a].cellOutput;
-        }
-
 
         public void resetBpttMem()
         {
@@ -342,7 +340,7 @@ namespace RNNSharp
             for (int a = 0; a < (bptt + bptt_block) * fea_size; a++)
                 bptt_fea[a].cellOutput = 0;
 
-            mat_bptt_syn0_w = new Matrix<double>(L1, L0 - L1);
+            mat_bptt_syn0_w = new Matrix<double>(L1, L0);
             mat_bptt_syn0_ph = new Matrix<double>(L1, L1);
             mat_bptt_synf = new Matrix<double>(L1, fea_size);
         }
@@ -362,7 +360,7 @@ namespace RNNSharp
             m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
 
-            mat_input2hidden = new Matrix<double>(L1, L0 - L1);
+            mat_input2hidden = new Matrix<double>(L1, L0);
             mat_feature2hidden = new Matrix<double>(L1, fea_size);
 
             mat_hiddenBpttWeight = new Matrix<double>(L1, L1);
@@ -381,9 +379,7 @@ namespace RNNSharp
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
             for (int a = 0; a < L1; a++)
-                neuHidden[a].cellOutput = 1.0;
-
-            copyHiddenLayerToInput();
+                neuHidden[a].cellOutput = 0.1;
 
             if (bptt > 0)
             {
@@ -452,18 +448,6 @@ namespace RNNSharp
         public override void netFlush()   //cleans all activations and error vectors
         {
             int a;
-            for (a = 0; a < L0 - L1; a++)
-            {
-                neuInput[a].cellOutput = 0;
-                neuInput[a].er = 0;
-            }
-
-            for (a = L0 - L1; a < L0; a++)
-            {
-                //last hidden layer is initialized to vector of 0.1 values to prevent unstability
-                neuInput[a].cellOutput = 0.1;
-                neuInput[a].er = 0;
-            }
 
             for (a = 0; a < L1; a++)
             {
@@ -541,13 +525,6 @@ namespace RNNSharp
             {
                 neuOutput[a].cellOutput = 0;
                 neuOutput[a].er = 0;
-            }
-
-            neuInput = new neuron[L0];
-            for (int a = 0; a < L0; a++)
-            {
-                neuInput[a].cellOutput = 0;
-                neuInput[a].er = 0;
             }
 
             neuHidden = new neuron[L1];
