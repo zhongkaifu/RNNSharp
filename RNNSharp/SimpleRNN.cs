@@ -383,20 +383,9 @@ namespace RNNSharp
 
             if (bptt > 0)
             {
-                for (int a = 2; a < bptt + bptt_block; a++)
-                {
-                    for (int b = 0; b < L1; b++)
-                    {
-                        bptt_hidden[a * L1 + b].cellOutput = 0;
-                        bptt_hidden[a * L1 + b].er = 0;
-                    }
-                }
-
-                for (int a = 0; a < bptt + bptt_block; a++)
-                {
-                    for (int b = 0; b < fea_size; b++)
-                        bptt_fea[a * fea_size + b].cellOutput = 0;
-                }
+                bptt_inputs = new SparseVector[MAX_RNN_HIST];
+                bptt_hidden = new neuron[(bptt + bptt_block + 1) * L1];
+                bptt_fea = new neuron[(bptt + bptt_block + 2) * fea_size];
             }
         }
 
@@ -438,7 +427,7 @@ namespace RNNSharp
             }
 
             // time to learn bptt
-            if (((counter % bptt_block) == 0) || (curState == numStates - 1))
+            if (((curState % bptt_block) == 0) || (curState == numStates - 1))
             {
                 learnBptt(state);
             }

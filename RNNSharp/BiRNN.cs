@@ -19,10 +19,10 @@ namespace RNNSharp
                 SimpleRNN s_backwardRNN = new SimpleRNN();
 
                 s_forwardRNN.setBPTT(4 + 1);
-                s_forwardRNN.setBPTTBlock(30);
+                s_forwardRNN.setBPTTBlock(10);
 
                 s_backwardRNN.setBPTT(4 + 1);
-                s_backwardRNN.setBPTTBlock(30);
+                s_backwardRNN.setBPTTBlock(10);
 
                 forwardRNN = s_forwardRNN;
                 backwardRNN = s_backwardRNN;

@@ -45,7 +45,7 @@ namespace RNNSharp
                     SimpleRNN sRNN = new SimpleRNN();
 
                     sRNN.setBPTT(m_modelSetting.GetBptt() + 1);
-                    sRNN.setBPTTBlock(30);
+                    sRNN.setBPTTBlock(10);
 
                     rnn = sRNN;
                 }
