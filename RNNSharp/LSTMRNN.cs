@@ -452,8 +452,6 @@ namespace RNNSharp
         public override void learnNet(State state, int timeat, bool biRNN = false)
         {
             //create delta list
-            double beta2 = beta * alpha;
-
             if (biRNN == false)
             {
                 CalculateOutputLayerError(state, timeat);
@@ -516,7 +514,7 @@ namespace RNNSharp
               double gradientOutputGate = SigmoidDerivative(c.netOut) * TanHDerivative(c.cellState) * weightedSum;
 
               //internal cell state error
-              double cellStateError = c.yOut* weightedSum;
+              double cellStateError = c.yOut * weightedSum;
 
 
               //weight updates
@@ -531,20 +529,10 @@ namespace RNNSharp
               {
                   var entry = sparse.GetEntry(k);
                   //updates weights for input to hidden layer
-                  if ((counter % 10) == 0)	//regularization is done every 10. step
-                  {
-                      w_i[entry.Key].wInputCell += alpha * cellStateError * wd_i[entry.Key].dSInputCell - w_i[entry.Key].wInputCell * beta2;
-                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * wd_i[entry.Key].dSInputInputGate - w_i[entry.Key].wInputInputGate * beta2;
-                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * wd_i[entry.Key].dSInputForgetGate - w_i[entry.Key].wInputForgetGate * beta2;
-                      w_i[entry.Key].wInputOutputGate += alpha * gradientOutputGate * entry.Value - w_i[entry.Key].wInputOutputGate * beta2;
-                  }
-                  else
-                  {
-                      w_i[entry.Key].wInputCell += alpha * cellStateError * wd_i[entry.Key].dSInputCell;
-                      w_i[entry.Key].wInputInputGate += alpha * cellStateError * wd_i[entry.Key].dSInputInputGate;
-                      w_i[entry.Key].wInputForgetGate += alpha * cellStateError * wd_i[entry.Key].dSInputForgetGate;
-                      w_i[entry.Key].wInputOutputGate += alpha * gradientOutputGate * entry.Value;
-                  }
+                  w_i[entry.Key].wInputCell += alpha * cellStateError * wd_i[entry.Key].dSInputCell;
+                  w_i[entry.Key].wInputInputGate += alpha * cellStateError * wd_i[entry.Key].dSInputInputGate;
+                  w_i[entry.Key].wInputForgetGate += alpha * cellStateError * wd_i[entry.Key].dSInputForgetGate;
+                  w_i[entry.Key].wInputOutputGate += alpha * gradientOutputGate * entry.Value;
               }
 
 
@@ -556,21 +544,10 @@ namespace RNNSharp
                   {
                       //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
                       //update connection weights
-                      if ((counter % 10) == 0)	//regularization is done every 10. step
-                      {
-                          w_i[j].wInputCell += alpha * cellStateError * wd_i[j].dSInputCell - w_i[j].wInputCell * beta2;
-                          w_i[j].wInputInputGate += alpha * cellStateError * wd_i[j].dSInputInputGate - w_i[j].wInputInputGate * beta2;
-                          w_i[j].wInputForgetGate += alpha * cellStateError * wd_i[j].dSInputForgetGate - w_i[j].wInputForgetGate * beta2;
-                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j] - w_i[j].wInputOutputGate * beta2;
-                      }
-                      else
-                      {
-                          w_i[j].wInputCell += alpha * cellStateError * wd_i[j].dSInputCell;
-                          w_i[j].wInputInputGate += alpha * cellStateError * wd_i[j].dSInputInputGate;
-                          w_i[j].wInputForgetGate += alpha * cellStateError * wd_i[j].dSInputForgetGate;
-                          w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j];
-                      }
-
+                      w_i[j].wInputCell += alpha * cellStateError * wd_i[j].dSInputCell;
+                      w_i[j].wInputInputGate += alpha * cellStateError * wd_i[j].dSInputInputGate;
+                      w_i[j].wInputForgetGate += alpha * cellStateError * wd_i[j].dSInputForgetGate;
+                      w_i[j].wInputOutputGate += alpha * gradientOutputGate * neuFeatures[j];
                   }
               }
 
@@ -583,41 +560,21 @@ namespace RNNSharp
               double deltaForgetGateCell = alpha * cellStateError * c.dSWCellForget;
 
               //update internal weights
-              if ((counter % 10) == 0)	//regularization is done every 10. step
-              {
-                  c.wCellIn += deltaInputGateCell - c.wCellIn * beta2;
-                  c.wCellForget += deltaForgetGateCell - c.wCellForget * beta2;
-                  c.wCellOut += deltaOutputGateCell - c.wCellOut * beta2;
-              }
-              else
-              {
-                  c.wCellIn += deltaInputGateCell;
-                  c.wCellForget += deltaForgetGateCell;
-                  c.wCellOut += deltaOutputGateCell;
-              }
+              c.wCellIn += deltaInputGateCell;
+              c.wCellForget += deltaForgetGateCell;
+              c.wCellOut += deltaOutputGateCell;
 
               neuHidden[i] = c;
           });
 
-            if (biRNN == false)
+            //update weights for hidden to output layer
+            for (int i = 0; i <= L1; i++)
             {
-                //update weights for hidden to output layer
-                for (int i = 0; i <= L1; i++)
+                for (int k = 0; k < L2; k++)
                 {
-                    for (int k = 0; k < L2; k++)
-                    {
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
-                        {
-                            mat_hidden2output[k][i] += alpha * neuHidden[i].cellOutput * neuOutput[k].er - mat_hidden2output[k][i] * beta2;
-                        }
-                        else
-                        {
-                            mat_hidden2output[k][i] += alpha * neuHidden[i].cellOutput * neuOutput[k].er;
-                        }
-                    }
+                    mat_hidden2output[k][i] += alpha * neuHidden[i].cellOutput * neuOutput[k].er;
                 }
             }
-
         }
 
 

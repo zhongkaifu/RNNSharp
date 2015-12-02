@@ -165,7 +165,7 @@ namespace RNNSharp
             SoftmaxLayer(neuOutput);
         }
 
-     
+
 
         public override void learnNet(State state, int timeat, bool biRNN = false)
         {
@@ -180,23 +180,11 @@ namespace RNNSharp
             }
             matrixXvectorADD(neuHidden, neuOutput, mat_hidden2output, 0, L1, 0, L2, 1);	//error output->hidden for words from specific class    	
 
-            if (biRNN == false)
+            for (int a = 0; a < L1; a++)
             {
-                for (int a = 0; a < L1; a++)
+                for (int c = 0; c < L2; c++)
                 {
-                    for (int c = 0; c < L2; c++)
-                    {
-                        double dg = neuOutput[c].er * neuHidden[a].cellOutput;
-
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
-                        {
-                            mat_hidden2output[c][a] += alpha * (dg - mat_hidden2output[c][a] * beta);
-                        }
-                        else
-                        {
-                            mat_hidden2output[c][a] += alpha * dg;
-                        }
-                    }
+                    mat_hidden2output[c][a] += alpha * neuOutput[c].er * neuHidden[a].cellOutput;
                 }
             }
         }
@@ -297,14 +285,7 @@ namespace RNNSharp
                     for (int i = 0; i < sparse.GetNumberOfEntries(); i++)
                     {
                         int pos = sparse.GetEntry(i).Key;
-                        if ((counter % 10) == 0)
-                        {
-                            mat_input2hidden[b][pos] += alpha * (mat_bptt_syn0_w[b][pos] - mat_input2hidden[b][pos] * beta);
-                        }
-                        else
-                        {
-                            mat_input2hidden[b][pos] += alpha * mat_bptt_syn0_w[b][pos];
-                        }
+                        mat_input2hidden[b][pos] += alpha * mat_bptt_syn0_w[b][pos];
 
                         mat_bptt_syn0_w[b][pos] = 0;
                     }

@@ -344,14 +344,7 @@ namespace RNNSharp
             {
                 for (int a = 0; a < weights.GetWidth(); a++)
                 {
-                    if ((counterTokenForLM % 10) == 0)
-                    {
-                        weights[b][a] += alpha * (delta[b][a] - weights[b][a] * beta);
-                    }
-                    else
-                    {
-                        weights[b][a] += alpha * delta[b][a];
-                    }
+                    weights[b][a] += alpha * delta[b][a];
 
                     delta[b][a] = 0;
                 }

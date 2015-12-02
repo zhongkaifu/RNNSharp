@@ -352,27 +352,25 @@ namespace RNNSharp
             forwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
             backwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
 
-            for (int curState = 0; curState < numStates; curState++)
-            {
-                for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
-                {
-                    //update weights for hidden to output layer
 
-                    for (int k = 0; k < mat_hidden2output.GetWidth(); k++)
-                    {
-                        if ((counter % 10) == 0)	//regularization is done every 10. step
-                        {
-                            mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er - mat_hidden2output[i][k] * beta);
-                        }
-                        else
-                        {
-                            mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
-                        }
-                    }
-                }
-            }
 
             Parallel.Invoke(() =>
+                {
+                    for (int curState = 0; curState < numStates; curState++)
+                    {
+                        for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
+                        {
+                            //update weights for hidden to output layer
+
+                            for (int k = 0; k < mat_hidden2output.GetWidth(); k++)
+                            {
+                                mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
+                            }
+                        }
+                    }
+
+                },
+                ()=>
             {
 
                 //Learn forward network
@@ -390,23 +388,6 @@ namespace RNNSharp
 
                     forwardRNN.learnNet(state, curState, true);
                     forwardRNN.LearnBackTime(state, numStates, curState);
-
-                    for (int i = 0; i < forwardRNN.mat_hidden2output.GetHeight(); i++)
-                    {
-                        //update weights for hidden to output layer
-
-                        for (int k = 0; k < forwardRNN.mat_hidden2output.GetWidth(); k++)
-                        {
-                            if ((counter % 10) == 0)	//regularization is done every 10. step
-                            {
-                                forwardRNN.mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er - forwardRNN.mat_hidden2output[i][k] * beta);
-                            }
-                            else
-                            {
-                                forwardRNN.mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
-                            }
-                        }
-                    }
                 }
             },
             () =>
@@ -428,24 +409,6 @@ namespace RNNSharp
 
                     backwardRNN.learnNet(state2, curState2, true);
                     backwardRNN.LearnBackTime(state2, numStates, curState2);
-
-
-                    for (int i = 0; i < backwardRNN.mat_hidden2output.GetHeight(); i++)
-                    {
-                        //update weights for hidden to output layer
-
-                        for (int k = 0; k < backwardRNN.mat_hidden2output.GetWidth(); k++)
-                        {
-                            if ((counter % 10) == 0)	//regularization is done every 10. step
-                            {
-                                backwardRNN.mat_hidden2output[i][k] += alpha * (mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er - backwardRNN.mat_hidden2output[i][k] * beta);
-                            }
-                            else
-                            {
-                                backwardRNN.mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState2][k].cellOutput * seqOutput[curState2][i].er;
-                            }
-                        }
-                    }
                 }
             });
         }
