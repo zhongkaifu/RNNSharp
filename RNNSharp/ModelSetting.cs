@@ -17,8 +17,8 @@ namespace RNNSharp
         public double GetLearningRate(){ return m_LearningRate; }
         public void SetLearningRate(double r) { m_LearningRate = r; }
 
-        public double GetRegularization() { return m_Regularization; }
-        public void SetRegularization(double r) { m_Regularization = r; }
+        public double GetDropout() { return m_Dropout; }
+        public void SetDropout(double r) { m_Dropout = r; }
 
         public double GetTagTransitionWeight(){ return m_tagTransitionWeight; }
         public void SetTagTransitionWeight(double r) { m_tagTransitionWeight = r; }
@@ -60,7 +60,7 @@ namespace RNNSharp
         int m_NumHidden;
         double m_LearningRate;
         double m_tagTransitionWeight;
-        double m_Regularization;
+        double m_Dropout;
         int m_Bptt;
         int m_MaxIteration;
         bool m_bCRFTraining;
@@ -91,7 +91,7 @@ namespace RNNSharp
             }
 
             Console.WriteLine("Learning rate: {0}", m_LearningRate);
-            Console.WriteLine("Regularization: {0}", m_Regularization);
+            Console.WriteLine("Dropout: {0}", m_Dropout);
             Console.WriteLine("Max Iteration: {0}", m_MaxIteration);
             Console.WriteLine("Hidden layer size： {0}", m_NumHidden);
             Console.WriteLine("RNN-CRF: {0}", m_bCRFTraining);

@@ -70,7 +70,7 @@ namespace RNNSharp
             rnn.SetCRFTraining(m_modelSetting.IsCRFTraining());
             rnn.SetLearningRate(m_modelSetting.GetLearningRate());
             rnn.SetGradientCutoff(15.0);
-            rnn.SetRegularization(m_modelSetting.GetRegularization());
+            rnn.SetDropout(m_modelSetting.GetDropout());
             rnn.SetHiddenLayerSize(m_modelSetting.GetNumHidden());
             rnn.SetTagBigramTransitionWeight(m_modelSetting.GetTagTransitionWeight());
 

@@ -112,12 +112,12 @@ namespace RNNSharp
             backwardRNN.SetGradientCutoff(newGradient);
         }
 
-        public override void SetRegularization(double newBeta)
+        public override void SetDropout(double newDropout)
         {
-            beta = newBeta;
+            dropout = newDropout;
 
-            forwardRNN.SetRegularization(newBeta);
-            backwardRNN.SetRegularization(newBeta);
+            forwardRNN.SetDropout(newDropout);
+            backwardRNN.SetDropout(newDropout);
         }
 
         public override void SetHiddenLayerSize(int newsize)
@@ -453,7 +453,7 @@ namespace RNNSharp
 
         }
 
-        public override void computeNet(State state, double[] doutput)
+        public override void computeNet(State state, double[] doutput, bool isTrain = true)
         {
 
         }

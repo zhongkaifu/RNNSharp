@@ -40,7 +40,7 @@ namespace RNNSharp
         protected double minTknErrRatio;
         protected double lastTknErrRatio;
         protected long counter;
-        protected double beta;
+        protected double dropout;
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected double gradient_cutoff;
         protected bool m_bCRFTraining = false;
@@ -175,7 +175,7 @@ namespace RNNSharp
             gradient_cutoff = 15;
 
             alpha = 0.1;
-            beta = 0.0000001;
+            dropout = 0;
             logp = 0;
             llogp = -100000000;
             minTknErrRatio = 1000000;
@@ -214,7 +214,7 @@ namespace RNNSharp
         public virtual void SetValidationSet(DataSet validation) { m_ValidationSet = validation; }
         public virtual void SetGradientCutoff(double newGradient) { gradient_cutoff = newGradient; }
         public virtual void SetLearningRate(double newAlpha) { alpha = newAlpha; }
-        public virtual void SetRegularization(double newBeta) { beta = newBeta; }
+        public virtual void SetDropout(double newDropout) { dropout = newDropout; }
         public virtual void SetHiddenLayerSize(int newsize) { L1 = newsize;}
         public virtual void SetModelFile(string strModelFile) { m_strModelFile = strModelFile; }
 
@@ -226,7 +226,7 @@ namespace RNNSharp
         public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
 
         public abstract void netReset(bool updateNet = false);
-        public abstract void computeNet(State state, double[] doutput);
+        public abstract void computeNet(State state, double[] doutput, bool isTrain = true);
 
 
         public virtual int[] PredictSentence(Sequence pSequence)
@@ -589,6 +589,7 @@ namespace RNNSharp
                 //ac mod
                 Parallel.For(0, (to - from), parallelOption, i =>
                 {
+                    dest[i + from].cellOutput = 0;
                     for (int j = 0; j < to2 - from2; j++)
                     {
                         dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
@@ -600,6 +601,7 @@ namespace RNNSharp
             {
                 Parallel.For(0, (to - from), parallelOption, i =>
                 {
+                    dest[i + from].er = 0;
                     for (int j = 0; j < to2 - from2; j++)
                     {
                         dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
@@ -801,7 +803,7 @@ namespace RNNSharp
             {
                 State state = pSequence.Get(curState);
                 setInputLayer(state, curState, numStates, predicted);
-                computeNet(state, m[curState]);      //compute probability distribution
+                computeNet(state, m[curState], false);      //compute probability distribution
 
                 predicted[curState] = GetBestOutputIndex();
             }

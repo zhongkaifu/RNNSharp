@@ -12,7 +12,7 @@ namespace RNNSharp
         protected int bptt;
         protected int bptt_block;
         protected neuron[] bptt_hidden;
-        protected neuron[] bptt_fea;
+        protected double[] bptt_fea;
         protected SparseVector[] bptt_inputs = new SparseVector[MAX_RNN_HIST];    // TODO: add const constraint
 
         protected Matrix<double> mat_bptt_syn0_w = new Matrix<double>();
@@ -30,7 +30,7 @@ namespace RNNSharp
         {
             m_modeltype = MODELTYPE.SIMPLE;
             gradient_cutoff = 15;
-            beta = 0.0000001;
+            dropout = 0;
             llogp = -100000000;
             iter = 0;
 
@@ -99,10 +99,21 @@ namespace RNNSharp
             }
         }
 
-        public void computeHiddenActivity()
+        public void computeHiddenActivity(bool isTrain)
         {
             for (int a = 0; a < L1; a++)
             {
+                if (neuHidden[a].mask == true)
+                {
+                    neuHidden[a].cellOutput = 0;
+                    continue;
+                }
+
+                if (isTrain == false)
+                {
+                    neuHidden[a].cellOutput = neuHidden[a].cellOutput * (1.0 - dropout);
+                }
+
                 if (neuHidden[a].cellOutput > 50) neuHidden[a].cellOutput = 50;  //for numerical stability
                 if (neuHidden[a].cellOutput < -50) neuHidden[a].cellOutput = -50;  //for numerical stability
                 neuHidden[a].cellOutput = 1.0 / (1.0 + Math.Exp(-neuHidden[a].cellOutput));
@@ -110,7 +121,7 @@ namespace RNNSharp
         }
 
         // forward process. output layer consists of tag value
-        public override void computeNet(State state, double[] doutput)
+        public override void computeNet(State state, double[] doutput, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
             neuLastHidden = new neuron[L1];
@@ -144,13 +155,7 @@ namespace RNNSharp
             }
 
             //activate 1      --sigmoid
-            computeHiddenActivity();
-
-            //initialize output nodes
-            for (int c = 0; c < L2; c++)
-            {
-                neuOutput[c].cellOutput = 0;
-            }
+            computeHiddenActivity(isTrain);
 
             matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1, 0);
             if (doutput != null)
@@ -174,11 +179,15 @@ namespace RNNSharp
                 CalculateOutputLayerError(state, timeat);
             }
 
+            matrixXvectorADD(neuHidden, neuOutput, mat_hidden2output, 0, L1, 0, L2, 1);	//error output->hidden for words from specific class    	
+
             for (int a = 0; a < L1; a++)
             {
-                neuHidden[a].er = 0;
+                if (neuHidden[a].mask == true)
+                {
+                    neuHidden[a].er = 0;
+                }
             }
-            matrixXvectorADD(neuHidden, neuOutput, mat_hidden2output, 0, L1, 0, L2, 1);	//error output->hidden for words from specific class    	
 
             for (int a = 0; a < L1; a++)
             {
@@ -209,7 +218,7 @@ namespace RNNSharp
                     {
                         for (int a = 0; a < fea_size; a++)
                         {
-                            mat_bptt_synf[b][a] += neuHidden[b].er * bptt_fea[a + step * fea_size].cellOutput;
+                            mat_bptt_synf[b][a] += neuHidden[b].er * bptt_fea[a + step * fea_size];
                         }
                     });
                 }
@@ -224,11 +233,6 @@ namespace RNNSharp
 
                     }
                 });
-
-                for (int a = 0; a < L1; a++)
-                {
-                    neuLastHidden[a].er = 0;
-                }
 
                 matrixXvectorADD(neuLastHidden, neuHidden, mat_hiddenBpttWeight, 0, L1, 0, L1, 1);		//propagates errors hidden->input to the recurrent part
 
@@ -311,16 +315,7 @@ namespace RNNSharp
             }
 
             bptt_hidden = new neuron[(bptt + bptt_block + 1) * L1];
-            for (int a = 0; a < (bptt + bptt_block) * L1; a++)
-            {
-                bptt_hidden[a].cellOutput = 0;
-                bptt_hidden[a].er = 0;
-            }
-
-            bptt_fea = new neuron[(bptt + bptt_block + 2) * fea_size];
-            for (int a = 0; a < (bptt + bptt_block) * fea_size; a++)
-                bptt_fea[a].cellOutput = 0;
-
+            bptt_fea = new double[(bptt + bptt_block + 2) * fea_size];
             mat_bptt_syn0_w = new Matrix<double>(L1, L0);
             mat_bptt_syn0_ph = new Matrix<double>(L1, L1);
             mat_bptt_synf = new Matrix<double>(L1, fea_size);
@@ -360,13 +355,28 @@ namespace RNNSharp
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
             for (int a = 0; a < L1; a++)
+            {
                 neuHidden[a].cellOutput = 0.1;
+                neuHidden[a].mask = false;
+            }
+
+            if (updateNet == true)
+            {
+                //Train mode
+                for (int a = 0; a < L1; a++)
+                {
+                    if (rand.NextDouble() < dropout)
+                    {
+                        neuHidden[a].mask = true;
+                    }
+                }
+            }
 
             if (bptt > 0)
             {
                 bptt_inputs = new SparseVector[MAX_RNN_HIST];
                 bptt_hidden = new neuron[(bptt + bptt_block + 1) * L1];
-                bptt_fea = new neuron[(bptt + bptt_block + 2) * fea_size];
+                bptt_fea = new double[(bptt + bptt_block + 2) * fea_size];
             }
         }
 
@@ -375,37 +385,28 @@ namespace RNNSharp
         {
             if (bptt > 0)
             {
+                int maxBptt = 0;
+                for (maxBptt = 0; maxBptt < bptt + bptt_block - 1; maxBptt++)
+                {
+                    if (bptt_inputs[maxBptt] == null)
+                    {
+                        break;
+                    }
+                }
+
                 //shift memory needed for bptt to next time step
-                for (int a = bptt + bptt_block - 1; a > 0; a--)
+                for (int a = maxBptt; a > 0; a--)
+                {
                     bptt_inputs[a] = bptt_inputs[a - 1];
+                    Array.Copy(bptt_hidden, (a - 1) * L1, bptt_hidden, a * L1, L1);
+                    Array.Copy(bptt_fea, (a - 1) * fea_size, bptt_fea, a * fea_size, fea_size);
+                }
                 bptt_inputs[0] = state.GetSparseData();
-
-                for (int a = bptt + bptt_block - 1; a > 0; a--)
-                {
-                    for (int b = 0; b < L1; b++)
-                    {
-                        bptt_hidden[a * L1 + b] = bptt_hidden[(a - 1) * L1 + b];
-                    }
-                }
-
-                for (int a = bptt + bptt_block - 1; a > 0; a--)
-                {
-                    for (int b = 0; b < fea_size; b++)
-                    {
-                        bptt_fea[a * fea_size + b].cellOutput = bptt_fea[(a - 1) * fea_size + b].cellOutput;
-                    }
-                }
             }
 
             //Save hidden and feature layer nodes values for bptt
-            for (int b = 0; b < L1; b++)
-            {
-                bptt_hidden[b] = neuHidden[b];
-            }
-            for (int b = 0; b < fea_size; b++)
-            {
-                bptt_fea[b].cellOutput = neuFeatures[b];
-            }
+            Array.Copy(neuHidden, 0, bptt_hidden, 0, L1);
+            Array.Copy(neuFeatures, 0, bptt_fea, 0, fea_size);
 
             // time to learn bptt
             if (((curState % bptt_block) == 0) || (curState == numStates - 1))

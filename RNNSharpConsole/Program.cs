@@ -22,7 +22,7 @@ namespace RNNSharpConsole
         static int iCRF = 0;
         static long savestep = 0;
         static double alpha = 0.1;
-        static double beta = 0.0000001;
+        static double dropout = 0;
         static int bptt = 4;
         static int modelType = 0;
         static int nBest = 1;
@@ -70,8 +70,8 @@ namespace RNNSharpConsole
             Console.WriteLine(" -alpha <float>");
             Console.WriteLine("\tLearning rate, default is 0.1");
             
-            Console.WriteLine(" -beta <float>");
-            Console.WriteLine("\tRegularization parameter, default is 1e-7");
+            Console.WriteLine(" -dropout <float>");
+            Console.WriteLine("\tDropout parameter [0, 1.0), default is 0");
             
             Console.WriteLine(" -layersize <int>");
             Console.WriteLine("\tHidden layer size for training, default is 200");
@@ -136,7 +136,7 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1]);
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1]);
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = double.Parse(args[i + 1]);
-            if ((i = ArgPos("-beta", args)) >= 0) beta = double.Parse(args[i + 1]);
+            if ((i = ArgPos("-dropout", args)) >= 0) dropout = double.Parse(args[i + 1]);
             if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1]);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
             if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
@@ -440,7 +440,7 @@ namespace RNNSharpConsole
             RNNConfig.SetMaxIteration(maxIter);
             RNNConfig.SetSaveStep(savestep);
             RNNConfig.SetLearningRate(alpha);
-            RNNConfig.SetRegularization(beta);
+            RNNConfig.SetDropout(dropout);
             RNNConfig.SetBptt(bptt);
 
             //Dump RNN setting on console

@@ -579,7 +579,7 @@ namespace RNNSharp
 
 
         // forward process. output layer consists of tag value
-        public override void computeNet(State state, double[] doutput)
+        public override void computeNet(State state, double[] doutput, bool isTrain = true)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
