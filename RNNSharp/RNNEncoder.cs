@@ -85,10 +85,18 @@ namespace RNNSharp
             Console.WriteLine();
 
             Console.WriteLine("[TRACE] Iterative training begins ...");
+            double lastPPL = double.MaxValue;
+
             while (rnn.ShouldTrainingStop() == false)
             {
                 //Start to train model
-                rnn.TrainNet();
+                double ppl = rnn.TrainNet();
+                if (ppl >= lastPPL)
+                {
+                    Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
+                    break;
+                }
+                lastPPL = ppl;
 
                 //Validate the model by validated corpus
                 if (rnn.ValidateNet() == true)
@@ -98,12 +106,6 @@ namespace RNNSharp
                     rnn.saveNetBin(m_modelSetting.GetModelFile());
                     Console.WriteLine("Done.");
                 }
-                //else
-                //{
-                //    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
-                //    rnn.loadNetBin(m_modelSetting.GetModelFile());
-                //    Console.WriteLine("Done.");
-                //}
             }
         }
     }

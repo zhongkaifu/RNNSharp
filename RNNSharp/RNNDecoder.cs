@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
 
 namespace RNNSharp
 {
@@ -13,19 +14,28 @@ namespace RNNSharp
 
         public RNNDecoder(string strModelFileName, Featurizer featurizer)
         {
-            MODELTYPE model_type = RNN.CheckModelFileType(strModelFileName);
+            MODELTYPE modelType = MODELTYPE.SIMPLE;
+            MODELDIRECTION modelDir = MODELDIRECTION.FORWARD;
 
-            if (model_type == MODELTYPE.SIMPLE)
+            RNN.CheckModelFileType(strModelFileName, out modelType, out modelDir);
+
+            if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
-                Console.WriteLine("Model Structure: Simple RNN");
-                SimpleRNN sRNN = new SimpleRNN();
-                m_Rnn = sRNN;
+                Console.WriteLine("Model Structure: Bi-directional RNN");
+                m_Rnn = new BiRNN((int)modelType);
             }
             else
             {
-                Console.WriteLine("Model Structure: LSTM-RNN");
-                LSTMRNN lstmRNN = new LSTMRNN();
-                m_Rnn = lstmRNN;
+                if (modelType == MODELTYPE.SIMPLE)
+                {
+                    Console.WriteLine("Model Structure: Simple RNN");
+                    m_Rnn = new SimpleRNN();
+                }
+                else
+                {
+                    Console.WriteLine("Model Structure: LSTM-RNN");
+                    m_Rnn = new LSTMRNN();
+                }
             }
 
             m_Rnn.loadNetBin(strModelFileName);

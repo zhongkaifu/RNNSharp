@@ -477,7 +477,7 @@ namespace RNNSharp
         public abstract void learnNet(State state, int timeat, bool biRNN = false);
         public abstract void LearnBackTime(State state, int numStates, int curState);
 
-        public virtual void TrainNet()
+        public virtual double TrainNet()
         {
             DateTime start = DateTime.Now;
             int[] predicted;
@@ -546,6 +546,8 @@ namespace RNNSharp
             Console.WriteLine("[TRACE] Iter " + iter + " completed");
             Console.WriteLine("[TRACE] Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
             Console.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+
+            return ppl;
         }
 
         public int randNext()
@@ -560,14 +562,14 @@ namespace RNNSharp
 
         public abstract void GetHiddenLayer(Matrix<double> m, int curStatus);
 
-        public static MODELTYPE CheckModelFileType(string filename)
+        public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir)
         {
-            StreamReader sr = new StreamReader(filename);
-            BinaryReader br = new BinaryReader(sr.BaseStream);
-
-            MODELTYPE type = (MODELTYPE)br.ReadInt32();
-
-            return type;
+            using (StreamReader sr = new StreamReader(filename))
+            {
+                BinaryReader br = new BinaryReader(sr.BaseStream);
+                modelType = (MODELTYPE)br.ReadInt32();
+                modelDir = (MODELDIRECTION)br.ReadInt32();
+            }
         }
 
         public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)

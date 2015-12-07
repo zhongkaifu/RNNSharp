@@ -308,9 +308,9 @@ namespace RNNSharpConsole
 
         private static void Test()
         {
-            if (File.Exists(strTagFile) == false)
+            if (String.IsNullOrEmpty(strTagFile) == true)
             {
-                Console.WriteLine("FAILED: The tag mapping file {0} isn't existed.", strTagFile);
+                Console.WriteLine("FAILED: The tag mapping file {0} isn't specified.", strTagFile);
                 UsageTest();
                 return;
             }
@@ -318,16 +318,16 @@ namespace RNNSharpConsole
             //Load tag id and its name from file
             TagSet tagSet = new TagSet(strTagFile);
 
-            if (File.Exists(strModelFile) == false)
+            if (String.IsNullOrEmpty(strModelFile) == true)
             {
-                Console.WriteLine("FAILED: The model file {0} isn't existed.", strModelFile);
+                Console.WriteLine("FAILED: The model file {0} isn't specified.", strModelFile);
                 UsageTest();
                 return;
             }
 
-            if (File.Exists(strFeatureConfigFile) == false)
+            if (String.IsNullOrEmpty(strFeatureConfigFile) == true)
             {
-                Console.WriteLine("FAILED: The feature configuration file {0} isn't existed.", strFeatureConfigFile);
+                Console.WriteLine("FAILED: The feature configuration file {0} isn't specified.", strFeatureConfigFile);
                 UsageTest();
                 return;
             }

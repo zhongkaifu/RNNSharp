@@ -135,6 +135,8 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
+            Console.WriteLine("Loading LSTM-RNN model: {0}", filename);
+
             StreamReader sr = new StreamReader(filename);
             BinaryReader br = new BinaryReader(sr.BaseStream);
 

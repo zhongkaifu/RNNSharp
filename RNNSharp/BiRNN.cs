@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -466,19 +467,68 @@ namespace RNNSharp
 
         public override void saveNetBin(string filename)
         {
+            //Save bi-directional model
             forwardRNN.mat_hidden2output = mat_hidden2output;
             backwardRNN.mat_hidden2output = mat_hidden2output;
 
             forwardRNN.saveNetBin(filename + ".forward");
             backwardRNN.saveNetBin(filename + ".backward");
+
+            //Save meta data
+            using (StreamWriter sw = new StreamWriter(filename))
+            {
+                BinaryWriter fo = new BinaryWriter(sw.BaseStream);
+                fo.Write((int)m_modeltype);
+                fo.Write((int)m_modeldirection);
+
+                // Signiture , 0 is for RNN or 1 is for RNN-CRF
+                int iflag = 0;
+                if (m_bCRFTraining == true)
+                {
+                    iflag = 1;
+                }
+                fo.Write(iflag);
+
+                fo.Write(L0);
+                fo.Write(L1);
+                fo.Write(L2);
+                fo.Write(fea_size);
+            }
         }
 
         public override void loadNetBin(string filename)
         {
+            Console.WriteLine("Loading bi-directional model: {0}", filename);
+
             forwardRNN.loadNetBin(filename + ".forward");
             backwardRNN.loadNetBin(filename + ".backward");
 
             mat_hidden2output = forwardRNN.mat_hidden2output;
+
+
+            using (StreamReader sr = new StreamReader(filename))
+            {
+                BinaryReader br = new BinaryReader(sr.BaseStream);
+
+                m_modeltype = (MODELTYPE)br.ReadInt32();
+                m_modeldirection = (MODELDIRECTION)br.ReadInt32();
+
+                int iflag = br.ReadInt32();
+                if (iflag == 1)
+                {
+                    m_bCRFTraining = true;
+                }
+                else
+                {
+                    m_bCRFTraining = false;
+                }
+
+                //Load basic parameters
+                L0 = br.ReadInt32();
+                L1 = br.ReadInt32();
+                L2 = br.ReadInt32();
+                fea_size = br.ReadInt32();
+            }
         }
     }
 }
