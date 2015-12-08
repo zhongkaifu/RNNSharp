@@ -86,17 +86,26 @@ namespace RNNSharp
 
             Console.WriteLine("[TRACE] Iterative training begins ...");
             double lastPPL = double.MaxValue;
-
-            while (rnn.ShouldTrainingStop() == false)
+            double lastAlpha = rnn.Alpha;
+            int iter = 0;
+            while (true)
             {
-                //Start to train model
-                double ppl = rnn.TrainNet();
-                if (ppl >= lastPPL)
+                if (rnn.MaxIter > 0 && iter > rnn.MaxIter)
                 {
+                    Console.WriteLine("We have trained this model {0} iteration, exit.");
+                    break;
+                }
+
+                //Start to train model
+                double ppl = rnn.TrainNet(iter);
+                if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
+                {
+                    //Although we reduce alpha value, we still cannot get better result.
                     Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
                     break;
                 }
                 lastPPL = ppl;
+
 
                 //Validate the model by validated corpus
                 if (rnn.ValidateNet() == true)
@@ -106,6 +115,18 @@ namespace RNNSharp
                     rnn.saveNetBin(m_modelSetting.GetModelFile());
                     Console.WriteLine("Done.");
                 }
+                else
+                {
+                    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
+                    rnn.loadNetBin(m_modelSetting.GetModelFile());
+                    Console.WriteLine("Done.");
+
+                    lastAlpha = rnn.Alpha;
+                    rnn.Alpha = rnn.Alpha / 2.0;
+                } 
+
+
+                iter++;
             }
         }
     }

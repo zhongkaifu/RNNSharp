@@ -184,10 +184,7 @@ namespace RNNSharp
             {
                 m_tagBigramTransition = loadMatrixBin(br);
 
-                for (int i = 0; i < MAX_RNN_HIST; i++)
-                {
-                    m_Diff[i] = new double[L2];
-                }
+                m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
                 m_DeltaBigramLM = new Matrix<double>(L2, L2);
             }
 
@@ -361,11 +358,7 @@ namespace RNNSharp
         {
             CreateCell(null);
 
-            for (int i = 0; i < MAX_RNN_HIST; i++)
-            {
-                m_Diff[i] = new double[L2];
-            }
-
+            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
             m_tagBigramTransition = new Matrix<double>(L2, L2);
             m_DeltaBigramLM = new Matrix<double>(L2, L2);
 

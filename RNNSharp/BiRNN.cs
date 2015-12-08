@@ -141,11 +141,7 @@ namespace RNNSharp
 
         public override void initMem()
         {
-            for (int i = 0; i < MAX_RNN_HIST; i++)
-            {
-                m_Diff[i] = new double[L2];
-            }
-
+            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
             m_tagBigramTransition = new Matrix<double>(L2, L2);
             m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
@@ -164,27 +160,6 @@ namespace RNNSharp
                     mat_hidden2output[i][j] = (((double)((randNext() % 100) + 1) / 100) * 2 * hiddenOutputRand) - hiddenOutputRand;
                 }
             }
-        }
-
-
-
-        public override Matrix<double> InnerDecode(Sequence pSequence)
-        {
-            Matrix<neuron> mHiddenLayer = null;
-            Matrix<double> mRawOutputLayer = null;
-            neuron[][] outputLayer = InnerDecode(pSequence, out mHiddenLayer, out mRawOutputLayer);
-            int numStates = pSequence.GetSize();
-
-            Matrix<double> m = new Matrix<double>(numStates, L2);
-            for (int currState = 0; currState < numStates; currState++)
-            {
-                for (int i = 0; i < L2; i++)
-                {
-                    m[currState][i] = outputLayer[currState][i].cellOutput;
-                }
-            }
-
-            return m;
         }
 
         int[] predicted_fnn;
@@ -267,12 +242,10 @@ namespace RNNSharp
             backwardRNN.netFlush();
         }
 
-        public override int[] learnSentenceForRNNCRF(Sequence pSequence)
+        public override Matrix<double> learnSentenceForRNNCRF(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network
             int numStates = pSequence.GetSize();
-            int[] predicted = new int[numStates];
-
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
@@ -281,12 +254,10 @@ namespace RNNSharp
             ForwardBackward(numStates, rawOutputLayer);
 
             //Get the best result
-            predicted = new int[numStates];
             for (int i = 0; i < numStates; i++)
             {
                 State state = pSequence.Get(i);
                 logp += Math.Log10(m_Diff[i][state.GetLabel()]);
-                predicted[i] = GetBestZIndex(i);
             }
 
             UpdateBigramTransition(pSequence);
@@ -305,44 +276,48 @@ namespace RNNSharp
 
             LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
 
-            return predicted;
+            return m_Diff;
         }
 
-        public override int[] PredictSentence(Sequence pSequence)
+        public override Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network
             int numStates = pSequence.GetSize();
-            int[] predicted = new int[numStates];
 
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
             neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer);
 
-            //Merge forward and backward
-            for (int curState = 0; curState < numStates; curState++)
+            if (runningMode != RunningMode.Test)
             {
-                State state = pSequence.Get(curState);
-                logp += Math.Log10(seqOutput[curState][state.GetLabel()].cellOutput);
-
-                predicted[curState] = GetBestOutputIndex(seqOutput, curState, L2);
-            }
-
-            //Update hidden-output layer weights
-            for (int curState = 0; curState < numStates; curState++)
-            {
-                State state = pSequence.Get(curState);
-                //For standard RNN
-                for (int c = 0; c < L2; c++)
+                //Merge forward and backward
+                for (int curState = 0; curState < numStates; curState++)
                 {
-                    seqOutput[curState][c].er = -seqOutput[curState][c].cellOutput;
+                    State state = pSequence.Get(curState);
+                    logp += Math.Log10(seqOutput[curState][state.GetLabel()].cellOutput);
+                    counter++;
                 }
-                seqOutput[curState][state.GetLabel()].er = 1 - seqOutput[curState][state.GetLabel()].cellOutput;
             }
 
-            LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+            if (runningMode == RunningMode.Train)
+            {
+                //Update hidden-output layer weights
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    State state = pSequence.Get(curState);
+                    //For standard RNN
+                    for (int c = 0; c < L2; c++)
+                    {
+                        seqOutput[curState][c].er = -seqOutput[curState][c].cellOutput;
+                    }
+                    seqOutput[curState][state.GetLabel()].er = 1 - seqOutput[curState][state.GetLabel()].cellOutput;
+                }
 
-            return predicted;
+                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+            }
+
+            return rawOutputLayer;
         }
 
         private void LearnTwoRNN(Sequence pSequence, Matrix<neuron> mergedHiddenLayer, neuron[][] seqOutput)
@@ -352,8 +327,6 @@ namespace RNNSharp
             int numStates = pSequence.GetSize();
             forwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
             backwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
-
-
 
             Parallel.Invoke(() =>
                 {
@@ -377,8 +350,6 @@ namespace RNNSharp
                 //Learn forward network
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    System.Threading.Interlocked.Increment(ref counter);
-
                     // error propogation
                     State state = pSequence.Get(curState);
                     forwardRNN.setInputLayer(state, curState, numStates, predicted_fnn);
@@ -396,8 +367,6 @@ namespace RNNSharp
 
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    System.Threading.Interlocked.Increment(ref counter);
-
                     int curState2 = numStates - 1 - curState;
 
                     // error propogation

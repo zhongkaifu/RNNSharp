@@ -32,7 +32,6 @@ namespace RNNSharp
             gradient_cutoff = 15;
             dropout = 0;
             llogp = -100000000;
-            iter = 0;
 
             L1 = 30;
             bptt = 0;
@@ -327,11 +326,7 @@ namespace RNNSharp
 
             mat_hidden2output = new Matrix<double>(L2, L1);
 
-            for (int i = 0; i < MAX_RNN_HIST; i++)
-            {
-                m_Diff[i] = new double[L2];
-            }
-
+            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
             m_tagBigramTransition = new Matrix<double>(L2, L2);
             m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
@@ -418,19 +413,8 @@ namespace RNNSharp
 
         public override void netFlush()   //cleans all activations and error vectors
         {
-            int a;
-
-            for (a = 0; a < L1; a++)
-            {
-                neuHidden[a].cellOutput = 0;
-                neuHidden[a].er = 0;
-            }
-
-            for (a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
-            }
+            neuHidden = new neuron[L1];
+            neuOutput = new neuron[L2];
         }
 
         public override void loadNetBin(string filename)
@@ -478,11 +462,7 @@ namespace RNNSharp
             if (iflag == 1)
             {
                 m_tagBigramTransition = loadMatrixBin(br);
-
-                for (int i = 0; i < MAX_RNN_HIST; i++)
-                {
-                    m_Diff[i] = new double[L2];
-                }
+                m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
                 m_DeltaBigramLM = new Matrix<double>(L2, L2);
             }
 
@@ -492,20 +472,8 @@ namespace RNNSharp
         private void CreateCells()
         {
             neuFeatures = new double[fea_size];
-
             neuOutput = new neuron[L2];
-            for (int a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
-            }
-
             neuHidden = new neuron[L1];
-            for (int a = 0; a < L1; a++)
-            {
-                neuHidden[a].cellOutput = 0;
-                neuHidden[a].er = 0;
-            }
         }
 
         // save model as binary format
