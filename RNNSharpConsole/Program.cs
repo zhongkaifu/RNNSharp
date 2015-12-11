@@ -456,9 +456,9 @@ namespace RNNSharpConsole
             Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet);
             featurizer.ShowFeatureSize();
 
-            if (File.Exists(strTrainFile) == false)
+            if (String.IsNullOrEmpty(strTrainFile) == true)
             {
-                Console.WriteLine("FAILED: The training corpus {0} isn't existed.", strTrainFile);
+                Console.WriteLine("FAILED: The training corpus isn't specified.");
                 UsageTrain();
                 return;
             }
@@ -467,15 +467,14 @@ namespace RNNSharpConsole
             DataSet dataSetTrain = new DataSet(tagSet.GetSize());
             LoadDataset(strTrainFile, featurizer, dataSetTrain);
 
-            if (File.Exists(strValidFile) == false)
+            DataSet dataSetValidation = null;
+            if (String.IsNullOrEmpty(strValidFile) == true)
             {
-                Console.WriteLine("FAILED: The validated corpus {0} isn't existed.", strValidFile);
-                UsageTrain();
+                Console.WriteLine("FAILED: The validation corpus isn't specified.");
                 return;
             }
-
             //LoadFeatureConfig validated corpus and extract feature set
-            DataSet dataSetValidation = new DataSet(tagSet.GetSize());
+            dataSetValidation = new DataSet(tagSet.GetSize());
             LoadDataset(strValidFile, featurizer, dataSetValidation);
 
             //Create RNN encoder and save necessary parameters

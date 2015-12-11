@@ -36,29 +36,23 @@ namespace RNNSharp
 
             m_modeldirection = MODELDIRECTION.BI_DIRECTIONAL;
         }
-        public override void SetTrainingSet(DataSet train)
-        {
-            m_TrainingSet = train;
-            fea_size = m_TrainingSet.GetDenseDimension();
-            L0 = m_TrainingSet.GetSparseDimension();
-            L2 = m_TrainingSet.GetTagSize();
 
-            forwardRNN.SetTrainingSet(train);
-            backwardRNN.SetTrainingSet(train);
+        public override void SetFeatureDimension(int denseFeatueSize, int sparseFeatureSize, int tagSize)
+        {
+            fea_size = denseFeatueSize;
+            L0 = sparseFeatureSize;
+            L2 = tagSize;
+
+            forwardRNN.SetFeatureDimension(denseFeatueSize, sparseFeatureSize, tagSize);
+            backwardRNN.SetFeatureDimension(denseFeatueSize, sparseFeatureSize, tagSize);
         }
+
 
         public override void initWeights()
         {
             forwardRNN.initWeights();
             backwardRNN.initWeights();
 
-        }
-        public override void SetValidationSet(DataSet validation)
-        {
-            m_ValidationSet = validation;
-
-            forwardRNN.SetValidationSet(validation);
-            backwardRNN.SetValidationSet(validation);
         }
 
         public override void SetModelFile(string strModelFile)
@@ -258,6 +252,7 @@ namespace RNNSharp
             {
                 State state = pSequence.Get(i);
                 logp += Math.Log10(m_Diff[i][state.GetLabel()]);
+                counter++;
             }
 
             UpdateBigramTransition(pSequence);

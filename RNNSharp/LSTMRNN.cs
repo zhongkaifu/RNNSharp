@@ -289,15 +289,14 @@ namespace RNNSharp
 
         public override void initWeights()
         {
-            int INPUT = m_TrainingSet.GetSparseDimension();
             //create and initialise the weights from input to hidden layer
             input2hidden = new LSTMWeight[L1][];
             for (int i = 0; i < L1; i++)
             {
-                input2hidden[i] = new LSTMWeight[INPUT + 1];
-                for (int j = 0; j <= INPUT; j++)
+                input2hidden[i] = new LSTMWeight[L0 + 1];
+                for (int j = 0; j <= L0; j++)
                 {
-                    input2hidden[i][j] = LSTMWeightInit(INPUT);
+                    input2hidden[i][j] = LSTMWeightInit(L0);
                 }
             }
 
@@ -309,7 +308,7 @@ namespace RNNSharp
                     feature2hidden[i] = new LSTMWeight[fea_size];
                     for (int j = 0; j < fea_size; j++)
                     {
-                        feature2hidden[i][j] = LSTMWeightInit(INPUT);
+                        feature2hidden[i][j] = LSTMWeightInit(L0);
                     }
                 }
             }
@@ -712,11 +711,10 @@ namespace RNNSharp
 
             if (updateNet == true)
             {
-                int INPUT = m_TrainingSet.GetSparseDimension();
                 input2hiddenDeri = new LSTMWeightDerivative[L1][];
                 for (int i = 0; i < L1; i++)
                 {
-                    input2hiddenDeri[i] = new LSTMWeightDerivative[INPUT];
+                    input2hiddenDeri[i] = new LSTMWeightDerivative[L0];
                 }
 
                 if (fea_size > 0)

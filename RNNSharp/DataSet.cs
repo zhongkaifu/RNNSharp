@@ -8,9 +8,37 @@ namespace RNNSharp
 {
     public class DataSet
     {
-        List<Sequence> m_Data = new List<Sequence>();
+        List<Sequence> m_Data;
         int m_tagSize;
         List<List<double>> m_LabelBigramTransition;
+
+        /// <summary>
+        /// Split current corpus into two parts according given ratio
+        /// </summary>
+        /// <param name="ratio"></param>
+        /// <param name="ds1"></param>
+        /// <param name="ds2"></param>
+        public void SplitDataSet(double ratio, out DataSet ds1, out DataSet ds2)
+        {
+            Random rnd = new Random(DateTime.Now.Millisecond);
+            ds1 = new DataSet(m_tagSize);
+            ds2 = new DataSet(m_tagSize);
+
+            for (int i = 0; i < m_Data.Count; i++)
+            {
+                if (rnd.NextDouble() < ratio)
+                {
+                    ds1.Add(m_Data[i]);
+                }
+                else
+                {
+                    ds2.Add(m_Data[i]);
+                }
+            }
+
+            ds1.BuildLabelBigramTransition();
+            ds2.BuildLabelBigramTransition();
+        }
 
         public void Add(Sequence sequence) { m_Data.Add(sequence); }
 
@@ -29,6 +57,8 @@ namespace RNNSharp
         public DataSet(int tagSize)
         {
             m_tagSize = tagSize;
+            m_Data = new List<Sequence>();
+            m_LabelBigramTransition = new List<List<double>>();
         }
 
         public int GetSize()

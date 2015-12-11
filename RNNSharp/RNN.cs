@@ -76,9 +76,6 @@ namespace RNNSharp
         protected Matrix<double> m_RawOutput;
         protected int counterTokenForLM;
 
-        protected DataSet m_TrainingSet;
-        protected DataSet m_ValidationSet;
-
         // for Viterbi decoding
         public Matrix<double> m_tagBigramTransition;
 
@@ -202,16 +199,15 @@ namespace RNNSharp
             m_modeldirection = (MODELDIRECTION)dir;
         }
 
-        public virtual void SetTrainingSet(DataSet train)
+
+        public virtual void SetFeatureDimension(int denseFeatueSize, int sparseFeatureSize, int tagSize)
         {
-            m_TrainingSet = train;
-            fea_size = m_TrainingSet.GetDenseDimension();
-            L0 = m_TrainingSet.GetSparseDimension();
-            L2 = m_TrainingSet.GetTagSize();
+            fea_size = denseFeatueSize;
+            L0 = sparseFeatureSize;
+            L2 = tagSize;
         }
 
         public virtual void SetCRFTraining(bool b) { m_bCRFTraining = b; }
-        public virtual void SetValidationSet(DataSet validation) { m_ValidationSet = validation; }
         public virtual void SetGradientCutoff(double newGradient) { gradient_cutoff = newGradient; }
         public virtual void SetLearningRate(double newAlpha) { alpha = newAlpha; }
         public virtual void SetDropout(double newDropout) { dropout = newDropout; }
@@ -492,7 +488,7 @@ namespace RNNSharp
         public abstract void learnNet(State state, int timeat, bool biRNN = false);
         public abstract void LearnBackTime(State state, int numStates, int curState);
 
-        public virtual double TrainNet(int iter)
+        public virtual double TrainNet(DataSet trainingSet, int iter)
         {
             DateTime start = DateTime.Now;
             int[] predicted;
@@ -506,15 +502,15 @@ namespace RNNSharp
             netFlush();
 
             //Shffle training corpus
-            m_TrainingSet.Shuffle();
+            trainingSet.Shuffle();
 
-            int numSequence = m_TrainingSet.GetSize();
+            int numSequence = trainingSet.GetSize();
             int tknErrCnt = 0;
             int sentErrCnt = 0;
             Console.WriteLine("[TRACE] Progress = 0/" + numSequence / 1000.0 + "K\r");
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                Sequence pSequence = m_TrainingSet.Get(curSequence);
+                Sequence pSequence = trainingSet.Get(curSequence);
                 int numStates = pSequence.GetSize();
 
                 if (numStates < 3)
@@ -854,7 +850,7 @@ namespace RNNSharp
         }
 
 
-        public virtual bool ValidateNet()
+        public virtual bool ValidateNet(DataSet validationSet)
         {
             Console.WriteLine("[TRACE] Start validation ...");
             int wordcn = 0;
@@ -868,10 +864,10 @@ namespace RNNSharp
             counterTokenForLM = 0;
 
             netFlush();            
-            int numSequence = m_ValidationSet.GetSize();
+            int numSequence = validationSet.GetSize();
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                Sequence pSequence = m_ValidationSet.Get(curSequence);
+                Sequence pSequence = validationSet.Get(curSequence);
                 wordcn += pSequence.GetSize();
 
                 Matrix<double> m;

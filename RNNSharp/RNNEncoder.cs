@@ -61,9 +61,15 @@ namespace RNNSharp
                 rnn = biRNN;
             }
 
+            //Set model type
             rnn.SetModelDirection(m_modelSetting.GetModelDirection());
-            rnn.SetTrainingSet(m_TrainingSet);
-            rnn.SetValidationSet(m_ValidationSet);
+
+            //Set feature dimension
+            rnn.SetFeatureDimension(m_TrainingSet.GetDenseDimension(), 
+                m_TrainingSet.GetSparseDimension(), 
+                m_TrainingSet.GetTagSize());
+
+
             rnn.SetModelFile(m_modelSetting.GetModelFile());
             rnn.SetSaveStep(m_modelSetting.GetSaveStep());
             rnn.SetMaxIter(m_modelSetting.GetMaxIteration());
@@ -97,7 +103,7 @@ namespace RNNSharp
                 }
 
                 //Start to train model
-                double ppl = rnn.TrainNet(iter);
+                double ppl = rnn.TrainNet(m_TrainingSet, iter);
                 if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
                 {
                     //Although we reduce alpha value, we still cannot get better result.
@@ -108,7 +114,7 @@ namespace RNNSharp
 
 
                 //Validate the model by validated corpus
-                if (rnn.ValidateNet() == true)
+                if (rnn.ValidateNet(m_ValidationSet) == true)
                 {
                     //If current model is better than before, save it into file
                     Console.Write("Saving better model into file {0}...", m_modelSetting.GetModelFile());
@@ -123,8 +129,7 @@ namespace RNNSharp
 
                     lastAlpha = rnn.Alpha;
                     rnn.Alpha = rnn.Alpha / 2.0;
-                } 
-
+                }
 
                 iter++;
             }
