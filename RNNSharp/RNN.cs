@@ -233,11 +233,11 @@ namespace RNNSharp
             bool isTraining = true;
             if (runningMode == RunningMode.Train)
             {
-                netReset(true);
+                isTraining = true;
             }
             else
             {
-                netReset(false);
+                isTraining = false;
             }
 
             netReset(isTraining);
