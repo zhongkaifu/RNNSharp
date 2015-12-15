@@ -7,7 +7,7 @@ using System.IO;
 
 namespace RNNSharp
 {
-    public class LSTMCell
+    public class LSTMCell : neuron
     {
         //input gate
         public double netIn;
@@ -35,9 +35,6 @@ namespace RNNSharp
         //output gate
         public double netOut;
         public double yOut;
-
-        //cell output
-        public double cellOutput;
     }
 
     public struct LSTMWeight
@@ -77,12 +74,15 @@ namespace RNNSharp
         }
 
 
-        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
+        public override neuron[] CopyHiddenLayer()
         {
-            for (int i = 0; i <= L1; i++)
+            neuron[] layer = new neuron[neuHidden.Length];
+            for (int i = 0; i < neuHidden.Length; i++)
             {
-                m[curStatus][i] = neuHidden[i].cellOutput;
+                layer[i] = neuHidden[i].CopyTo();
             }
+
+            return layer;
         }
 
         public LSTMWeight[][] loadLSTMWeight(BinaryReader br)
@@ -194,7 +194,7 @@ namespace RNNSharp
 
         public void SaveHiddenLayerWeights(BinaryWriter fo)
         {
-            for (int i = 0; i < L1 + 1; i++)
+            for (int i = 0; i < L1; i++)
             {
                 fo.Write(neuHidden[i].wCellIn);
                 fo.Write(neuHidden[i].wCellForget);
@@ -293,8 +293,8 @@ namespace RNNSharp
             input2hidden = new LSTMWeight[L1][];
             for (int i = 0; i < L1; i++)
             {
-                input2hidden[i] = new LSTMWeight[L0 + 1];
-                for (int j = 0; j <= L0; j++)
+                input2hidden[i] = new LSTMWeight[L0];
+                for (int j = 0; j < L0; j++)
                 {
                     input2hidden[i][j] = LSTMWeightInit(L0);
                 }
@@ -315,7 +315,7 @@ namespace RNNSharp
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
             double hiddenOutputRand = 1 / Math.Sqrt((double)L1);
-            mat_hidden2output = new Matrix<double>(L2, L1 + 1);
+            mat_hidden2output = new Matrix<double>(L2, L1);
 
             for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
             {
@@ -326,7 +326,7 @@ namespace RNNSharp
             }
         }
 
-        public void LSTMCellInit(bool type, LSTMCell c)
+        public void LSTMCellInit(LSTMCell c)
         {
             //input gate
             c.netIn = 0;
@@ -350,7 +350,7 @@ namespace RNNSharp
             c.yOut = 0;
 
             //cell output
-            c.cellOutput = (type == true) ? 0 : -1;
+            c.cellOutput = 0;
         }
 
         public override void initMem()
@@ -368,7 +368,7 @@ namespace RNNSharp
         private void CreateCell(BinaryReader br)
         {
             neuFeatures = new double[fea_size];
-            neuOutput = new neuron[L2];
+            neuOutput = CreateLayer(L2);
 
             for (int a = 0; a < L2; a++)
             {
@@ -376,19 +376,17 @@ namespace RNNSharp
                 neuOutput[a].er = 0;
             }
 
-            neuHidden = new LSTMCell[L1 + 1];
+            neuHidden = new LSTMCell[L1];
             for (int i = 0; i < L1; i++)
             {
                 neuHidden[i] = new LSTMCell();
-                LSTMCellInit(NORMAL, neuHidden[i]);
+                LSTMCellInit(neuHidden[i]);
             }
-            neuHidden[L1] = new LSTMCell();
-            LSTMCellInit(BIAS, neuHidden[L1]);
 
             if (br != null)
             {
                 //Load weight from input file
-                for (int i = 0; i < L1 + 1; i++)
+                for (int i = 0; i < L1; i++)
                 {
                     neuHidden[i].wCellIn = br.ReadDouble();
                     neuHidden[i].wCellForget = br.ReadDouble();
@@ -406,24 +404,7 @@ namespace RNNSharp
                     neuHidden[i].wCellForget = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
                     neuHidden[i].wCellOut = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
                 }
-
-                //internal weights
-                neuHidden[L1].wCellIn = 0;
-                neuHidden[L1].wCellForget = 0;
-                neuHidden[L1].wCellOut = 0;
             }
-        }
-
-        public void matrixXvectorADD(neuron[] dest, LSTMCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
-        {
-            //ac mod
-            Parallel.For(0, (to - from), parallelOption, i =>
-            {
-                for (int j = 0; j < to2 - from2; j++)
-                {
-                    dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
-                }
-            });
         }
 
         public void matrixXvectorADD(LSTMCell[] dest, double[] srcvec, LSTMWeight[][] srcmatrix, int from, int to, int from2, int to2)
@@ -562,7 +543,7 @@ namespace RNNSharp
           });
 
             //update weights for hidden to output layer
-            for (int i = 0; i <= L1; i++)
+            for (int i = 0; i < L1; i++)
             {
                 for (int k = 0; k < L2; k++)
                 {
@@ -660,14 +641,7 @@ namespace RNNSharp
                 neuHidden[j] = cell_j;
             });
 
-
-            //initialize output nodes
-            for (int c = 0; c < L2; c++)
-            {
-                neuOutput[c].cellOutput = 0;
-            }
-
-            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1 + 1);
+            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1, 0);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
@@ -682,22 +656,12 @@ namespace RNNSharp
 
         public override void netFlush()   //cleans all activations and error vectors
         {
-            int a;
-            for (a = 0; a < fea_size; a++)
-            {
-                neuFeatures[a] = 0;
-            }
+            neuFeatures = new double[fea_size];
+            neuOutput = CreateLayer(L2);
 
             for (int i = 0; i < L1; i++)
             {
-                LSTMCellInit(NORMAL, neuHidden[i]);
-            }
-            LSTMCellInit(BIAS, neuHidden[L1]);
-
-            for (a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
+                LSTMCellInit(neuHidden[i]);
             }
         }
 
@@ -705,9 +669,8 @@ namespace RNNSharp
         {
             for (int i = 0; i < L1; i++)
             {
-                LSTMCellInit(NORMAL, neuHidden[i]);
+                LSTMCellInit(neuHidden[i]);
             }
-            LSTMCellInit(BIAS, neuHidden[L1]);
 
             if (updateNet == true)
             {

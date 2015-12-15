@@ -14,31 +14,16 @@ namespace RNNSharp
         private int m_nWidth; // the number of columns
         private T[][] m_saData;
 
-        public void Reset()
+        public Matrix(int h, int w)
         {
-            Alloc();
-        }
+            m_nHeight = h;
+            m_nWidth = w;
 
-        void Alloc()
-        {
             m_saData = new T[m_nHeight][];
             for (int i = 0; i < m_nHeight; i++)
             {
                 m_saData[i] = new T[m_nWidth];
             }
-
-        }
-
-        public Matrix()
-        {
-
-        }
-
-        public Matrix(int h, int w)
-        {
-            m_nHeight = h;
-            m_nWidth = w;
-            Alloc();
         }
 
 

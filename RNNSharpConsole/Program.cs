@@ -456,6 +456,13 @@ namespace RNNSharpConsole
             Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet);
             featurizer.ShowFeatureSize();
 
+            if (featurizer.IsRunTimeFeatureUsed() == true && iDir == 1)
+            {
+                Console.WriteLine("FAILED: Run time feature is not available for bi-directional RNN model.");
+                UsageTrain();
+                return;
+            }
+
             if (String.IsNullOrEmpty(strTrainFile) == true)
             {
                 Console.WriteLine("FAILED: The training corpus isn't specified.");

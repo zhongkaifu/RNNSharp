@@ -22,7 +22,14 @@ namespace RNNSharp
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
                 Console.WriteLine("Model Structure: Bi-directional RNN");
-                m_Rnn = new BiRNN((int)modelType);
+                if (modelType == MODELTYPE.SIMPLE)
+                {
+                    m_Rnn = new BiRNN(new SimpleRNN(), new SimpleRNN());
+                }
+                else
+                {
+                    m_Rnn = new BiRNN(new LSTMRNN(), new LSTMRNN());
+                }
             }
             else
             {
