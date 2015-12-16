@@ -17,6 +17,7 @@ namespace RNNSharp
 
         protected Matrix<double> mat_hiddenBpttWeight;
 
+        protected neuron[] neuLastHidden;		//neurons in input layer
         protected neuron[] neuHidden;		//neurons in hidden layer
         protected Matrix<double> mat_input2hidden;
         protected Matrix<double> mat_feature2hidden;
@@ -120,7 +121,7 @@ namespace RNNSharp
         public override void computeNet(State state, double[] doutput, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
-            neuron[] neuLastHidden = neuHidden;
+            neuLastHidden = neuHidden;
 
             //hidden(t-1) -> hidden(t)
             neuHidden = CreateLayer(L1);
@@ -205,69 +206,64 @@ namespace RNNSharp
 
         void learnBptt(State state)
         {
-            neuron[] neuLastHidden = CreateLayer(L1);
-            neuron[] neuHiddenBptt = CreateLayer(L1);
-            for (int i = 0; i < L1; i++)
-            {
-                neuHiddenBptt[i].er = bptt_hidden[i].er;
-            }
-
             for (int step = 0; step < bptt + bptt_block - 2; step++)
             {
-                //If we don't have historical information about current state or previous state, just exit
-                if (null == bptt_inputs[step] || null == bptt_inputs[step + 1])
+                if (null == bptt_inputs[step])
                     break;
 
-                Parallel.For(0, L1, parallelOption, i =>
+                var sparse = bptt_inputs[step];         
+                Parallel.For(0, L1, parallelOption, a =>
                 {
-                    //Get previous hidden layer
-                    neuLastHidden[i].cellOutput = bptt_hidden[(step + 1) * L1 + i].cellOutput;
-                    neuLastHidden[i].er = bptt_hidden[(step + 1) * L1 + i].er;
-
-                    neuHiddenBptt[i].cellOutput = bptt_hidden[step * L1 + i].cellOutput;
-                    //Compute hidden layter gradient
-                    neuHiddenBptt[i].er *= neuHiddenBptt[i].cellOutput * (1 - neuHiddenBptt[i].cellOutput);
-                });
-
-
-                //Calculate features error
-                var sparse = bptt_inputs[step];
-                Parallel.For(0, L1, parallelOption, i =>
-                {
-                    //Dense features
-                    //weight update fea->0
+                    // compute hidden layter gradient
+                    neuHidden[a].er *= neuHidden[a].cellOutput * (1 - neuHidden[a].cellOutput);
+            
+                    //dense weight update fea->0
                     if (fea_size > 0)
                     {
-                        for (int j = 0; j < fea_size; j++)
+                        for (int i = 0; i < fea_size; i++)
                         {
-                            mat_bptt_synf[i][j] += neuHiddenBptt[i].er * bptt_fea[j + step * fea_size];
+                            mat_bptt_synf[a][i] += neuHidden[a].er * bptt_fea[i + step * fea_size];
                         }
                     }
 
-                    //Sparse features
-                    //weight update hidden->input
-                    for (int j = 0; j < sparse.GetNumberOfEntries(); j++)
+                    //sparse weight update hidden->input
+                    for (int i = 0; i < sparse.GetNumberOfEntries(); i++)
                     {
-                        mat_bptt_syn0_w[i][sparse.GetEntry(j).Key] += neuHiddenBptt[i].er * sparse.GetEntry(j).Value;
+                        mat_bptt_syn0_w[a][sparse.GetEntry(i).Key] += neuHidden[a].er * sparse.GetEntry(i).Value;
                     }
 
-                    // Calcuate bptt weights error
-                    for (int j = 0; j < L1; j++)
+                    //bptt weight update
+                    for (int i = 0; i < L1; i++)
                     {
-                        mat_bptt_syn0_ph[i][j] += neuHiddenBptt[i].er * neuLastHidden[j].cellOutput;
+                        mat_bptt_syn0_ph[a][i] += neuHidden[a].er * neuLastHidden[i].cellOutput;
                     }
+
                 });
 
                 //propagates errors hidden->input to the recurrent part
-                neuron[] neuLastHiddenErr = CreateLayer(L1);
-                matrixXvectorADD(neuLastHiddenErr, neuHiddenBptt, mat_hiddenBpttWeight, 0, L1, 0, L1, 1);
+                matrixXvectorADD(neuLastHidden, neuHidden, mat_hiddenBpttWeight, 0, L1, 0, L1, 1);
                 for (int a = 0; a < L1; a++)
                 {
                     //propagate error from time T-n to T-n-1
-                    neuHiddenBptt[a].er = neuLastHiddenErr[a].er + neuLastHidden[a].er;
+                    neuHidden[a].er = neuLastHidden[a].er + bptt_hidden[(step + 1) * L1 + a].er;
+                }
+
+                if (step < bptt + bptt_block - 3)
+                {
+                    for (int a = 0; a < L1; a++)
+                    {
+                        neuHidden[a].cellOutput = bptt_hidden[(step + 1) * L1 + a].cellOutput;
+                        neuLastHidden[a].cellOutput = bptt_hidden[(step + 2) * L1 + a].cellOutput;
+                    }
                 }
             }
-            
+
+            for (int b = 0; b < L1; b++)
+            {
+                neuHidden[b].cellOutput = bptt_hidden[b].cellOutput;		//restore hidden layer after bptt
+            }
+
+
             Parallel.For(0, L1, parallelOption, b =>
             {
                 //Update bptt feature weights
