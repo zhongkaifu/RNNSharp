@@ -140,22 +140,19 @@ namespace RNNSharp
 
         public void setInputLayer(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
-            if (predicted != null)
+            // set runtime feature
+            for (int i = 0; i < state.GetNumRuntimeFeature(); i++)
             {
-                // set runtime feature
-                for (int i = 0; i < state.GetNumRuntimeFeature(); i++)
+                for (int j = 0;j < L2;j++)
                 {
-                    for (int j = 0; j < L2; j++)
-                    {
-                        //Clean up run time feature value and then set a new one
-                        state.SetRuntimeFeature(i, j, 0);
-                    }
+                    //Clean up run time feature value and then set a new one
+                    state.SetRuntimeFeature(i, j, 0);
+                }
 
-                    int pos = curState + ((forward == true) ? 1 : -1) * state.GetRuntimeFeature(i).OffsetToCurrentState;
-                    if (pos >= 0 && pos < numStates)
-                    {
-                        state.SetRuntimeFeature(i, predicted[pos], 1);
-                    }
+                int pos = curState + ((forward == true) ? 1 : -1) * state.GetRuntimeFeature(i).OffsetToCurrentState;
+                if (pos >= 0 && pos < numStates)
+                {
+                    state.SetRuntimeFeature(i, predicted[pos], 1);
                 }
             }
 
@@ -227,17 +224,6 @@ namespace RNNSharp
         public abstract void netReset(bool updateNet = false);
         public abstract void computeNet(State state, double[] doutput, bool isTrain = true);
 
-
-        public neuron[] CreateLayer(int size)
-        {
-            neuron[] n = new neuron[size];
-            for (int i = 0; i < size; i++)
-            {
-                n[i] = new neuron();
-            }
-
-            return n;
-        }
 
         public virtual Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
@@ -362,8 +348,24 @@ namespace RNNSharp
             return m_Diff;
         }
 
+
+        public void UpdateWeights(Matrix<double> weights, Matrix<double> delta)
+        {
+            Parallel.For(0, weights.GetHeight(), parallelOption, b =>
+            {
+                for (int a = 0; a < weights.GetWidth(); a++)
+                {
+                    weights[b][a] += alpha * delta[b][a];
+
+                    delta[b][a] = 0;
+                }
+            });
+        }
+
         public void UpdateBigramTransition(Sequence seq)
         {
+            //Clean up the detla data for tag bigram LM
+            m_DeltaBigramLM.Reset();
             int numStates = seq.GetSize();
 
             for (int timeat = 1; timeat < numStates; timeat++)
@@ -384,17 +386,7 @@ namespace RNNSharp
             counterTokenForLM++;
 
             //Update tag Bigram LM
-            Parallel.For(0, L2, parallelOption, b =>
-            {
-                for (int a = 0; a < L2; a++)
-                {
-                    m_tagBigramTransition[b][a] += alpha * m_DeltaBigramLM[b][a];
-
-                    //Clean bigram weight error
-                    m_DeltaBigramLM[b][a] = 0;
-                }
-            });
-
+            UpdateWeights(m_tagBigramTransition, m_DeltaBigramLM);
         }
 
         public int GetBestZIndex(int currStatus)
@@ -586,7 +578,7 @@ namespace RNNSharp
         public abstract void saveNetBin(string filename);
         public abstract void loadNetBin(string filename);
 
-        public abstract neuron[] CopyHiddenLayer();
+        public abstract void GetHiddenLayer(Matrix<double> m, int curStatus);
 
         public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir)
         {
@@ -596,6 +588,18 @@ namespace RNNSharp
                 modelType = (MODELTYPE)br.ReadInt32();
                 modelDir = (MODELDIRECTION)br.ReadInt32();
             }
+        }
+
+        public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
+        {
+            //ac mod
+            Parallel.For(0, (to - from), parallelOption, i =>
+            {
+                for (int j = 0; j < to2 - from2; j++)
+                {
+                    dest[i + from].cellOutput += srcvec[j + from2] * srcmatrix[i][j];
+                }
+            });
         }
 
         public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)

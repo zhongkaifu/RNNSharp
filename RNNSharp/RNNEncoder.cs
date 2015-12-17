@@ -51,28 +51,14 @@ namespace RNNSharp
                 }
                 else
                 {
-                    rnn = new LSTMRNN();
+                    LSTMRNN lstmRNN = new LSTMRNN();
+                    rnn = lstmRNN;
                 }
             }
             else
             {
-                if (m_modelSetting.GetModelType() == 0)
-                {
-                    SimpleRNN sForwardRNN = new SimpleRNN();
-                    SimpleRNN sBackwardRNN = new SimpleRNN();
-
-                    sForwardRNN.setBPTT(m_modelSetting.GetBptt() + 1);
-                    sForwardRNN.setBPTTBlock(10);
-
-                    sBackwardRNN.setBPTT(m_modelSetting.GetBptt() + 1);
-                    sBackwardRNN.setBPTTBlock(10);
-
-                    rnn = new BiRNN(sForwardRNN, sBackwardRNN);
-                }
-                else
-                {
-                    rnn = new BiRNN(new LSTMRNN(), new LSTMRNN());
-                }
+                BiRNN biRNN = new BiRNN(m_modelSetting.GetModelType());
+                rnn = biRNN;
             }
 
             //Set model type
@@ -124,12 +110,6 @@ namespace RNNSharp
                     Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
                     break;
                 }
-                else if (ppl >= lastPPL)
-                {
-                    lastAlpha = rnn.Alpha;
-                    rnn.Alpha = rnn.Alpha / 2.0;
-                }
-
                 lastPPL = ppl;
 
 
@@ -141,15 +121,15 @@ namespace RNNSharp
                     rnn.saveNetBin(m_modelSetting.GetModelFile());
                     Console.WriteLine("Done.");
                 }
-                //else
-                //{
-                //    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
-                //    rnn.loadNetBin(m_modelSetting.GetModelFile());
-                //    Console.WriteLine("Done.");
+                else
+                {
+                    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
+                    rnn.loadNetBin(m_modelSetting.GetModelFile());
+                    Console.WriteLine("Done.");
 
-                //    lastAlpha = rnn.Alpha;
-                //    rnn.Alpha = rnn.Alpha / 2.0;
-                //}
+                    lastAlpha = rnn.Alpha;
+                    rnn.Alpha = rnn.Alpha / 2.0;
+                }
 
                 iter++;
             }
