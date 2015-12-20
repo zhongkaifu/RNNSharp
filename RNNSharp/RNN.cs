@@ -140,19 +140,22 @@ namespace RNNSharp
 
         public void setInputLayer(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
-            // set runtime feature
-            for (int i = 0; i < state.GetNumRuntimeFeature(); i++)
+            if (predicted != null)
             {
-                for (int j = 0;j < L2;j++)
+                // set runtime feature
+                for (int i = 0; i < state.GetNumRuntimeFeature(); i++)
                 {
-                    //Clean up run time feature value and then set a new one
-                    state.SetRuntimeFeature(i, j, 0);
-                }
+                    for (int j = 0; j < L2; j++)
+                    {
+                        //Clean up run time feature value and then set a new one
+                        state.SetRuntimeFeature(i, j, 0);
+                    }
 
-                int pos = curState + ((forward == true) ? 1 : -1) * state.GetRuntimeFeature(i).OffsetToCurrentState;
-                if (pos >= 0 && pos < numStates)
-                {
-                    state.SetRuntimeFeature(i, predicted[pos], 1);
+                    int pos = curState + ((forward == true) ? 1 : -1) * state.GetRuntimeFeature(i).OffsetToCurrentState;
+                    if (pos >= 0 && pos < numStates)
+                    {
+                        state.SetRuntimeFeature(i, predicted[pos], 1);
+                    }
                 }
             }
 
@@ -348,24 +351,8 @@ namespace RNNSharp
             return m_Diff;
         }
 
-
-        public void UpdateWeights(Matrix<double> weights, Matrix<double> delta)
-        {
-            Parallel.For(0, weights.GetHeight(), parallelOption, b =>
-            {
-                for (int a = 0; a < weights.GetWidth(); a++)
-                {
-                    weights[b][a] += alpha * delta[b][a];
-
-                    delta[b][a] = 0;
-                }
-            });
-        }
-
         public void UpdateBigramTransition(Sequence seq)
         {
-            //Clean up the detla data for tag bigram LM
-            m_DeltaBigramLM.Reset();
             int numStates = seq.GetSize();
 
             for (int timeat = 1; timeat < numStates; timeat++)
@@ -386,7 +373,16 @@ namespace RNNSharp
             counterTokenForLM++;
 
             //Update tag Bigram LM
-            UpdateWeights(m_tagBigramTransition, m_DeltaBigramLM);
+            Parallel.For(0, L2, parallelOption, b =>
+            {
+                for (int a = 0; a < L2; a++)
+                {
+                    m_tagBigramTransition[b][a] += alpha * m_DeltaBigramLM[b][a];
+
+                    //Clean bigram weight error
+                    m_DeltaBigramLM[b][a] = 0;
+                }
+            });
         }
 
         public int GetBestZIndex(int currStatus)

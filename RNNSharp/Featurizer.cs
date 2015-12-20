@@ -155,6 +155,12 @@ namespace RNNSharp
             }
         }
 
+        public bool IsRunTimeFeatureUsed()
+        {
+            var fc = m_FeatureConfiguration;
+            return fc.ContainsKey(RT_FEATURE_CONTEXT);
+        }
+
         public void ShowFeatureSize()
         {
             var fc = m_FeatureConfiguration;

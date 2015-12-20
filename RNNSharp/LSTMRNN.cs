@@ -79,7 +79,7 @@ namespace RNNSharp
 
         public override void GetHiddenLayer(Matrix<double> m, int curStatus)
         {
-            for (int i = 0; i <= L1; i++)
+            for (int i = 0; i < L1; i++)
             {
                 m[curStatus][i] = neuHidden[i].cellOutput;
             }
@@ -194,7 +194,7 @@ namespace RNNSharp
 
         public void SaveHiddenLayerWeights(BinaryWriter fo)
         {
-            for (int i = 0; i < L1 + 1; i++)
+            for (int i = 0; i < L1; i++)
             {
                 fo.Write(neuHidden[i].wCellIn);
                 fo.Write(neuHidden[i].wCellForget);
@@ -293,8 +293,8 @@ namespace RNNSharp
             input2hidden = new LSTMWeight[L1][];
             for (int i = 0; i < L1; i++)
             {
-                input2hidden[i] = new LSTMWeight[L0 + 1];
-                for (int j = 0; j <= L0; j++)
+                input2hidden[i] = new LSTMWeight[L0];
+                for (int j = 0; j < L0; j++)
                 {
                     input2hidden[i][j] = LSTMWeightInit(L0);
                 }
@@ -315,7 +315,7 @@ namespace RNNSharp
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
             double hiddenOutputRand = 1 / Math.Sqrt((double)L1);
-            mat_hidden2output = new Matrix<double>(L2, L1 + 1);
+            mat_hidden2output = new Matrix<double>(L2, L1);
 
             for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
             {
@@ -326,7 +326,7 @@ namespace RNNSharp
             }
         }
 
-        public void LSTMCellInit(bool type, LSTMCell c)
+        public void LSTMCellInit(LSTMCell c)
         {
             //input gate
             c.netIn = 0;
@@ -350,7 +350,7 @@ namespace RNNSharp
             c.yOut = 0;
 
             //cell output
-            c.cellOutput = (type == true) ? 0 : -1;
+            c.cellOutput = 0;
         }
 
         public override void initMem()
@@ -360,6 +360,22 @@ namespace RNNSharp
             m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
             m_tagBigramTransition = new Matrix<double>(L2, L2);
             m_DeltaBigramLM = new Matrix<double>(L2, L2);
+
+            input2hiddenDeri = new LSTMWeightDerivative[L1][];
+            if (fea_size > 0)
+            {
+                feature2hiddenDeri = new LSTMWeightDerivative[L1][];
+            }
+
+            for (int i = 0; i < L1; i++)
+            {
+                input2hiddenDeri[i] = new LSTMWeightDerivative[L0];
+
+                if (fea_size > 0)
+                {
+                    feature2hiddenDeri[i] = new LSTMWeightDerivative[fea_size];
+                }
+            }
 
             Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
             initWeights();
@@ -376,19 +392,17 @@ namespace RNNSharp
                 neuOutput[a].er = 0;
             }
 
-            neuHidden = new LSTMCell[L1 + 1];
+            neuHidden = new LSTMCell[L1];
             for (int i = 0; i < L1; i++)
             {
                 neuHidden[i] = new LSTMCell();
-                LSTMCellInit(NORMAL, neuHidden[i]);
+                LSTMCellInit(neuHidden[i]);
             }
-            neuHidden[L1] = new LSTMCell();
-            LSTMCellInit(BIAS, neuHidden[L1]);
 
             if (br != null)
             {
                 //Load weight from input file
-                for (int i = 0; i < L1 + 1; i++)
+                for (int i = 0; i < L1; i++)
                 {
                     neuHidden[i].wCellIn = br.ReadDouble();
                     neuHidden[i].wCellForget = br.ReadDouble();
@@ -406,11 +420,6 @@ namespace RNNSharp
                     neuHidden[i].wCellForget = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
                     neuHidden[i].wCellOut = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
                 }
-
-                //internal weights
-                neuHidden[L1].wCellIn = 0;
-                neuHidden[L1].wCellForget = 0;
-                neuHidden[L1].wCellOut = 0;
             }
         }
 
@@ -562,7 +571,7 @@ namespace RNNSharp
           });
 
             //update weights for hidden to output layer
-            for (int i = 0; i <= L1; i++)
+            for (int i = 0; i < L1; i++)
             {
                 for (int k = 0; k < L2; k++)
                 {
@@ -660,14 +669,7 @@ namespace RNNSharp
                 neuHidden[j] = cell_j;
             });
 
-
-            //initialize output nodes
-            for (int c = 0; c < L2; c++)
-            {
-                neuOutput[c].cellOutput = 0;
-            }
-
-            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1 + 1);
+            matrixXvectorADD(neuOutput, neuHidden, mat_hidden2output, 0, L2, 0, L1);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
@@ -682,50 +684,31 @@ namespace RNNSharp
 
         public override void netFlush()   //cleans all activations and error vectors
         {
-            int a;
-            for (a = 0; a < fea_size; a++)
-            {
-                neuFeatures[a] = 0;
-            }
+            neuFeatures = new double[fea_size];
 
             for (int i = 0; i < L1; i++)
             {
-                LSTMCellInit(NORMAL, neuHidden[i]);
-            }
-            LSTMCellInit(BIAS, neuHidden[L1]);
-
-            for (a = 0; a < L2; a++)
-            {
-                neuOutput[a].cellOutput = 0;
-                neuOutput[a].er = 0;
+                LSTMCellInit(neuHidden[i]);
             }
         }
 
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
-            for (int i = 0; i < L1; i++)
+            Parallel.For(0, L1, parallelOption, i =>
             {
-                LSTMCellInit(NORMAL, neuHidden[i]);
-            }
-            LSTMCellInit(BIAS, neuHidden[L1]);
+                LSTMCellInit(neuHidden[i]);
 
-            if (updateNet == true)
-            {
-                input2hiddenDeri = new LSTMWeightDerivative[L1][];
-                for (int i = 0; i < L1; i++)
+                if (updateNet == true)
                 {
-                    input2hiddenDeri[i] = new LSTMWeightDerivative[L0];
-                }
-
-                if (fea_size > 0)
-                {
-                    feature2hiddenDeri = new LSTMWeightDerivative[L1][];
-                    for (int i = 0; i < L1; i++)
+                    Array.Clear(input2hiddenDeri[i], 0, L0);
+                    if (fea_size > 0)
                     {
-                        feature2hiddenDeri[i] = new LSTMWeightDerivative[fea_size];
+                        Array.Clear(feature2hiddenDeri[i], 0, fea_size);
                     }
                 }
-            }
+            });
+
+
         }
     }
 
