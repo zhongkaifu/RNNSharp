@@ -92,7 +92,6 @@ namespace RNNSharp
             rnn.SetGradientCutoff(15.0);
             rnn.SetDropout(m_modelSetting.GetDropout());
             rnn.SetHiddenLayerSize(m_modelSetting.GetNumHidden());
-            rnn.SetTagBigramTransitionWeight(m_modelSetting.GetTagTransitionWeight());
 
             rnn.initMem();
             
@@ -118,20 +117,6 @@ namespace RNNSharp
 
                 //Start to train model
                 double ppl = rnn.TrainNet(m_TrainingSet, iter);
-                if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
-                {
-                    //Although we reduce alpha value, we still cannot get better result.
-                    Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
-                    break;
-                }
-                else if (ppl >= lastPPL)
-                {
-                    lastAlpha = rnn.Alpha;
-                    rnn.Alpha = rnn.Alpha / 2.0;
-                }
-
-                lastPPL = ppl;
-
 
                 //Validate the model by validated corpus
                 if (rnn.ValidateNet(m_ValidationSet) == true)
@@ -146,7 +131,27 @@ namespace RNNSharp
                 //    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
                 //    rnn.loadNetBin(m_modelSetting.GetModelFile());
                 //    Console.WriteLine("Done.");
+
+                //    lastAlpha = rnn.Alpha;
+                //    rnn.Alpha = rnn.Alpha / 2.0;
                 //}
+
+
+                if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
+                {
+                    //Although we reduce alpha value, we still cannot get better result.
+                    Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
+                    Console.WriteLine("Current alpha: {0}, the previous alpha: {1}", rnn.Alpha, lastAlpha);
+                    break;
+                }
+
+                lastAlpha = rnn.Alpha;
+                if (ppl >= lastPPL)
+                {
+                    rnn.Alpha = rnn.Alpha / 2.0;
+                }
+
+                lastPPL = ppl;
 
                 iter++;
             }

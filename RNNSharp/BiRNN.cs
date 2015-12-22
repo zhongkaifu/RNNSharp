@@ -106,11 +106,6 @@ namespace RNNSharp
             backwardRNN.SetHiddenLayerSize(newsize);
         }
 
-        public override void SetTagBigramTransitionWeight(double w)
-        {
-            m_dTagBigramTransitionWeight = w;
-        }
-
         public override void GetHiddenLayer(Matrix<double> m, int curStatus)
         {
             throw new NotImplementedException("Not implement GetHiddenLayer");
@@ -118,23 +113,17 @@ namespace RNNSharp
 
         public override void initMem()
         {
-            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
-            m_tagBigramTransition = new Matrix<double>(L2, L2);
-            m_DeltaBigramLM = new Matrix<double>(L2, L2);
-
             forwardRNN.initMem();
             backwardRNN.initMem();
 
-
             //Create and intialise the weights from hidden to output layer, these are just normal weights
-            double hiddenOutputRand = 1 / Math.Sqrt((double)L1);
             mat_hidden2output = new Matrix<double>(L2, L1);
 
             for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
             {
                 for (int j = 0; j < mat_hidden2output.GetWidth(); j++)
                 {
-                    mat_hidden2output[i][j] = (((double)((randNext() % 100) + 1) / 100) * 2 * hiddenOutputRand) - hiddenOutputRand;
+                    mat_hidden2output[i][j] = RandInitWeight();
                 }
             }
         }
@@ -229,7 +218,7 @@ namespace RNNSharp
             for (int i = 0; i < numStates; i++)
             {
                 State state = pSequence.Get(i);
-                logp += Math.Log10(m_Diff[i][state.GetLabel()]);
+                logp += Math.Log10(mat_CRFSeqOutput[i][state.GetLabel()]);
                 counter++;
             }
 
@@ -242,14 +231,14 @@ namespace RNNSharp
                 //For standard RNN
                 for (int c = 0; c < L2; c++)
                 {
-                    seqOutput[curState][c].er = -m_Diff[curState][c];
+                    seqOutput[curState][c].er = -mat_CRFSeqOutput[curState][c];
                 }
-                seqOutput[curState][state.GetLabel()].er = 1 - m_Diff[curState][state.GetLabel()];
+                seqOutput[curState][state.GetLabel()].er = 1 - mat_CRFSeqOutput[curState][state.GetLabel()];
             }
 
             LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
 
-            return m_Diff;
+            return mat_CRFSeqOutput;
         }
 
         public override Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
@@ -413,6 +402,9 @@ namespace RNNSharp
             forwardRNN.mat_hidden2output = mat_hidden2output;
             backwardRNN.mat_hidden2output = mat_hidden2output;
 
+            forwardRNN.mat_CRFTagTransWeights = mat_CRFTagTransWeights;
+            backwardRNN.mat_CRFTagTransWeights = mat_CRFTagTransWeights;
+
             forwardRNN.saveNetBin(filename + ".forward");
             backwardRNN.saveNetBin(filename + ".backward");
 
@@ -446,7 +438,7 @@ namespace RNNSharp
             backwardRNN.loadNetBin(filename + ".backward");
 
             mat_hidden2output = forwardRNN.mat_hidden2output;
-
+            mat_CRFTagTransWeights = forwardRNN.mat_CRFTagTransWeights;
 
             using (StreamReader sr = new StreamReader(filename))
             {

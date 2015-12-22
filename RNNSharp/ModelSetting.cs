@@ -20,9 +20,6 @@ namespace RNNSharp
         public double GetDropout() { return m_Dropout; }
         public void SetDropout(double r) { m_Dropout = r; }
 
-        public double GetTagTransitionWeight(){ return m_tagTransitionWeight; }
-        public void SetTagTransitionWeight(double r) { m_tagTransitionWeight = r; }
-
         public int GetBptt() { return m_Bptt; }
         public void SetBptt(int n) { m_Bptt = n; }
 
@@ -59,7 +56,6 @@ namespace RNNSharp
         string m_strModelFile;
         int m_NumHidden;
         double m_LearningRate;
-        double m_tagTransitionWeight;
         double m_Dropout;
         int m_Bptt;
         int m_MaxIteration;
@@ -95,11 +91,6 @@ namespace RNNSharp
             Console.WriteLine("Max Iteration: {0}", m_MaxIteration);
             Console.WriteLine("Hidden layer size： {0}", m_NumHidden);
             Console.WriteLine("RNN-CRF: {0}", m_bCRFTraining);
-            if (m_bCRFTraining == true)
-            {
-                Console.WriteLine("Tag Transition Weight: {0}", m_tagTransitionWeight);
-            }
-
             if (m_SaveStep > 0)
             {
                 Console.WriteLine("Save temporary model after every {0} sentences", m_SaveStep);
@@ -112,8 +103,6 @@ namespace RNNSharp
             m_Bptt = 4;
             m_LearningRate = 0.1;
             m_NumHidden = 200;
-            m_tagTransitionWeight = 1.0;
-
             m_bCRFTraining = true;
         }
     }

@@ -58,7 +58,6 @@ namespace RNNSharp
         public int L1;
         public int L2;
         protected int fea_size;
-        protected float randrng;
 
         protected double alpha;
         public double Alpha
@@ -77,26 +76,19 @@ namespace RNNSharp
         protected int counterTokenForLM;
 
         // for Viterbi decoding
-        public Matrix<double> m_tagBigramTransition;
+        public Matrix<double> mat_CRFTagTransWeights;
 
         /// for sequence training
-        public Matrix<double> m_DeltaBigramLM; // different of tag output tag transition probability, saving p(u|v) in a sparse matrix
-        public Matrix<double> m_Diff;
-        public double m_dTagBigramTransitionWeight = 1.0; // tag bigram transition probability weight
-
-        public virtual void SetTagBigramTransitionWeight(double w)
-        {
-            m_dTagBigramTransitionWeight = w;
-        }
+        public Matrix<double> mat_CRFSeqOutput;
 
         public virtual void setTagBigramTransition(List<List<double>> m)
         {
-            if (null == m_tagBigramTransition)
-                m_tagBigramTransition = new Matrix<double>(L2, L2);
+            if (null == mat_CRFTagTransWeights)
+                mat_CRFTagTransWeights = new Matrix<double>(L2, L2);
 
             for (int i = 0; i < L2; i++)
                 for (int j = 0; j < L2; j++)
-                    m_tagBigramTransition[i][j] = m[i][j];
+                    mat_CRFTagTransWeights[i][j] = m[i][j];
 
         }
 
@@ -181,7 +173,6 @@ namespace RNNSharp
 
         public RNN()
         {
-            randrng = 0.1f;
             gradient_cutoff = 15;
 
             alpha = 0.1;
@@ -327,7 +318,7 @@ namespace RNNSharp
             for (int i = 0; i < numStates; i++)
             {
                 State state = pSequence.Get(i);
-                logp += Math.Log10(m_Diff[i][state.GetLabel()]);
+                logp += Math.Log10(mat_CRFSeqOutput[i][state.GetLabel()]);
 
                 predicted[i] = GetBestZIndex(i);
             }
@@ -348,12 +339,13 @@ namespace RNNSharp
                 LearnBackTime(state, numStates, curState);
             }
 
-            return m_Diff;
+            return mat_CRFSeqOutput;
         }
 
         public void UpdateBigramTransition(Sequence seq)
         {
             int numStates = seq.GetSize();
+            Matrix<double> m_DeltaBigramLM = new Matrix<double>(L2, L2);
 
             for (int timeat = 1; timeat < numStates; timeat++)
             {
@@ -361,7 +353,7 @@ namespace RNNSharp
                 {
                     for (int j = 0; j < L2; j++)
                     {
-                        m_DeltaBigramLM[i][j] -= (m_tagBigramTransition[i][j] * m_Diff[timeat][i] * m_Diff[timeat - 1][j]);
+                        m_DeltaBigramLM[i][j] -= (mat_CRFTagTransWeights[i][j] * mat_CRFSeqOutput[timeat][i] * mat_CRFSeqOutput[timeat - 1][j]);
                     }
                 }
 
@@ -373,28 +365,25 @@ namespace RNNSharp
             counterTokenForLM++;
 
             //Update tag Bigram LM
-            Parallel.For(0, L2, parallelOption, b =>
+            for (int b = 0;b < L2;b++)
             {
                 for (int a = 0; a < L2; a++)
                 {
-                    m_tagBigramTransition[b][a] += alpha * m_DeltaBigramLM[b][a];
-
-                    //Clean bigram weight error
-                    m_DeltaBigramLM[b][a] = 0;
+                    mat_CRFTagTransWeights[b][a] += alpha * m_DeltaBigramLM[b][a];
                 }
-            });
+            }
         }
 
         public int GetBestZIndex(int currStatus)
         {
             //Get the output tag
             int imax = 0;
-            double dmax = m_Diff[currStatus][0];
+            double dmax = mat_CRFSeqOutput[currStatus][0];
             for (int j = 1; j < L2; j++)
             {
-                if (m_Diff[currStatus][j] > dmax)
+                if (mat_CRFSeqOutput[currStatus][j] > dmax)
                 {
-                    dmax = m_Diff[currStatus][j];
+                    dmax = mat_CRFSeqOutput[currStatus][j];
                     imax = j;
                 }
             }
@@ -415,9 +404,9 @@ namespace RNNSharp
                     {
                         for (int k = 0; k < L2; k++)
                         {
-                            double fbgm = m_tagBigramTransition[j][k];
+                            double fbgm = mat_CRFTagTransWeights[j][k];
                             double finit = alphaSet[i - 1][k];
-                            double ftmp = m_dTagBigramTransitionWeight * fbgm + finit;
+                            double ftmp = fbgm + finit;
 
                             dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
                         }
@@ -439,9 +428,9 @@ namespace RNNSharp
                     {
                         for (int k = 0; k < L2; k++)
                         {
-                            double fbgm = m_tagBigramTransition[k][j];
+                            double fbgm = mat_CRFTagTransWeights[k][j];
                             double finit = betaSet[i + 1][k];
-                            double ftmp = m_dTagBigramTransitionWeight * fbgm + finit;
+                            double ftmp = fbgm + finit;
 
                             dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
                         }
@@ -461,13 +450,13 @@ namespace RNNSharp
 
             }
 
-
             //Calculate the output probability of each node
+            mat_CRFSeqOutput = new Matrix<double>(numStates, L2);
             for (int i = 0; i < numStates; i++)
             {
                 for (int j = 0; j < L2; j++)
                 {
-                    m_Diff[i][j] = Math.Exp(alphaSet[i][j] + betaSet[i][j] - m_RawOutput[i][j] - Z_);
+                    mat_CRFSeqOutput[i][j] = Math.Exp(alphaSet[i][j] + betaSet[i][j] - m_RawOutput[i][j] - Z_);
                 }
             }
         }
@@ -476,10 +465,16 @@ namespace RNNSharp
 
         public abstract void initWeights();
 
-        public double random(double min, double max)
+        private double random(double min, double max)
         {
             return rand.NextDouble() * (max - min) + min;
         }
+
+        public double RandInitWeight()
+        {
+            return random(-0.1, 0.1) + random(-0.1, 0.1) + random(-0.1, 0.1);
+        }
+
 
         public abstract void learnNet(State state, int timeat, bool biRNN = false);
         public abstract void LearnBackTime(State state, int numStates, int curState);
@@ -564,11 +559,6 @@ namespace RNNSharp
             return ppl;
         }
 
-        public int randNext()
-        {
-            return rand.Next();
-        }
-
         public abstract void initMem();
 
         public abstract void saveNetBin(string filename);
@@ -586,22 +576,21 @@ namespace RNNSharp
             }
         }
 
-        public void matrixXvectorADD(neuron[] dest, double[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
+
+        protected double NormalizeErr(double err)
         {
-            //ac mod
-            Parallel.For(0, (to - from), parallelOption, i =>
-            {
-                for (int j = 0; j < to2 - from2; j++)
-                {
-                    dest[i + from].cellOutput += srcvec[j + from2] * srcmatrix[i][j];
-                }
-            });
+            if (err > gradient_cutoff)
+                err = gradient_cutoff;
+            if (err < -gradient_cutoff)
+                err = -gradient_cutoff;
+
+            return err;
         }
 
         public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
         {
             if (type == 0)
-            {		
+            {
                 //ac mod
                 Parallel.For(0, (to - from), parallelOption, i =>
                 {
@@ -624,15 +613,9 @@ namespace RNNSharp
                     }
                 });
 
-                if (gradient_cutoff > 0)
+                for (int i = from; i < to; i++)
                 {
-                    for (int i = from; i < to; i++)
-                    {
-                        if (dest[i].er > gradient_cutoff)
-                            dest[i].er = gradient_cutoff;
-                        if (dest[i].er < -gradient_cutoff)
-                            dest[i].er = -gradient_cutoff;
-                    }
+                    dest[i].er = NormalizeErr(dest[i].er);
                 }
             }
         }
@@ -662,7 +645,7 @@ namespace RNNSharp
 
             int n = seq.GetSize();
             int K = L2;
-            Matrix<double> STP = m_tagBigramTransition;
+            Matrix<double> STP = mat_CRFTagTransWeights;
             PAIR<int, int>[, ,] vPath = new PAIR<int, int>[n, K, N];
             int DUMP_LABEL = -1;
             double[,] vPreAlpha = new double[K, N];
@@ -754,7 +737,7 @@ namespace RNNSharp
 
             int n = seq.GetSize();
             int K = L2;
-            Matrix<double> STP = m_tagBigramTransition;
+            Matrix<double> STP = mat_CRFTagTransWeights;
             int[,] vPath = new int[n, K];
 
             double[] vPreAlpha = new double[K];
@@ -829,9 +812,9 @@ namespace RNNSharp
                 //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
                 for (int c = 0; c < L2; c++)
                 {
-                    neuOutput[c].er = -m_Diff[timeat][c];
+                    neuOutput[c].er = -mat_CRFSeqOutput[timeat][c];
                 }
-                neuOutput[state.GetLabel()].er = 1 - m_Diff[timeat][state.GetLabel()];
+                neuOutput[state.GetLabel()].er = 1 - mat_CRFSeqOutput[timeat][state.GetLabel()];
             }
             else
             {

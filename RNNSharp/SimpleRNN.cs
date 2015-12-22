@@ -59,7 +59,7 @@ namespace RNNSharp
             {
                 for (a = 0; a < L0; a++)
                 {
-                    mat_input2hidden[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
+                    mat_input2hidden[b][a] = RandInitWeight();
                 }
             }
 
@@ -68,7 +68,7 @@ namespace RNNSharp
             {
                 for (a = 0; a < fea_size; a++)
                 {
-                    mat_feature2hidden[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
+                    mat_feature2hidden[b][a] = RandInitWeight();
 
                 }
             }
@@ -77,7 +77,7 @@ namespace RNNSharp
             {
                 for (a = 0; a < L1; a++)
                 {
-                    mat_hidden2output[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
+                    mat_hidden2output[b][a] = RandInitWeight();
                 }
             }
 
@@ -85,7 +85,7 @@ namespace RNNSharp
             {
                 for (a = 0; a < L1; a++)
                 {
-                    mat_hiddenBpttWeight[b][a] = random(-randrng, randrng) + random(-randrng, randrng) + random(-randrng, randrng);
+                    mat_hiddenBpttWeight[b][a] = RandInitWeight();
                 }
             }
         }
@@ -212,7 +212,7 @@ namespace RNNSharp
                 var sparse = bptt_inputs[step];
                 Parallel.For(0, L1, parallelOption, a =>
                 {
-                    // compute hidden layter gradient
+                    // compute hidden layer gradient
                     neuHidden[a].er *= neuHidden[a].cellOutput * (1 - neuHidden[a].cellOutput);
 
                     //dense weight update fea->0
@@ -319,19 +319,13 @@ namespace RNNSharp
             CreateCells();
 
             mat_hidden2output = new Matrix<double>(L2, L1);
-
-            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
-            m_tagBigramTransition = new Matrix<double>(L2, L2);
-            m_DeltaBigramLM = new Matrix<double>(L2, L2);
-
-
             mat_input2hidden = new Matrix<double>(L1, L0);
             mat_feature2hidden = new Matrix<double>(L1, fea_size);
 
             mat_hiddenBpttWeight = new Matrix<double>(L1, L1);
 
 
-            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
+            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
 
             //Initialize BPTT
@@ -446,9 +440,7 @@ namespace RNNSharp
 
             if (iflag == 1)
             {
-                m_tagBigramTransition = loadMatrixBin(br);
-                m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
-                m_DeltaBigramLM = new Matrix<double>(L2, L2);
+                mat_CRFTagTransWeights = loadMatrixBin(br);
             }
 
             sr.Close();
@@ -499,7 +491,7 @@ namespace RNNSharp
             if (iflag == 1)
             {
                 // Save Bigram
-                saveMatrixBin(m_tagBigramTransition, fo);
+                saveMatrixBin(mat_CRFTagTransWeights, fo);
             }
 
             fo.Close();

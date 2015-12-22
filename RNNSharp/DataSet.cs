@@ -75,7 +75,7 @@ namespace RNNSharp
             if (0 == m_Data.Count) return 0;
             return m_Data[0].GetDenseDimension();
         }
-        
+
         public int GetSparseDimension()
         {
             if (0 == m_Data.Count) return 0;
@@ -83,20 +83,20 @@ namespace RNNSharp
         }
 
 
-           public List<List<double>> GetLabelBigramTransition()  { return m_LabelBigramTransition; }
+        public List<List<double>> GetLabelBigramTransition() { return m_LabelBigramTransition; }
 
 
-         public void BuildLabelBigramTransition(double smooth = 1.0)
+        public void BuildLabelBigramTransition(double smooth = 1.0)
         {
             m_LabelBigramTransition = new List<List<double>>();
 
-             for (int i = 0;i < m_tagSize;i++)
-             {
-                 m_LabelBigramTransition.Add(new List<double>());
-             }
             for (int i = 0; i < m_tagSize; i++)
             {
-                for (int j = 0;j < m_tagSize;j++)
+                m_LabelBigramTransition.Add(new List<double>());
+            }
+            for (int i = 0; i < m_tagSize; i++)
+            {
+                for (int j = 0; j < m_tagSize; j++)
                 {
                     m_LabelBigramTransition[i].Add(smooth);
                 }
@@ -104,7 +104,7 @@ namespace RNNSharp
 
             for (int i = 0; i < m_Data.Count; i++)
             {
-                var sequence = m_Data[i];    
+                var sequence = m_Data[i];
                 if (sequence.GetSize() <= 1)
                     continue;
 

@@ -182,10 +182,7 @@ namespace RNNSharp
 
             if (iflag == 1)
             {
-                m_tagBigramTransition = loadMatrixBin(br);
-
-                m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
-                m_DeltaBigramLM = new Matrix<double>(L2, L2);
+                mat_CRFTagTransWeights = loadMatrixBin(br);
             }
 
             sr.Close();
@@ -243,7 +240,7 @@ namespace RNNSharp
             if (iflag == 1)
             {
                 // Save Bigram
-                saveMatrixBin(m_tagBigramTransition, fo);
+                saveMatrixBin(mat_CRFTagTransWeights, fo);
             }
 
             fo.Close();
@@ -275,14 +272,12 @@ namespace RNNSharp
         public LSTMWeight LSTMWeightInit(int iL)
         {
             LSTMWeight w;
-            //range of random values
-            double inputHiddenRand = 1 / Math.Sqrt((double)iL);
 
             //initialise each weight to random value
-            w.wInputCell = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
-            w.wInputInputGate = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
-            w.wInputForgetGate = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
-            w.wInputOutputGate = (((double)((randNext() % 100) + 1) / 100) * 2 * inputHiddenRand) - inputHiddenRand;
+            w.wInputCell = RandInitWeight();
+            w.wInputInputGate = RandInitWeight();
+            w.wInputForgetGate = RandInitWeight();
+            w.wInputOutputGate = RandInitWeight();
 
             return w;
         }
@@ -314,14 +309,13 @@ namespace RNNSharp
             }
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
-            double hiddenOutputRand = 1 / Math.Sqrt((double)L1);
             mat_hidden2output = new Matrix<double>(L2, L1);
 
             for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
             {
                 for (int j = 0; j < mat_hidden2output.GetWidth(); j++)
                 {
-                    mat_hidden2output[i][j] = (((double)((randNext() % 100) + 1) / 100) * 2 * hiddenOutputRand) - hiddenOutputRand;
+                    mat_hidden2output[i][j] = RandInitWeight();
                 }
             }
         }
@@ -357,10 +351,6 @@ namespace RNNSharp
         {
             CreateCell(null);
 
-            m_Diff = new Matrix<double>(MAX_RNN_HIST, L2);
-            m_tagBigramTransition = new Matrix<double>(L2, L2);
-            m_DeltaBigramLM = new Matrix<double>(L2, L2);
-
             input2hiddenDeri = new LSTMWeightDerivative[L1][];
             if (fea_size > 0)
             {
@@ -377,7 +367,7 @@ namespace RNNSharp
                 }
             }
 
-            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", random(-1.0, 1.0));// yy debug
+            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
         }
 
@@ -412,13 +402,12 @@ namespace RNNSharp
             else
             {
                 //Initialize weight by random number
-                double internalRand = 1 / Math.Sqrt(3);
                 for (int i = 0; i < L1; i++)
                 {
                     //internal weights, also important
-                    neuHidden[i].wCellIn = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
-                    neuHidden[i].wCellForget = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
-                    neuHidden[i].wCellOut = (((double)((randNext() % 100) + 1) / 100) * 2 * internalRand) - internalRand;
+                    neuHidden[i].wCellIn = RandInitWeight();
+                    neuHidden[i].wCellForget = RandInitWeight();
+                    neuHidden[i].wCellOut = RandInitWeight();
                 }
             }
         }
@@ -512,6 +501,7 @@ namespace RNNSharp
               {
                   weightedSum += neuOutput[k].er * mat_hidden2output[k][i];
               }
+              weightedSum = NormalizeErr(weightedSum);
 
               //using the error find the gradient of the output gate
               double gradientOutputGate = SigmoidDerivative(c.netOut) * TanHDerivative(c.cellState) * weightedSum;
