@@ -186,11 +186,11 @@ RNNSharpConsole.exe -mode train <parameters>
 -ftrfile <string>: feature configuration file  
 -tagfile <string>: supported output tagid-name list file  
 -alpha <float>: learning rate, default is 0.1  
--beta <float>: Regularization parameter, default is 1e-7  
+-dropout <float>: hidden layer node drop out ratio, default is 0  
 -bptt <int>: the step for back-propagation through time, default is 4  
 -layersize <int>: hidden layer size for training, default is 200  
 -crf <0/1>: training model by standard RNN(0) or RNN-CRF(1), default is 0  
--maxiter <int>: maximum iteration for training, default is 20  
+-maxiter <int>: maximum iteration for training. 0 is no limition, default is 20  
 -savestep <int>: save temporary model after every <int> sentence, default is 0  
 -dir <int> : RNN directional: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0  
 
