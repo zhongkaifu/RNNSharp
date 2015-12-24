@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -101,9 +102,9 @@ namespace RNNSharp
                 rnn.setTagBigramTransition(m_LabelBigramTransition);
             }
 
-            Console.WriteLine();
+            Logger.WriteLine(Logger.Level.info, "");
 
-            Console.WriteLine("[TRACE] Iterative training begins ...");
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Iterative training begins ...");
             double lastPPL = double.MaxValue;
             double lastAlpha = rnn.Alpha;
             int iter = 0;
@@ -111,7 +112,7 @@ namespace RNNSharp
             {
                 if (rnn.MaxIter > 0 && iter > rnn.MaxIter)
                 {
-                    Console.WriteLine("We have trained this model {0} iteration, exit.");
+                    Logger.WriteLine(Logger.Level.info, "We have trained this model {0} iteration, exit.");
                     break;
                 }
 
@@ -119,34 +120,32 @@ namespace RNNSharp
                 double ppl = rnn.TrainNet(m_TrainingSet, iter);
 
                 //Validate the model by validated corpus
+                bool betterValidateNet = false;
                 if (rnn.ValidateNet(m_ValidationSet) == true)
                 {
                     //If current model is better than before, save it into file
-                    Console.Write("Saving better model into file {0}...", m_modelSetting.GetModelFile());
+                    Logger.WriteLine(Logger.Level.info, "Saving better model into file {0}...", m_modelSetting.GetModelFile());
                     rnn.saveNetBin(m_modelSetting.GetModelFile());
-                    Console.WriteLine("Done.");
-                }
-                //else
-                //{
-                //    Console.Write("Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
-                //    rnn.loadNetBin(m_modelSetting.GetModelFile());
-                //    Console.WriteLine("Done.");
 
-                //    lastAlpha = rnn.Alpha;
-                //    rnn.Alpha = rnn.Alpha / 2.0;
-                //}
+                    betterValidateNet = true;
+                }
+                else
+                {
+                    Logger.WriteLine(Logger.Level.info, "Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
+                    rnn.loadNetBin(m_modelSetting.GetModelFile());
+                }
 
 
                 if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
                 {
                     //Although we reduce alpha value, we still cannot get better result.
-                    Console.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
-                    Console.WriteLine("Current alpha: {0}, the previous alpha: {1}", rnn.Alpha, lastAlpha);
+                    Logger.WriteLine(Logger.Level.info, "Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
+                    Logger.WriteLine(Logger.Level.info, "Current alpha: {0}, the previous alpha: {1}", rnn.Alpha, lastAlpha);
                     break;
                 }
 
                 lastAlpha = rnn.Alpha;
-                if (ppl >= lastPPL)
+                if (betterValidateNet == false)
                 {
                     rnn.Alpha = rnn.Alpha / 2.0;
                 }

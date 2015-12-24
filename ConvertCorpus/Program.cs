@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using AdvUtils;
 
 namespace ConvertCorpus
 {
@@ -18,7 +19,7 @@ namespace ConvertCorpus
                 {
                     if (a == args.Length - 1)
                     {
-                        Console.WriteLine("Argument missing for {0}", str);
+                        Logger.WriteLine(Logger.Level.info, "Argument missing for {0}", str);
                         return -1;
                     }
                     return a;

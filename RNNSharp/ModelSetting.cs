@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -66,34 +67,34 @@ namespace RNNSharp
 
         public void DumpSetting()
         {
-            Console.WriteLine("Model File: {0}", m_strModelFile);
+            Logger.WriteLine(Logger.Level.info, "Model File: {0}", m_strModelFile);
             if (m_ModelType == 0)
             {
-                Console.WriteLine("Model Structure: Simple RNN");
-                Console.WriteLine("BPTT: {0}", m_Bptt);
+                Logger.WriteLine(Logger.Level.info, "Model Structure: Simple RNN");
+                Logger.WriteLine(Logger.Level.info, "BPTT: {0}", m_Bptt);
             }
             else if (m_ModelType == 1)
             {
-                Console.WriteLine("Model Structure: LSTM-RNN");
+                Logger.WriteLine(Logger.Level.info, "Model Structure: LSTM-RNN");
             }
             
             if (m_iDir == 0)
             {
-                Console.WriteLine("RNN Direction: Forward");
+                Logger.WriteLine(Logger.Level.info, "RNN Direction: Forward");
             }
             else
             {
-                Console.WriteLine("RNN Direction: Bi-directional");
+                Logger.WriteLine(Logger.Level.info, "RNN Direction: Bi-directional");
             }
 
-            Console.WriteLine("Learning rate: {0}", m_LearningRate);
-            Console.WriteLine("Dropout: {0}", m_Dropout);
-            Console.WriteLine("Max Iteration: {0}", m_MaxIteration);
-            Console.WriteLine("Hidden layer size： {0}", m_NumHidden);
-            Console.WriteLine("RNN-CRF: {0}", m_bCRFTraining);
+            Logger.WriteLine(Logger.Level.info, "Learning rate: {0}", m_LearningRate);
+            Logger.WriteLine(Logger.Level.info, "Dropout: {0}", m_Dropout);
+            Logger.WriteLine(Logger.Level.info, "Max Iteration: {0}", m_MaxIteration);
+            Logger.WriteLine(Logger.Level.info, "Hidden layer size： {0}", m_NumHidden);
+            Logger.WriteLine(Logger.Level.info, "RNN-CRF: {0}", m_bCRFTraining);
             if (m_SaveStep > 0)
             {
-                Console.WriteLine("Save temporary model after every {0} sentences", m_SaveStep);
+                Logger.WriteLine(Logger.Level.info, "Save temporary model after every {0} sentences", m_SaveStep);
             }
         }
 

@@ -162,7 +162,7 @@ namespace RNNSharp
             {
                 if (strFeature.StartsWith("U") == false)
                 {
-                    Console.WriteLine("Invalidated feature: {0}", strFeature);
+                    Logger.WriteLine(Logger.Level.info, "Invalidated feature: {0}", strFeature);
                     continue;
                 }
 

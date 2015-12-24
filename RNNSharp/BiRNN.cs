@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -432,7 +433,7 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
-            Console.WriteLine("Loading bi-directional model: {0}", filename);
+            Logger.WriteLine(Logger.Level.info, "Loading bi-directional model: {0}", filename);
 
             forwardRNN.loadNetBin(filename + ".forward");
             backwardRNN.loadNetBin(filename + ".backward");

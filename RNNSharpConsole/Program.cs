@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using RNNSharp;
+using AdvUtils;
 
 namespace RNNSharpConsole
 {
@@ -37,57 +38,57 @@ namespace RNNSharpConsole
         {
             UsageTitle();
             Console.WriteLine("RNNSharpConsole.exe <parameters>");
-            Console.WriteLine(" -mode <string>: support train/test");
+            Console.WriteLine(" -mode <string>: train/test");
         }
 
         static void UsageTrain()
         {
             UsageTitle();
             Console.WriteLine("RNNSharpConsole.exe -mode train <parameters>");
-            Console.WriteLine("Parameters for training RNN");
+            Console.WriteLine("Parameters for RNN training");
 
             Console.WriteLine(" -trainfile <string>");
             Console.WriteLine("\tTraining corpus file");
-            
+
             Console.WriteLine(" -validfile <string>");
             Console.WriteLine("\tValidated corpus file for training");
-            
+
             Console.WriteLine(" -modelfile <string>");
             Console.WriteLine("\tEncoded model file");
-            
+
             Console.WriteLine(" -modeltype <int>");
-            Console.WriteLine("\tModel structure: 0 - simple RNN, 1 - LSTM-RNN, default is 0");
+            Console.WriteLine("\tModel type: 0 - BPTT-RNN, 1 - LSTM-RNN, default is 0");
 
             Console.WriteLine(" -dir <int>");
-            Console.WriteLine("\tRNN directional: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0");
-            
+            Console.WriteLine("\tRecurrent direction: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0");
+
             Console.WriteLine(" -ftrfile <string>");
             Console.WriteLine("\tFeature configuration file");
-            
+
             Console.WriteLine(" -tagfile <string>");
             Console.WriteLine("\tSupported output tagid-name list file");
-            
+
             Console.WriteLine(" -alpha <float>");
-            Console.WriteLine("\tLearning rate, default is 0.1");
-            
+            Console.WriteLine("\tInitializing learning rate, default is 0.1");
+
             Console.WriteLine(" -dropout <float>");
-            Console.WriteLine("\tDropout parameter [0, 1.0), default is 0");
-            
+            Console.WriteLine("\tDropout ratio [0, 1.0), default is 0");
+
             Console.WriteLine(" -layersize <int>");
-            Console.WriteLine("\tHidden layer size for training, default is 200");
-            
+            Console.WriteLine("\tHidden layer size, default is 200");
+
             Console.WriteLine(" -bptt <int>");
-            Console.WriteLine("\tStep for back-propagation through time for simple RNN. default is 4");
-            
-            Console.WriteLine(" -crf <0/1>");
-            Console.WriteLine("\tTraining model by RNN(0) or RNN-CRF(1), default is 0");
-            
+            Console.WriteLine("\tStep for back-propagation through time for BPTT-RNN. default is 4");
+
+            Console.WriteLine(" -crf <int>");
+            Console.WriteLine("\tEnable CRF model at output, 0 is disable, 1 is enable. default is 0");
+
             Console.WriteLine(" -maxiter <int>");
-            Console.WriteLine("\tMaximum iteration for training, default is 20");
-            
+            Console.WriteLine("\tMaximum iteration for training, 0 is unlimited. default is 20");
+
             Console.WriteLine(" -savestep <int>");
-            Console.WriteLine("\tSave temporary model after every <int> sentence, default is 0");
-            
+            Console.WriteLine("\tSave temporary model after every <int> sentences, default is 0");
+
             Console.WriteLine();
             Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0");
 
@@ -97,25 +98,25 @@ namespace RNNSharpConsole
         {
             UsageTitle();
             Console.WriteLine("RNNSharpConsole.exe -mode test <parameters>");
-            Console.WriteLine("Parameters for predicting tags from given corpus");
+            Console.WriteLine("Parameters to predict tags from given corpus by using trained model");
             Console.WriteLine(" -testfile <string>");
             Console.WriteLine("\tTraining corpus file");
-            
+
             Console.WriteLine(" -modelfile <string>");
             Console.WriteLine("\tEncoded model file");
-            
+
             Console.WriteLine(" -tagfile <string>");
             Console.WriteLine("\tSupported output tagid-name list file");
-            
+
             Console.WriteLine(" -ftrfile <string>");
             Console.WriteLine("\tFeature configuration file");
-            
+
             Console.WriteLine(" -outfile <string>");
             Console.WriteLine("\tResult output file");
 
             Console.WriteLine(" -nbest <int>");
             Console.WriteLine("\tGet N-best result. Default is 1");
-            
+
             Console.WriteLine();
             Console.WriteLine("Example: RNNSharpConsole.exe -mode test -testfile test.txt -modelfile model.bin -tagfile tags.txt -ftrfile features.txt -outfile result.txt -nbest 3");
         }
@@ -174,7 +175,7 @@ namespace RNNSharpConsole
                 {
                     if (a == args.Length - 1)
                     {
-                        Console.WriteLine("Argument missing for {0}", str);
+                        Logger.WriteLine(Logger.Level.info, "Argument missing for {0}", str);
                         return -1;
                     }
                     return a;
@@ -206,7 +207,7 @@ namespace RNNSharpConsole
                 }
             }
 
-            Console.WriteLine("Record set size in {0}: {1}", strFileName, RecordCount);
+            Logger.WriteLine(Logger.Level.info, "Record set size in {0}: {1}", strFileName, RecordCount);
             sr.Close();
 
         }
@@ -235,7 +236,7 @@ namespace RNNSharpConsole
                 //Set label for the sequence
                 if (seq.SetLabel(sent, featurizer.GetTagSet()) == false)
                 {
-                    Console.WriteLine("Error: Invalidated record.");
+                    Logger.WriteLine(Logger.Level.info, "Error: Invalidated record.");
                     sent.DumpFeatures();
                     continue;
                 }
@@ -247,11 +248,9 @@ namespace RNNSharpConsole
                 RecordCount++;
                 if (RecordCount % 10000 == 0)
                 {
-                    Console.Write("{0}...", RecordCount);
+                    Logger.WriteLine(Logger.Level.info, "{0}...", RecordCount);
                 }
             }
-
-            Console.WriteLine();
 
             sr.Close();
 
@@ -280,7 +279,7 @@ namespace RNNSharpConsole
             }
             else
             {
-                Console.WriteLine("Specify running mode is required.");
+                Logger.WriteLine(Logger.Level.err, "Running mode is required.");
                 Usage();
             }
         }
@@ -310,7 +309,7 @@ namespace RNNSharpConsole
         {
             if (String.IsNullOrEmpty(strTagFile) == true)
             {
-                Console.WriteLine("FAILED: The tag mapping file {0} isn't specified.", strTagFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't specified.", strTagFile);
                 UsageTest();
                 return;
             }
@@ -320,21 +319,21 @@ namespace RNNSharpConsole
 
             if (String.IsNullOrEmpty(strModelFile) == true)
             {
-                Console.WriteLine("FAILED: The model file {0} isn't specified.", strModelFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The model file {0} isn't specified.", strModelFile);
                 UsageTest();
                 return;
             }
 
             if (String.IsNullOrEmpty(strFeatureConfigFile) == true)
             {
-                Console.WriteLine("FAILED: The feature configuration file {0} isn't specified.", strFeatureConfigFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} isn't specified.", strFeatureConfigFile);
                 UsageTest();
                 return;
             }
 
             if (strOutputFile.Length == 0)
             {
-                Console.WriteLine("FAILED: The output file name should not be empty.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: The output file name should not be empty.");
                 UsageTest();
                 return;
             }
@@ -351,7 +350,7 @@ namespace RNNSharpConsole
 
             if (File.Exists(strTestFile) == false)
             {
-                Console.WriteLine("FAILED: The test corpus {0} isn't existed.", strTestFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The test corpus {0} isn't existed.", strTestFile);
                 UsageTest();
                 return;
             }
@@ -392,7 +391,7 @@ namespace RNNSharpConsole
                     int[][] output = decoder.ProcessNBest(sent, nBest);
                     if (output == null)
                     {
-                        Console.WriteLine("FAILED: decode failed. Dump current sentence...");
+                        Logger.WriteLine(Logger.Level.err, "FAILED: decode failed. Dump current sentence...");
                         sent.DumpFeatures();
                         return;
                     }
@@ -420,9 +419,11 @@ namespace RNNSharpConsole
 
         private static void Train()
         {
+            Logger.LogFile = "RNNSharpConsole.log";
+
             if (File.Exists(strTagFile) == false)
             {
-                Console.WriteLine("FAILED: The tag mapping file {0} isn't existed.", strTagFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't existed.", strTagFile);
                 UsageTrain();
                 return;
             }
@@ -448,7 +449,7 @@ namespace RNNSharpConsole
 
             if (File.Exists(strFeatureConfigFile) == false)
             {
-                Console.WriteLine("FAILED: The feature configuration file {0} isn't existed.", strFeatureConfigFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} isn't existed.", strFeatureConfigFile);
                 UsageTrain();
                 return;
             }
@@ -458,13 +459,13 @@ namespace RNNSharpConsole
 
             if (featurizer.IsRunTimeFeatureUsed() == true && iDir == 1)
             {
-                Console.WriteLine("FAILED: Run time feature is not available for bi-directional RNN model.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: Run time feature is not available for bi-directional RNN model.");
                 UsageTrain();
                 return;
             }
             if (String.IsNullOrEmpty(strTrainFile) == true)
             {
-                Console.WriteLine("FAILED: The training corpus isn't specified.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus isn't specified.");
                 UsageTrain();
                 return;
             }
@@ -476,7 +477,7 @@ namespace RNNSharpConsole
             DataSet dataSetValidation = null;
             if (String.IsNullOrEmpty(strValidFile) == true)
             {
-                Console.WriteLine("FAILED: The validation corpus isn't specified.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: The validation corpus isn't specified.");
                 return;
             }
             //LoadFeatureConfig validated corpus and extract feature set
@@ -490,7 +491,7 @@ namespace RNNSharpConsole
 
             if (iCRF == 1)
             {
-                Console.WriteLine("Initialize output tag bigram transition probability...");
+                Logger.WriteLine(Logger.Level.info, "Initialize output tag bigram transition probability...");
                 //Build tag bigram transition matrix
                 dataSetTrain.BuildLabelBigramTransition();
                 encoder.SetLabelBigramTransition(dataSetTrain.GetLabelBigramTransition());

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -21,7 +22,7 @@ namespace RNNSharp
 
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
-                Console.WriteLine("Model Structure: Bi-directional RNN");
+                Logger.WriteLine(Logger.Level.info, "Model Structure: Bi-directional RNN");
                 if (modelType == MODELTYPE.SIMPLE)
                 {
                     m_Rnn = new BiRNN(new SimpleRNN(), new SimpleRNN());
@@ -35,18 +36,18 @@ namespace RNNSharp
             {
                 if (modelType == MODELTYPE.SIMPLE)
                 {
-                    Console.WriteLine("Model Structure: Simple RNN");
+                    Logger.WriteLine(Logger.Level.info, "Model Structure: Simple RNN");
                     m_Rnn = new SimpleRNN();
                 }
                 else
                 {
-                    Console.WriteLine("Model Structure: LSTM-RNN");
+                    Logger.WriteLine(Logger.Level.info, "Model Structure: LSTM-RNN");
                     m_Rnn = new LSTMRNN();
                 }
             }
 
             m_Rnn.loadNetBin(strModelFileName);
-            Console.WriteLine("CRF Model: {0}", m_Rnn.IsCRFModel());
+            Logger.WriteLine(Logger.Level.info, "CRF Model: {0}", m_Rnn.IsCRFModel());
             m_Featurizer = featurizer;
         }
 

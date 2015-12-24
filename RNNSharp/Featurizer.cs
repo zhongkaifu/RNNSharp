@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using Txt2Vec;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -68,25 +69,25 @@ namespace RNNSharp
                 string strValue = kv[1].Trim().ToLower();
                 if (strKey == WORDEMBEDDING_FILENAME)
                 {
-                    Console.WriteLine("Loading word embedding feature set...");
+                    Logger.WriteLine(Logger.Level.info, "Loading word embedding feature set...");
                     m_WordEmbedding = new WordEMWrapFeaturizer(strValue);
                     continue;
                 }
                 else if (strKey == TFEATURE_FILENAME)
                 {
-                    Console.WriteLine("Loading template feature set...");
+                    Logger.WriteLine(Logger.Level.info, "Loading template feature set...");
                     m_TFeaturizer = new TemplateFeaturizer(strValue);
                     continue;
                 }
                 else if (strKey == WORDEMBEDDING_COLUMN)
                 {
                     m_WordEmbeddingCloumn = int.Parse(strValue);
-                    Console.WriteLine("Word embedding feature column: {0}", m_WordEmbeddingCloumn);
+                    Logger.WriteLine(Logger.Level.info, "Word embedding feature column: {0}", m_WordEmbeddingCloumn);
                     continue;
                 }
                 else if (strKey == TFEATURE_WEIGHT_TYPE)
                 {
-                    Console.WriteLine("TFeature weighting type: {0}", strValue);
+                    Logger.WriteLine(Logger.Level.info, "TFeature weighting type: {0}", strValue);
                     if (strValue == "binary")
                     {
                         m_TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
@@ -166,16 +167,16 @@ namespace RNNSharp
             var fc = m_FeatureConfiguration;
 
             if (m_TFeaturizer != null)
-                Console.WriteLine("Template feature size: {0}", m_TFeaturizer.GetFeatureSize());
+                Logger.WriteLine(Logger.Level.info, "Template feature size: {0}", m_TFeaturizer.GetFeatureSize());
 
             if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
-                Console.WriteLine("Template feature context size: {0}", m_TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
+                Logger.WriteLine(Logger.Level.info, "Template feature context size: {0}", m_TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
-                Console.WriteLine("Run time feature size: {0}", m_TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
+                Logger.WriteLine(Logger.Level.info, "Run time feature size: {0}", m_TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
-                Console.WriteLine("Word embedding feature size: {0}", m_WordEmbedding.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
+                Logger.WriteLine(Logger.Level.info, "Word embedding feature size: {0}", m_WordEmbedding.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
         }
 
         void ExtractSparseFeature(int currentState, int numStates, List<string[]> features, State pState)

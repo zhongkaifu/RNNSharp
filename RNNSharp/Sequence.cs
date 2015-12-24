@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -41,7 +42,7 @@ namespace RNNSharp
                 int tagId = tagSet.GetIndex(strTagName);
                 if (tagId < 0)
                 {
-                    Console.WriteLine("Error: tag {0} is unknown.", strTagName);
+                    Logger.WriteLine(Logger.Level.info, "Error: tag {0} is unknown.", strTagName);
                     return false;
                 }
 

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -135,7 +136,7 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
-            Console.WriteLine("Loading LSTM-RNN model: {0}", filename);
+            Logger.WriteLine(Logger.Level.info, "Loading LSTM-RNN model: {0}", filename);
 
             StreamReader sr = new StreamReader(filename);
             BinaryReader br = new BinaryReader(sr.BaseStream);
@@ -367,7 +368,7 @@ namespace RNNSharp
                 }
             }
 
-            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
         }
 

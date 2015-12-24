@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -325,7 +326,7 @@ namespace RNNSharp
             mat_hiddenBpttWeight = new Matrix<double>(L1, L1);
 
 
-            Console.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
 
             //Initialize BPTT
@@ -398,7 +399,7 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
-            Console.WriteLine("Loading SimpleRNN model: {0}", filename);
+            Logger.WriteLine(Logger.Level.info, "Loading SimpleRNN model: {0}", filename);
 
             StreamReader sr = new StreamReader(filename);
             BinaryReader br = new BinaryReader(sr.BaseStream);

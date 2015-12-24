@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Threading;
 using System.IO;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -483,7 +484,7 @@ namespace RNNSharp
         {
             DateTime start = DateTime.Now;
             int[] predicted;
-            Console.WriteLine("[TRACE] Iter " + iter + " begins with learning rate alpha = " + alpha + " ...");
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Iter " + iter + " begins with learning rate alpha = " + alpha + " ...");
 
             //Initialize varibles
             counter = 0;
@@ -498,7 +499,7 @@ namespace RNNSharp
             int numSequence = trainingSet.GetSize();
             int tknErrCnt = 0;
             int sentErrCnt = 0;
-            Console.WriteLine("[TRACE] Progress = 0/" + numSequence / 1000.0 + "K\r");
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Progress = 0/" + numSequence / 1000.0 + "K\r");
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
                 Sequence pSequence = trainingSet.Get(curSequence);
@@ -532,18 +533,17 @@ namespace RNNSharp
 
                 if ((curSequence + 1) % 1000 == 0)
                 {
-                    Console.WriteLine("[TRACE] Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
-                    Console.WriteLine(" train cross-entropy = {0} ", -logp / Math.Log10(2.0) / counter);
-                    Console.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)counter * 100);
-                    Console.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100);
+                    Logger.WriteLine(Logger.Level.info, "[TRACE] Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
+                    Logger.WriteLine(Logger.Level.info, " train cross-entropy = {0} ", -logp / Math.Log10(2.0) / counter);
+                    Logger.WriteLine(Logger.Level.info, " Error token ratio = {0}%", (double)tknErrCnt / (double)counter * 100);
+                    Logger.WriteLine(Logger.Level.info, " Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100);
                 }
 
                 if (m_SaveStep > 0 && (curSequence + 1) % m_SaveStep == 0)
                 {
                     //After processed every m_SaveStep sentences, save current model into a temporary file
-                    Console.Write("Saving temporary model into file...");
+                    Logger.WriteLine(Logger.Level.info, "Saving temporary model into file...");
                     saveNetBin(m_strModelFile + ".tmp");
-                    Console.WriteLine("Done.");
                 }
             }
 
@@ -552,9 +552,9 @@ namespace RNNSharp
 
             double entropy = -logp / Math.Log10(2.0) / counter;
             double ppl = exp_10(-logp / counter);
-            Console.WriteLine("[TRACE] Iter " + iter + " completed");
-            Console.WriteLine("[TRACE] Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
-            Console.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Iter " + iter + " completed");
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
+            Logger.WriteLine(Logger.Level.info, "[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
 
             return ppl;
         }
@@ -831,7 +831,7 @@ namespace RNNSharp
 
         public virtual bool ValidateNet(DataSet validationSet)
         {
-            Console.WriteLine("[TRACE] Start validation ...");
+            Logger.WriteLine(Logger.Level.info, "[TRACE] Start validation ...");
             int wordcn = 0;
             int[] predicted;
             int tknErrCnt = 0;
@@ -875,17 +875,19 @@ namespace RNNSharp
 
             double entropy = -logp / Math.Log10(2.0) / counter;
             double ppl = exp_10(-logp / counter);
+            double tknErrRatio = (double)tknErrCnt / (double)wordcn * 100;
+            double sentErrRatio = (double)sentErrCnt / (double)numSequence * 100;
 
-            Console.WriteLine("[TRACE] In validation: error token ratio = {0}% error sentence ratio = {1}%", (double)tknErrCnt / (double)wordcn * 100, (double)sentErrCnt / (double)numSequence * 100);
-            Console.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
-            Console.WriteLine();
+            Logger.WriteLine(Logger.Level.info, "[TRACE] In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
+            Logger.WriteLine(Logger.Level.info, "[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
+            Logger.WriteLine(Logger.Level.info, "");
 
             bool bUpdate = false;
-            if (ppl < minTknErrRatio)
+            if (tknErrRatio < minTknErrRatio)
             {
                 //We have better result on validated set, save this model
                 bUpdate = true;
-                minTknErrRatio = ppl;
+                minTknErrRatio = tknErrRatio;
             }
 
             return bUpdate;

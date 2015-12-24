@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AdvUtils;
 
 namespace RNNSharp
 {
@@ -31,7 +32,7 @@ namespace RNNSharp
                     sb.Append('\t');
                 }
 
-                Console.WriteLine(sb.ToString().Trim());
+                Logger.WriteLine(Logger.Level.info, sb.ToString().Trim());
             }
         }
 
