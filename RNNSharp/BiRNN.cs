@@ -198,12 +198,6 @@ namespace RNNSharp
             return seqOutput;
         }
 
-        public override void netFlush()
-        {
-            forwardRNN.netFlush();
-            backwardRNN.netFlush();
-        }
-
         public override Matrix<double> learnSentenceForRNNCRF(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network

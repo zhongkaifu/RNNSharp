@@ -491,8 +491,6 @@ namespace RNNSharp
             logp = 0;
             counterTokenForLM = 0;
 
-            netFlush();
-
             //Shffle training corpus
             trainingSet.Shuffle();
 
@@ -619,8 +617,6 @@ namespace RNNSharp
                 }
             }
         }
-
-        public abstract void netFlush();
 
         public int[] DecodeNN(Sequence seq)
         {
@@ -841,8 +837,7 @@ namespace RNNSharp
             counter = 0;
             logp = 0;
             counterTokenForLM = 0;
-
-            netFlush();            
+          
             int numSequence = validationSet.GetSize();
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {

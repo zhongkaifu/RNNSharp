@@ -390,13 +390,6 @@ namespace RNNSharp
             }
         }
 
-
-        public override void netFlush()   //cleans all activations and error vectors
-        {
-            neuHidden = new neuron[L1];
-            neuOutput = new neuron[L2];
-        }
-
         public override void loadNetBin(string filename)
         {
             Logger.WriteLine(Logger.Level.info, "Loading SimpleRNN model: {0}", filename);
@@ -460,9 +453,7 @@ namespace RNNSharp
             StreamWriter sw = new StreamWriter(filename);
             BinaryWriter fo = new BinaryWriter(sw.BaseStream);
 
-
             fo.Write((int)m_modeltype);
-
             fo.Write((int)m_modeldirection);
 
             // Signiture , 0 is for RNN or 1 is for RNN-CRF

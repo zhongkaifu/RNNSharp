@@ -129,11 +129,11 @@ namespace RNNSharp
 
                     betterValidateNet = true;
                 }
-                else
-                {
-                    Logger.WriteLine(Logger.Level.info, "Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
-                    rnn.loadNetBin(m_modelSetting.GetModelFile());
-                }
+                //else
+                //{
+                //    Logger.WriteLine(Logger.Level.info, "Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
+                //    rnn.loadNetBin(m_modelSetting.GetModelFile());
+                //}
 
 
                 if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
