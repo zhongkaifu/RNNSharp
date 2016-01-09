@@ -1,6 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNNSharp", "RNNSharp\RNNSharp.csproj", "{1D37FF75-66F5-4814-AE48-EBF5CB9A56BF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RNNSharpConsole", "RNNSharpConsole\RNNSharpConsole.csproj", "{5B4AFE4E-138C-425B-BE2A-7CB239CA175F}"
@@ -8,6 +10,13 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConvertCorpus", "ConvertCorpus\ConvertCorpus.csproj", "{1CBAF268-6BC3-41F2-983F-E611AF912A87}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TFeatureBin", "TFeatureBin\TFeatureBin.csproj", "{560D37F9-8269-4A2E-9573-CA579FB8D7E7}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{37B17F9C-9953-4D62-B88F-2CD45F1763B2}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE = LICENSE
+		README.md = README.md
+		RNNSharpOverview.jpg = RNNSharpOverview.jpg
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
