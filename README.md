@@ -16,6 +16,9 @@ For recurrent CRFs (recurrent conditional random fields), it's a new type of CRF
 
 For bi-directional RNN, the output result combines the result of both forward RNN and backward RNN. It usually has better performance than single-directional RNN.
 
+Here is overview picture of RNNSharp:
+![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpOverview.jpg)
+
 ## Supported Feature Types
 RNNSharp supports four types of feature set. They are template features, context template features, run time feature and word embedding features. These features are controlled by configuration file, the following paragraph will introduce what these features are and how to use them in configuration file.
 
