@@ -1,71 +1,62 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class Sequence
     {
-        State[] m_States;
-        int m_NumStates;
-
-        public int GetSize() { return m_NumStates; }
-        public State Get(int i) { return m_States[i]; }
-
+        public State[] States { get;}
 
         public int GetDenseDimension()
         {
-            if (0 == m_NumStates) return 0;
-            else return m_States[0].GetDenseDimension();
+            if (0 == States.Length || States[0].DenseData == null)
+            {
+                return 0;
+            }
+            else
+            {
+                return States[0].DenseData.GetDimension();
+            }
         }
 
         public int GetSparseDimension()
         {
-            if (0 == m_NumStates) return 0;
-            else return m_States[0].GetSparseDimension();
+            if (0 == States.Length) return 0;
+            else return States[0].SparseData.GetDimension();
         }
 
-        public bool SetLabel(Sentence sent, TagSet tagSet)
+        public void SetLabel(Sentence sent, TagSet tagSet)
         {
-            List<string[]> features = sent.GetFeatureSet();
-            if (features.Count != m_States.Length)
+            List<string[]> tokensList = sent.TokensList;
+            if (tokensList.Count != States.Length)
             {
-                return false;
+                throw new DataMisalignedException(String.Format("Error: Inconsistent token({0}) and state({1}) size. Tokens list: {2}",
+                    tokensList.Count, States.Length, sent.ToString()));
             }
 
-            for (int i = 0; i < features.Count; i++)
+            for (int i = 0; i < tokensList.Count; i++)
             {
-                string strTagName = features[i][features[i].Length - 1];
+                string strTagName = tokensList[i][tokensList[i].Length - 1];
                 int tagId = tagSet.GetIndex(strTagName);
                 if (tagId < 0)
                 {
-                    Logger.WriteLine(Logger.Level.info, "Error: tag {0} is unknown.", strTagName);
-                    return false;
+                    throw new DataMisalignedException(String.Format("Error: tag {0} is unknown. Tokens list: {1}", 
+                        strTagName, sent.ToString()));
                 }
 
-                m_States[i].SetLabel(tagId);
+                States[i].Label = tagId;
             }
-
-            return true;
         }
 
-        public void SetSize(int numStates)
+        public Sequence(int numStates)
         {
-            if (m_NumStates != numStates)
+            States = new State[numStates];
+            for (int i = 0; i < numStates; i++)
             {
-                m_NumStates = numStates;
-                m_States = null;
-                if (m_NumStates > 0)
-                {
-                    m_States = new State[m_NumStates];
-                    for (int i = 0; i < m_NumStates; i++)
-                    {
-                        m_States[i] = new State();
-                    }
-                }
+                States[i] = new State();
             }
         }
 

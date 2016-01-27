@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     //Template feature processor
@@ -30,11 +31,6 @@ namespace RNNSharp
         public int GetFeatureSize()
         {
             return m_maxFeatureId;
-        }
-
-        public List<string> GetFeatureTemplates()
-        {
-            return m_Templates;
         }
 
         //Extract feature id list from given record and start position

@@ -1,133 +1,90 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class DataSet
     {
-        List<Sequence> m_Data;
-        int m_tagSize;
-        List<List<double>> m_LabelBigramTransition;
-
-        /// <summary>
-        /// Split current corpus into two parts according given ratio
-        /// </summary>
-        /// <param name="ratio"></param>
-        /// <param name="ds1"></param>
-        /// <param name="ds2"></param>
-        public void SplitDataSet(double ratio, out DataSet ds1, out DataSet ds2)
-        {
-            Random rnd = new Random(DateTime.Now.Millisecond);
-            ds1 = new DataSet(m_tagSize);
-            ds2 = new DataSet(m_tagSize);
-
-            for (int i = 0; i < m_Data.Count; i++)
-            {
-                if (rnd.NextDouble() < ratio)
-                {
-                    ds1.Add(m_Data[i]);
-                }
-                else
-                {
-                    ds2.Add(m_Data[i]);
-                }
-            }
-
-            ds1.BuildLabelBigramTransition();
-            ds2.BuildLabelBigramTransition();
-        }
-
-        public void Add(Sequence sequence) { m_Data.Add(sequence); }
+        public List<Sequence> SequenceList { get; set; }
+        public int TagSize { get; set; }
+        public List<List<float>> CRFLabelBigramTransition { get; set; }
 
         public void Shuffle()
         {
             Random rnd = new Random(DateTime.Now.Millisecond);
-            for (int i = 0; i < m_Data.Count; i++)
+            for (int i = 0; i < SequenceList.Count; i++)
             {
-                int m = rnd.Next() % m_Data.Count;
-                Sequence tmp = m_Data[i];
-                m_Data[i] = m_Data[m];
-                m_Data[m] = tmp;
+                int m = rnd.Next() % SequenceList.Count;
+                Sequence tmp = SequenceList[i];
+                SequenceList[i] = SequenceList[m];
+                SequenceList[m] = tmp;
             }
         }
 
         public DataSet(int tagSize)
         {
-            m_tagSize = tagSize;
-            m_Data = new List<Sequence>();
-            m_LabelBigramTransition = new List<List<double>>();
+            TagSize = tagSize;
+            SequenceList = new List<Sequence>();
+            CRFLabelBigramTransition = new List<List<float>>();
         }
 
-        public int GetSize()
+        public int DenseFeatureSize()
         {
-            return m_Data.Count;
-        }
-
-        public Sequence Get(int i) { return m_Data[i]; }
-        public int GetTagSize() { return m_tagSize; }
-
-
-        public int GetDenseDimension()
-        {
-            if (0 == m_Data.Count) return 0;
-            return m_Data[0].GetDenseDimension();
+            if (0 == SequenceList.Count) return 0;
+            return SequenceList[0].GetDenseDimension();
         }
 
         public int GetSparseDimension()
         {
-            if (0 == m_Data.Count) return 0;
-            return m_Data[0].GetSparseDimension();
+            if (0 == SequenceList.Count) return 0;
+            return SequenceList[0].GetSparseDimension();
         }
 
-
-        public List<List<double>> GetLabelBigramTransition() { return m_LabelBigramTransition; }
-
-
-        public void BuildLabelBigramTransition(double smooth = 1.0)
+        public void BuildLabelBigramTransition(float smooth = 1.0f)
         {
-            m_LabelBigramTransition = new List<List<double>>();
+            CRFLabelBigramTransition = new List<List<float>>();
 
-            for (int i = 0; i < m_tagSize; i++)
+            for (int i = 0; i < TagSize; i++)
             {
-                m_LabelBigramTransition.Add(new List<double>());
+                CRFLabelBigramTransition.Add(new List<float>());
             }
-            for (int i = 0; i < m_tagSize; i++)
+            for (int i = 0; i < TagSize; i++)
             {
-                for (int j = 0; j < m_tagSize; j++)
+                for (int j = 0; j < TagSize; j++)
                 {
-                    m_LabelBigramTransition[i].Add(smooth);
+                    CRFLabelBigramTransition[i].Add(smooth);
                 }
             }
 
-            for (int i = 0; i < m_Data.Count; i++)
+            for (int i = 0; i < SequenceList.Count; i++)
             {
-                var sequence = m_Data[i];
-                if (sequence.GetSize() <= 1)
+                var sequence = SequenceList[i];
+                if (sequence.States.Length <= 1)
                     continue;
 
-                int pLabel = sequence.Get(0).GetLabel();
-                for (int j = 1; j < sequence.GetSize(); j++)
+                int pLabel = sequence.States[0].Label;
+                for (int j = 1; j < sequence.States.Length; j++)
                 {
-                    int label = sequence.Get(j).GetLabel();
-                    m_LabelBigramTransition[label][pLabel]++;
+                    int label = sequence.States[j].Label;
+                    CRFLabelBigramTransition[label][pLabel]++;
                     pLabel = label;
                 }
             }
 
-            for (int i = 0; i < m_tagSize; i++)
+            for (int i = 0; i < TagSize; i++)
             {
                 double sum = 0;
-                for (int j = 0; j < m_tagSize; j++)
+                for (int j = 0; j < TagSize; j++)
                 {
-                    sum += m_LabelBigramTransition[i][j];
+                    sum += CRFLabelBigramTransition[i][j];
                 }
 
-                for (int j = 0; j < m_tagSize; j++)
+                for (int j = 0; j < TagSize; j++)
                 {
-                    m_LabelBigramTransition[i][j] = Math.Log(m_LabelBigramTransition[i][j] / sum);
+                    CRFLabelBigramTransition[i][j] = (float)Math.Log(CRFLabelBigramTransition[i][j] / sum);
                 }
             }
         }

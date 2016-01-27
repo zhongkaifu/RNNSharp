@@ -1,9 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class WordEMWrapFeaturizer
@@ -14,25 +13,22 @@ namespace RNNSharp
 
         public WordEMWrapFeaturizer(string filename)
         {
-            Txt2Vec.Decoder decoder = new Txt2Vec.Decoder();
-            decoder.LoadBinaryModel(filename);
+            Txt2Vec.Model model = new Txt2Vec.Model();
+            model.LoadBinaryModel(filename);
 
-            string[] terms = decoder.GetAllTerms();
-            vectorSize = decoder.GetVectorSize();
+            string[] terms = model.GetAllTerms();
+            vectorSize = model.VectorSize;
 
             m_WordEmbedding = new Dictionary<string, SingleVector>();
             m_UnkEmbedding = new SingleVector(vectorSize);
 
             foreach (string term in terms)
             {
-                double[] vector = decoder.GetVector(term);
+                float[] vector = model.GetVector(term);
 
                 if (vector != null)
                 {
                     SingleVector spVector = new SingleVector(vectorSize, vector);
-
-                    spVector.Normalize();
-
                     m_WordEmbedding.Add(term, spVector);
                 }
             }

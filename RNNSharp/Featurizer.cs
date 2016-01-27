@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
-using Txt2Vec;
 using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     enum TFEATURE_WEIGHT_TYPE_ENUM
@@ -17,14 +16,14 @@ namespace RNNSharp
 
     public class Featurizer
     {
+        public TagSet TagSet { get; set; }
+
         Dictionary<string, List<int>> m_FeatureConfiguration;
         int m_SparseDimension;
         int m_DenseDimension;
         int m_WordEmbeddingCloumn;
         TFEATURE_WEIGHT_TYPE_ENUM m_TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
-
         WordEMWrapFeaturizer m_WordEmbedding;
-        TagSet m_TagSet;
         TemplateFeaturizer m_TFeaturizer;
 
         static string TFEATURE_CONTEXT = "TFEATURE_CONTEXT";
@@ -34,12 +33,6 @@ namespace RNNSharp
         static string RT_FEATURE_CONTEXT = "RTFEATURE_CONTEXT";
         static string WORDEMBEDDING_COLUMN = "WORDEMBEDDING_COLUMN";
         static string TFEATURE_WEIGHT_TYPE = "TFEATURE_WEIGHT_TYPE";
-
-        public TagSet GetTagSet()
-        {
-            return m_TagSet;
-        }
-
 
         //The format of configuration file
         public void LoadFeatureConfigFromFile(string strFileName)
@@ -125,7 +118,7 @@ namespace RNNSharp
         public Featurizer(string strFeatureConfigFileName, TagSet tagSet)
         {
             LoadFeatureConfigFromFile(strFeatureConfigFileName);
-            m_TagSet = tagSet;
+            TagSet = tagSet;
             InitComponentFeaturizer();
         }
 
@@ -143,7 +136,7 @@ namespace RNNSharp
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
             {
-                m_SparseDimension += m_TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
+                m_SparseDimension += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
             }
 
             m_DenseDimension = 0;
@@ -173,7 +166,7 @@ namespace RNNSharp
                 Logger.WriteLine(Logger.Level.info, "Template feature context size: {0}", m_TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
-                Logger.WriteLine(Logger.Level.info, "Run time feature size: {0}", m_TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
+                Logger.WriteLine(Logger.Level.info, "Run time feature size: {0}", TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
                 Logger.WriteLine(Logger.Level.info, "Word embedding feature size: {0}", m_WordEmbedding.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
@@ -181,7 +174,7 @@ namespace RNNSharp
 
         void ExtractSparseFeature(int currentState, int numStates, List<string[]> features, State pState)
         {
-            Dictionary<int, double> sparseFeature = new Dictionary<int, double>();
+            Dictionary<int, float> sparseFeature = new Dictionary<int, float>();
             int start = 0;
             var fc = m_FeatureConfiguration;
 
@@ -224,14 +217,14 @@ namespace RNNSharp
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
             {
                 List<int> v = fc[RT_FEATURE_CONTEXT];
-                pState.SetNumRuntimeFeature(v.Count);
+                pState.RuntimeFeatures = new PriviousLabelFeature[v.Count];
                 for (int j = 0; j < v.Count; j++)
                 {
                     if (v[j] < 0)
                     {
                         pState.AddRuntimeFeaturePlacehold(j, v[j], sparseFeature.Count, start);
                         sparseFeature[start] = 0; //Placehold a position
-                        start += m_TagSet.GetSize();
+                        start += TagSet.GetSize();
                     }
                     else
                     {
@@ -240,7 +233,7 @@ namespace RNNSharp
                 }
             }
 
-            SparseVector spSparseFeature = pState.GetSparseData();
+            SparseVector spSparseFeature = pState.SparseData;
             spSparseFeature.SetDimension(m_SparseDimension);
             spSparseFeature.SetData(sparseFeature);
         }
@@ -284,19 +277,16 @@ namespace RNNSharp
 
         public Sequence ExtractFeatures(Sentence sentence)
         {
-            Sequence sequence = new Sequence();
-            int n = sentence.GetTokenSize();
-            List<string[]> features = sentence.GetFeatureSet();
+            int n = sentence.TokensList.Count;
+            Sequence sequence = new Sequence(n);
 
             //For each token, get its sparse and dense feature set according configuration and training corpus
-            sequence.SetSize(n);
             for (int i = 0; i < n; i++)
             {
-                State state = sequence.Get(i);
-                ExtractSparseFeature(i, n, features, state);
+                State state = sequence.States[i];
+                ExtractSparseFeature(i, n, sentence.TokensList, state);
 
-                var spDenseFeature = ExtractDenseFeature(i, n, features);
-                state.SetDenseData(spDenseFeature);
+                state.DenseData = ExtractDenseFeature(i, n, sentence.TokensList);
             }
 
             return sequence;

@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 using RNNSharp;
 using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharpConsole
 {
     class Program
@@ -22,8 +23,8 @@ namespace RNNSharpConsole
         static int layersize = 200;
         static int iCRF = 0;
         static long savestep = 0;
-        static double alpha = 0.1;
-        static double dropout = 0;
+        static float alpha = 0.1f;
+        static float dropout = 0;
         static int bptt = 4;
         static int modelType = 0;
         static int nBest = 1;
@@ -31,7 +32,7 @@ namespace RNNSharpConsole
 
         static void UsageTitle()
         {
-            Console.WriteLine("Recurrent Neural Network Toolkit v1.1 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Recurrent Neural Network Toolkit v1.2 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         static void Usage()
@@ -136,8 +137,8 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-modeltype", args)) >= 0) modelType = int.Parse(args[i + 1]);
             if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1]);
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-alpha", args)) >= 0) alpha = double.Parse(args[i + 1]);
-            if ((i = ArgPos("-dropout", args)) >= 0) dropout = double.Parse(args[i + 1]);
+            if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1]);
+            if ((i = ArgPos("-dropout", args)) >= 0) dropout = float.Parse(args[i + 1]);
             if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1]);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
             if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
@@ -221,28 +222,21 @@ namespace RNNSharpConsole
 
             while (true)
             {
-                List<string> tokenList = ReadRecord(sr);
-                if (tokenList.Count == 0)
+                //Extract features from it and convert it into sequence
+                Sentence sent = new Sentence(ReadRecord(sr));
+                if (sent.TokensList.Count <= 2)
                 {
-                    //No more record
+                    //No more record, it only contain <s> and </s>
                     break;
                 }
 
-                //Extract features from it and convert it into sequence
-                Sentence sent = new Sentence();
-                sent.SetFeatures(tokenList);
                 Sequence seq = featurizer.ExtractFeatures(sent);
-                
+
                 //Set label for the sequence
-                if (seq.SetLabel(sent, featurizer.GetTagSet()) == false)
-                {
-                    Logger.WriteLine(Logger.Level.info, "Error: Invalidated record.");
-                    sent.DumpFeatures();
-                    continue;
-                }
+                seq.SetLabel(sent, featurizer.TagSet);
 
                 //Add the sequence into data set
-                dataSet.Add(seq);
+                dataSet.SequenceList.Add(seq);
 
                 //Show state at every 1000 record
                 RecordCount++;
@@ -284,9 +278,9 @@ namespace RNNSharpConsole
             }
         }
 
-        private static List<string> ReadRecord(StreamReader sr)
+        private static List<string[]> ReadRecord(StreamReader sr)
         {
-            List<string> record = new List<string>();
+            List<string[]> record = new List<string[]>();
             string strLine = null;
 
             //Read each line from file
@@ -299,7 +293,7 @@ namespace RNNSharpConsole
                     return record;
                 }
 
-                record.Add(strLine);
+                record.Add(strLine.Split('\t'));
             }
 
             return record;
@@ -314,7 +308,7 @@ namespace RNNSharpConsole
                 return;
             }
 
-            //Load tag id and its name from file
+            //Load tag name
             TagSet tagSet = new TagSet(strTagFile);
 
             if (String.IsNullOrEmpty(strModelFile) == true)
@@ -342,11 +336,9 @@ namespace RNNSharpConsole
             Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet);
             featurizer.ShowFeatureSize();
 
-            //Create an instance for the model
-           // Model model = new Model(strModelFile);
-
             //Create instance for decoder
             RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(strModelFile, featurizer);
+
 
             if (File.Exists(strTestFile) == false)
             {
@@ -360,15 +352,12 @@ namespace RNNSharpConsole
 
             while (true)
             {
-                List<string> tokenList = ReadRecord(sr);
-                if (tokenList.Count == 0)
+                Sentence sent = new Sentence(ReadRecord(sr));
+                if (sent.TokensList.Count <= 2)
                 {
-                    //No more record
+                    //No more record, it only contains <s> and </s>
                     break;
                 }
-
-                Sentence sent = new Sentence();
-                sent.SetFeatures(tokenList);
 
                 if (nBest == 1)
                 {
@@ -376,9 +365,10 @@ namespace RNNSharpConsole
                     //Output decoded result
                     //Append the decoded result into the end of feature set of each token
                     StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < tokenList.Count; i++)
+                    for (int i = 0; i < sent.TokensList.Count; i++)
                     {
-                        sb.Append(tokenList[i]);
+                        string tokens = String.Join("\t", sent.TokensList[i]);
+                        sb.Append(tokens);
                         sb.Append("\t");
                         sb.Append(tagSet.GetTagName(output[i]));
                         sb.AppendLine();
@@ -389,19 +379,13 @@ namespace RNNSharpConsole
                 else
                 {
                     int[][] output = decoder.ProcessNBest(sent, nBest);
-                    if (output == null)
-                    {
-                        Logger.WriteLine(Logger.Level.err, "FAILED: decode failed. Dump current sentence...");
-                        sent.DumpFeatures();
-                        return;
-                    }
-
                     StringBuilder sb = new StringBuilder();
                     for (int i = 0; i < nBest; i++)
                     {
-                        for (int j = 0; j < tokenList.Count; j++)
+                        for (int j = 0; j < sent.TokensList.Count; j++)
                         {
-                            sb.Append(tokenList[j]);
+                            string tokens = String.Join("\t", sent.TokensList[i]);
+                            sb.Append(tokens);
                             sb.Append("\t");
                             sb.Append(tagSet.GetTagName(output[i][j]));
                             sb.AppendLine();
@@ -433,23 +417,23 @@ namespace RNNSharpConsole
 
             //Create configuration instance and set parameters
             ModelSetting RNNConfig = new ModelSetting();
-            RNNConfig.SetModelFile(strModelFile);
-            RNNConfig.SetNumHidden(layersize);
-            RNNConfig.SetCRFTraining((iCRF == 1) ? true : false);
-            RNNConfig.SetDir(iDir);
-            RNNConfig.SetModelType(modelType);
-            RNNConfig.SetMaxIteration(maxIter);
-            RNNConfig.SetSaveStep(savestep);
-            RNNConfig.SetLearningRate(alpha);
-            RNNConfig.SetDropout(dropout);
-            RNNConfig.SetBptt(bptt);
+            RNNConfig.ModelFile = strModelFile;
+            RNNConfig.NumHidden = layersize;
+            RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
+            RNNConfig.ModelDirection = iDir;
+            RNNConfig.ModelType = modelType;
+            RNNConfig.MaxIteration = maxIter;
+            RNNConfig.SaveStep = savestep;
+            RNNConfig.LearningRate = alpha;
+            RNNConfig.Dropout = dropout;
+            RNNConfig.Bptt = bptt;
 
             //Dump RNN setting on console
             RNNConfig.DumpSetting();
 
             if (File.Exists(strFeatureConfigFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} isn't existed.", strFeatureConfigFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.", strFeatureConfigFile);
                 UsageTrain();
                 return;
             }
@@ -463,38 +447,37 @@ namespace RNNSharpConsole
                 UsageTrain();
                 return;
             }
-            if (String.IsNullOrEmpty(strTrainFile) == true)
+
+            if (File.Exists(strTrainFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus isn't specified.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus doesn't exist.");
                 UsageTrain();
                 return;
             }
 
-            //LoadFeatureConfig training corpus and extract feature set
-            DataSet dataSetTrain = new DataSet(tagSet.GetSize());
-            LoadDataset(strTrainFile, featurizer, dataSetTrain);
-
-            DataSet dataSetValidation = null;
-            if (String.IsNullOrEmpty(strValidFile) == true)
+            if (File.Exists(strValidFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The validation corpus isn't specified.");
+                Logger.WriteLine(Logger.Level.err, "FAILED: The validation corpus doesn't exist.");
+                UsageTrain();
                 return;
             }
-            //LoadFeatureConfig validated corpus and extract feature set
-            dataSetValidation = new DataSet(tagSet.GetSize());
-            LoadDataset(strValidFile, featurizer, dataSetValidation);
 
             //Create RNN encoder and save necessary parameters
             RNNEncoder encoder = new RNNEncoder(RNNConfig);
-            encoder.SetTrainingSet(dataSetTrain);
-            encoder.SetValidationSet(dataSetValidation);
+
+            //LoadFeatureConfig training corpus and extract feature set
+            encoder.TrainingSet = new DataSet(tagSet.GetSize());
+            LoadDataset(strTrainFile, featurizer, encoder.TrainingSet);
+
+            //LoadFeatureConfig validated corpus and extract feature set
+            encoder.ValidationSet = new DataSet(tagSet.GetSize());
+            LoadDataset(strValidFile, featurizer, encoder.ValidationSet);
 
             if (iCRF == 1)
             {
                 Logger.WriteLine(Logger.Level.info, "Initialize output tag bigram transition probability...");
                 //Build tag bigram transition matrix
-                dataSetTrain.BuildLabelBigramTransition();
-                encoder.SetLabelBigramTransition(dataSetTrain.GetLabelBigramTransition());
+                encoder.TrainingSet.BuildLabelBigramTransition();
             }
 
             //Start to train the model

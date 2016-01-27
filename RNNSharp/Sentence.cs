@@ -1,65 +1,81 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class Sentence
     {
-        private List<string[]> m_features;
+        public List<string[]> TokensList { get; }
 
-        public List<string[]> GetFeatureSet()
+        public Sentence(List<string[]> tokensList)
         {
-            return m_features;
-        }
+            int dim = 0;
+            TokensList = new List<string[]>();
 
-        public int GetTokenSize()
-        {
-            return m_features.Count;
-        }
-
-        public void DumpFeatures()
-        {
-            foreach (string[] features in m_features)
+            if (tokensList.Count == 0)
             {
-                StringBuilder sb = new StringBuilder();
-                foreach (string strFeature in features)
+                return;
+            }
+
+            //Check if dimension is consistent inside the sentence
+            foreach (string[] tokens in tokensList)
+            {
+                if (dim > 0 && tokens.Length != dim)
                 {
-                    sb.Append(strFeature);
-                    sb.Append('\t');
+                    string err = ReportInvalidateTokens(tokensList, dim, tokens);
+                    throw new FormatException(String.Format("Invalidated record: {0}", err));
                 }
 
-                Logger.WriteLine(Logger.Level.info, sb.ToString().Trim());
+                dim = tokens.Length;
+                TokensList.Add(tokens);
             }
-        }
 
-        public virtual void SetFeatures(List<string> tokenList)
-        {
-            m_features = new List<string[]>();
+            //Add begin/end of sentence flag into feature
+            string[] beginFeatures = new string[dim];
+            string[] endFeatures = new string[dim];
 
-            //Add the begining term for current record
-            string[] curfeature = new string[2];
-            curfeature[0] = "<s>";
-            curfeature[1] = "O";
-            m_features.Add(curfeature);
-
-            foreach (string s in tokenList)
+            for (int i = 0; i < dim - 1; i++)
             {
-                string[] tokens = s.Split('\t');
-                m_features.Add(tokens);
+                beginFeatures[i] = "<s>";
+                endFeatures[i] = "</s>";
             }
 
-            //Add the end term of current record
-            curfeature = new string[2];
-            curfeature[0] = "</s>";
-            curfeature[1] = "O";
-            m_features.Add(curfeature);
+            beginFeatures[dim - 1] = TagSet.DefaultTag;
+            endFeatures[dim - 1] = TagSet.DefaultTag;
+
+            TokensList.Insert(0, beginFeatures);
+            TokensList.Add(endFeatures);
         }
 
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (string[] tokens in TokensList)
+            {           
+                foreach (string token in tokens)
+                {
+                    sb.Append(token);
+                    sb.Append('\t');
+                }
+                sb.AppendLine();
+            }
 
+            return sb.ToString();
+        }
 
+        private string ReportInvalidateTokens(List<string[]> tokenList, int dim, string[] badTokens)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine(String.Format("Inconsistent feature dimension in the record.It's {0}, but it should be {1}", badTokens.Length, dim));
+            sb.AppendLine(ToString());
+            Logger.WriteLine(Logger.Level.err, sb.ToString());
+
+            return sb.ToString();
+        }
     }
 }

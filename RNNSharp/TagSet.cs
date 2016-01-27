@@ -1,15 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using System.IO;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class TagSet
     {
-        public Dictionary<string, int> m_Tag2Index = new Dictionary<string, int>();
+        public Dictionary<string, int> m_Tag2Index;
+        public static string DefaultTag = "SentBE";
 
         public int GetSize()
         {
@@ -41,30 +41,30 @@ namespace RNNSharp
         }
 
 
-        //Load the tag id and its name mapping from given file
-        //Format: tagid /t tag name
+        //Load tag name from given file
+        //Format: each line has one tag name
         public TagSet(string strTagFileName)
         {
-            StreamReader fin = new StreamReader(strTagFileName);
+            m_Tag2Index = new Dictionary<string, int>();
+            int idx = 0;
+            m_Tag2Index.Add(DefaultTag, idx);
+            idx++;
 
-            int idx;
-            string strTagName;
             string strLine = null;
-            while ((strLine = fin.ReadLine()) != null)
+            using (StreamReader fin = new StreamReader(strTagFileName))
             {
-                strLine = strLine.Trim();
-                if (strLine.Length == 0)
+                while ((strLine = fin.ReadLine()) != null)
                 {
-                    continue;
+                    strLine = strLine.Trim();
+                    if (strLine.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    m_Tag2Index.Add(strLine, idx);
+                    idx++;
                 }
-
-                string[] items = strLine.Split('\t');
-                idx = int.Parse(items[0]);
-                strTagName = items[1];
-
-                m_Tag2Index.Add(strTagName, idx);
             }
-            fin.Close();
         }
     }
 }

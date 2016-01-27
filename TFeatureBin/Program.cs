@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
 using RNNSharp;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace TFeatureBin
 {
     class Program
@@ -167,55 +168,59 @@ namespace TFeatureBin
 
             Logger.WriteLine(Logger.Level.info, "Generate feature set...");
             BigDictionary<string, int> feature2freq = new BigDictionary<string, int>();
-            List<string[]> record = new List<string[]>();
-            StreamReader srCorpus = new StreamReader(strInputFile, Encoding.UTF8);
+
+
+            List<string[]> tokenList = new List<string[]>();
             string strLine = null;
-            while ((strLine = srCorpus.ReadLine()) != null)
+            Sentence sentence = null;
+
+            using (StreamReader srCorpus = new StreamReader(strInputFile, Encoding.UTF8))
             {
-                strLine = strLine.Trim();
-                if (strLine.Length == 0)
+                while ((strLine = srCorpus.ReadLine()) != null)
                 {
-                    //The end of current record
-                    for (int i = 0; i < record.Count; i++)
+                    strLine = strLine.Trim();
+                    if (strLine.Length == 0)
                     {
-                        //Get feature of current token
-                        List<string> featureList = templateFeaturizer.GenerateFeature(record, i);
-                        foreach (string strFeature in featureList)
+                        //The end of current record
+                        sentence = new Sentence(tokenList);
+                        for (int i = 0; i < sentence.TokensList.Count; i++)
                         {
-                            if (feature2freq.ContainsKey(strFeature) == false)
+                            //Get feature of i-th token
+                            List<string> featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
+                            foreach (string strFeature in featureList)
                             {
-                                feature2freq.Add(strFeature, 0);
+                                if (feature2freq.ContainsKey(strFeature) == false)
+                                {
+                                    feature2freq.Add(strFeature, 0);
+                                }
+                                feature2freq[strFeature]++;
                             }
-                            feature2freq[strFeature]++;
                         }
+
+                        tokenList.Clear();
                     }
-
-                    record.Clear();
-                }
-                else
-                {
-                    string[] items = strLine.Split('\t');
-                    record.Add(items);
-                }
-
-            }
-
-            //The end of current record
-            for (int i = 0; i < record.Count; i++)
-            {
-                //Get feature of current token
-                List<string> featureList = templateFeaturizer.GenerateFeature(record, i);
-                foreach (string strFeature in featureList)
-                {
-                    if (feature2freq.ContainsKey(strFeature) == false)
+                    else
                     {
-                        feature2freq.Add(strFeature, 0);
+                        tokenList.Add(strLine.Split('\t'));
                     }
-                    feature2freq[strFeature]++;
+                }
+
+                //The end of current record
+                sentence = new Sentence(tokenList);
+                for (int i = 0; i < sentence.TokensList.Count; i++)
+                {
+                    //Get feature of i-th token
+                    List<string> featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
+                    foreach (string strFeature in featureList)
+                    {
+                        if (feature2freq.ContainsKey(strFeature) == false)
+                        {
+                            feature2freq.Add(strFeature, 0);
+                        }
+                        feature2freq[strFeature]++;
+                    }
                 }
             }
-
-            srCorpus.Close();
 
             //Only save the feature whose frequency is not less than minfreq
             Logger.WriteLine(Logger.Level.info, "Filter out features whose frequency is less than {0}", minfreq);

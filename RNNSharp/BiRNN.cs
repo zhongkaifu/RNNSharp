@@ -1,11 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     class BiRNN : RNN
@@ -18,19 +18,37 @@ namespace RNNSharp
             forwardRNN = s_forwardRNN;
             backwardRNN = s_backwardRNN;
 
-            m_modeldirection = MODELDIRECTION.BI_DIRECTIONAL;
+            ModelType = forwardRNN.ModelType;
+            ModelDirection = MODELDIRECTION.BI_DIRECTIONAL;
         }
 
-        public override void SetFeatureDimension(int denseFeatueSize, int sparseFeatureSize, int tagSize)
+        public override int L0
         {
-            fea_size = denseFeatueSize;
-            L0 = sparseFeatureSize;
-            L2 = tagSize;
+            get
+            {
+                return forwardRNN.L0;
+            }
 
-            forwardRNN.SetFeatureDimension(denseFeatueSize, sparseFeatureSize, tagSize);
-            backwardRNN.SetFeatureDimension(denseFeatueSize, sparseFeatureSize, tagSize);
+            set
+            {
+                forwardRNN.L0 = value;
+                backwardRNN.L0 = value;
+            }
         }
 
+        public override int L2
+        {
+            get
+            {
+                return forwardRNN.L2;
+            }
+
+            set
+            {
+                forwardRNN.L2 = value;
+                backwardRNN.L2 = value;
+            }
+        }
 
         public override void initWeights()
         {
@@ -39,72 +57,123 @@ namespace RNNSharp
 
         }
 
-        public override void SetModelFile(string strModelFile)
+        public override string ModelFile
         {
-            m_strModelFile = strModelFile;
-
-            forwardRNN.mat_hidden2output = mat_hidden2output;
-            backwardRNN.mat_hidden2output = mat_hidden2output;
-
-            forwardRNN.SetModelFile(strModelFile);
-            backwardRNN.SetModelFile(strModelFile);
+            get { return forwardRNN.ModelFile; }
+            set
+            {
+                forwardRNN.ModelFile = value;
+                backwardRNN.ModelFile = value;
+            }
         }
 
-        public override void SetSaveStep(long savestep)
+        public override long SaveStep
         {
-            m_SaveStep = savestep;
+            get
+            {
+                return forwardRNN.SaveStep;
+            }
 
-            forwardRNN.SetSaveStep(savestep);
-            backwardRNN.SetSaveStep(savestep);
+            set
+            {
+                forwardRNN.SaveStep = value;
+                backwardRNN.SaveStep = value;
+            }
         }
 
-        public override void SetMaxIter(int _nMaxIter)
+        public override int MaxIter
         {
-            m_MaxIter = _nMaxIter;
+            get
+            {
+                return forwardRNN.MaxIter;
+            }
 
-            forwardRNN.SetMaxIter(_nMaxIter);
-            backwardRNN.SetMaxIter(_nMaxIter);
+            set
+            {
+                forwardRNN.MaxIter = value;
+                backwardRNN.MaxIter = value;
+            }
         }
 
-
-        public override void SetCRFTraining(bool b)
+        public override bool IsCRFTraining
         {
-            m_bCRFTraining = b;
+            get { return forwardRNN.IsCRFTraining; }
 
-            forwardRNN.SetCRFTraining(b);
-            backwardRNN.SetCRFTraining(b);
+            set
+            {
+                forwardRNN.IsCRFTraining = value;
+                backwardRNN.IsCRFTraining = value;
+            }
         }
 
-        public override void SetLearningRate(double newAlpha)
+        public override float LearningRate
         {
-            alpha = newAlpha;
+            get
+            {
+                return forwardRNN.LearningRate;
+            }
 
-            forwardRNN.SetLearningRate(newAlpha);
-            backwardRNN.SetLearningRate(newAlpha);
+            set
+            {
+                forwardRNN.LearningRate = value;
+                backwardRNN.LearningRate = value;
+            }
         }
 
-        public override void SetGradientCutoff(double newGradient)
+        public override float GradientCutoff
         {
-            gradient_cutoff = newGradient;
+            get
+            {
+                return forwardRNN.GradientCutoff;
+            }
 
-            forwardRNN.SetGradientCutoff(newGradient);
-            backwardRNN.SetGradientCutoff(newGradient);
+            set
+            {
+                forwardRNN.GradientCutoff = value;
+                backwardRNN.GradientCutoff = value;
+            }
         }
 
-        public override void SetDropout(double newDropout)
+        public override float Dropout
         {
-            dropout = newDropout;
+            get
+            {
+                return forwardRNN.Dropout;
+            }
 
-            forwardRNN.SetDropout(newDropout);
-            backwardRNN.SetDropout(newDropout);
+            set
+            {
+                forwardRNN.Dropout = value;
+                backwardRNN.Dropout = value;
+            }
         }
 
-        public override void SetHiddenLayerSize(int newsize)
+        public override int L1
         {
-            L1 = newsize;
+            get
+            {
+                return forwardRNN.L1;
+            }
 
-            forwardRNN.SetHiddenLayerSize(newsize);
-            backwardRNN.SetHiddenLayerSize(newsize);
+            set
+            {
+                forwardRNN.L1 = value;
+                backwardRNN.L1 = value;
+            }
+        }
+
+        public override int DenseFeatureSize
+        {
+            get
+            {
+                return forwardRNN.DenseFeatureSize;
+            }
+
+            set
+            {
+                forwardRNN.DenseFeatureSize = value;
+                backwardRNN.DenseFeatureSize = value;
+            }
         }
 
         public override void GetHiddenLayer(Matrix<double> m, int curStatus)
@@ -118,20 +187,20 @@ namespace RNNSharp
             backwardRNN.initMem();
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
-            mat_hidden2output = new Matrix<double>(L2, L1);
+            Hidden2OutputWeight = new Matrix<double>(L2, L1);
 
-            for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
+            for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
             {
-                for (int j = 0; j < mat_hidden2output.GetWidth(); j++)
+                for (int j = 0; j < Hidden2OutputWeight.GetWidth(); j++)
                 {
-                    mat_hidden2output[i][j] = RandInitWeight();
+                    Hidden2OutputWeight[i][j] = RandInitWeight();
                 }
             }
         }
 
         public neuron[][] InnerDecode(Sequence pSequence, out Matrix<neuron> outputHiddenLayer, out Matrix<double> rawOutputLayer)
         {
-            int numStates = pSequence.GetSize();
+            int numStates = pSequence.States.Length;
             Matrix<double> mForward = null;
             Matrix<double> mBackward = null;
 
@@ -144,7 +213,7 @@ namespace RNNSharp
                 mForward = new Matrix<double>(numStates, forwardRNN.L1);
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    State state = pSequence.Get(curState);
+                    State state = pSequence.States[curState];
                     forwardRNN.setInputLayer(state, curState, numStates, null);
                     forwardRNN.computeNet(state, null);      //compute probability distribution
 
@@ -157,7 +226,7 @@ namespace RNNSharp
                  mBackward = new Matrix<double>(numStates, backwardRNN.L1);
                  for (int curState = numStates - 1; curState >= 0; curState--)
                  {
-                     State state = pSequence.Get(curState);
+                     State state = pSequence.States[curState];
                      backwardRNN.setInputLayer(state, curState, numStates, null, false);
                      backwardRNN.computeNet(state, null);      //compute probability distribution
 
@@ -181,7 +250,7 @@ namespace RNNSharp
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 seqOutput[curState] = new neuron[L2];
-                matrixXvectorADD(seqOutput[curState], mergedHiddenLayer[curState], mat_hidden2output, 0, L2, 0, L1, 0);
+                matrixXvectorADD(seqOutput[curState], mergedHiddenLayer[curState], Hidden2OutputWeight, 0, L2, 0, L1, 0);
 
                 for (int i = 0; i < L2; i++)
                 {
@@ -198,10 +267,10 @@ namespace RNNSharp
             return seqOutput;
         }
 
-        public override Matrix<double> learnSentenceForRNNCRF(Sequence pSequence, RunningMode runningMode)
+        public override int[] PredictSentenceCRF(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network
-            int numStates = pSequence.GetSize();
+            int numStates = pSequence.States.Length;
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
@@ -209,37 +278,43 @@ namespace RNNSharp
 
             ForwardBackward(numStates, rawOutputLayer);
 
-            //Get the best result
-            for (int i = 0; i < numStates; i++)
+            if (runningMode != RunningMode.Test)
             {
-                State state = pSequence.Get(i);
-                logp += Math.Log10(mat_CRFSeqOutput[i][state.GetLabel()]);
-                counter++;
-            }
-
-            UpdateBigramTransition(pSequence);
-
-            //Update hidden-output layer weights
-            for (int curState = 0; curState < numStates; curState++)
-            {
-                State state = pSequence.Get(curState);
-                //For standard RNN
-                for (int c = 0; c < L2; c++)
+                //Get the best result
+                for (int i = 0; i < numStates; i++)
                 {
-                    seqOutput[curState][c].er = -mat_CRFSeqOutput[curState][c];
+                    logp += Math.Log10(CRFSeqOutput[i][pSequence.States[i].Label]);
                 }
-                seqOutput[curState][state.GetLabel()].er = 1 - mat_CRFSeqOutput[curState][state.GetLabel()];
             }
 
-            LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+            int[] predict = Viterbi(rawOutputLayer, numStates);
 
-            return mat_CRFSeqOutput;
+            if (runningMode == RunningMode.Train)
+            {
+                UpdateBigramTransition(pSequence);
+
+                //Update hidden-output layer weights
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    int label = pSequence.States[curState].Label;
+                    //For standard RNN
+                    for (int c = 0; c < L2; c++)
+                    {
+                        seqOutput[curState][c].er = -CRFSeqOutput[curState][c];
+                    }
+                    seqOutput[curState][label].er = 1 - CRFSeqOutput[curState][label];
+                }
+
+                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+            }
+
+            return predict;
         }
 
         public override Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network
-            int numStates = pSequence.GetSize();
+            int numStates = pSequence.States.Length;
 
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
@@ -251,9 +326,7 @@ namespace RNNSharp
                 //Merge forward and backward
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    State state = pSequence.Get(curState);
-                    logp += Math.Log10(seqOutput[curState][state.GetLabel()].cellOutput);
-                    counter++;
+                    logp += Math.Log10(seqOutput[curState][pSequence.States[curState].Label].cellOutput);
                 }
             }
 
@@ -262,13 +335,13 @@ namespace RNNSharp
                 //Update hidden-output layer weights
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    State state = pSequence.Get(curState);
+                    int label = pSequence.States[curState].Label;
                     //For standard RNN
                     for (int c = 0; c < L2; c++)
                     {
                         seqOutput[curState][c].er = -seqOutput[curState][c].cellOutput;
                     }
-                    seqOutput[curState][state.GetLabel()].er = 1 - seqOutput[curState][state.GetLabel()].cellOutput;
+                    seqOutput[curState][label].er = 1 - seqOutput[curState][label].cellOutput;
                 }
 
                 LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
@@ -281,21 +354,21 @@ namespace RNNSharp
         {
             netReset(true);
 
-            int numStates = pSequence.GetSize();
-            forwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
-            backwardRNN.mat_hidden2output = mat_hidden2output.CopyTo();
+            int numStates = pSequence.States.Length;
+            forwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
+            backwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
 
             Parallel.Invoke(() =>
                 {
                     for (int curState = 0; curState < numStates; curState++)
                     {
-                        for (int i = 0; i < mat_hidden2output.GetHeight(); i++)
+                        for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
                         {
                             //update weights for hidden to output layer
 
-                            for (int k = 0; k < mat_hidden2output.GetWidth(); k++)
+                            for (int k = 0; k < Hidden2OutputWeight.GetWidth(); k++)
                             {
-                                mat_hidden2output[i][k] += alpha * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
+                                Hidden2OutputWeight[i][k] += LearningRate * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
                             }
                         }
                     }
@@ -308,12 +381,12 @@ namespace RNNSharp
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     // error propogation
-                    State state = pSequence.Get(curState);
+                    State state = pSequence.States[curState];
                     forwardRNN.setInputLayer(state, curState, numStates, null);
                     forwardRNN.computeNet(state, null);      //compute probability distribution
 
                     //Copy output result to forward net work's output
-                    forwardRNN.neuOutput = seqOutput[curState];
+                    forwardRNN.OutputLayer = seqOutput[curState];
 
                     forwardRNN.learnNet(state, curState, true);
                     forwardRNN.LearnBackTime(state, numStates, curState);
@@ -327,12 +400,12 @@ namespace RNNSharp
                     int curState2 = numStates - 1 - curState;
 
                     // error propogation
-                    State state2 = pSequence.Get(curState2);
+                    State state2 = pSequence.States[curState2];
                     backwardRNN.setInputLayer(state2, curState2, numStates, null, false);
                     backwardRNN.computeNet(state2, null);      //compute probability distribution
 
                     //Copy output result to forward net work's output
-                    backwardRNN.neuOutput = seqOutput[curState2];
+                    backwardRNN.OutputLayer = seqOutput[curState2];
 
                     backwardRNN.learnNet(state2, curState2, true);
                     backwardRNN.LearnBackTime(state2, numStates, curState2);
@@ -340,36 +413,6 @@ namespace RNNSharp
             });
         }
 
-        public int GetBestOutputIndex(Matrix<double> m, int curState)
-        {
-            int imax = 0;
-            double dmax = m[curState][0];
-            for (int k = 1; k < m.GetWidth(); k++)
-            {
-                if (m[curState][k] > dmax)
-                {
-                    dmax = m[curState][k];
-                    imax = k;
-                }
-            }
-            return imax;
-        }
-
-
-        public int GetBestOutputIndex(neuron[][] m, int curState, int L2)
-        {
-            int imax = 0;
-            double dmax = m[curState][0].cellOutput;
-            for (int k = 1; k < L2; k++)
-            {
-                if (m[curState][k].cellOutput > dmax)
-                {
-                    dmax = m[curState][k].cellOutput;
-                    imax = k;
-                }
-            }
-            return imax;
-        }
 
         public override void LearnBackTime(State state, int numStates, int curState)
         {
@@ -394,11 +437,11 @@ namespace RNNSharp
         public override void saveNetBin(string filename)
         {
             //Save bi-directional model
-            forwardRNN.mat_hidden2output = mat_hidden2output;
-            backwardRNN.mat_hidden2output = mat_hidden2output;
+            forwardRNN.Hidden2OutputWeight = Hidden2OutputWeight;
+            backwardRNN.Hidden2OutputWeight = Hidden2OutputWeight;
 
-            forwardRNN.mat_CRFTagTransWeights = mat_CRFTagTransWeights;
-            backwardRNN.mat_CRFTagTransWeights = mat_CRFTagTransWeights;
+            forwardRNN.CRFTagTransWeights = CRFTagTransWeights;
+            backwardRNN.CRFTagTransWeights = CRFTagTransWeights;
 
             forwardRNN.saveNetBin(filename + ".forward");
             backwardRNN.saveNetBin(filename + ".backward");
@@ -407,12 +450,12 @@ namespace RNNSharp
             using (StreamWriter sw = new StreamWriter(filename))
             {
                 BinaryWriter fo = new BinaryWriter(sw.BaseStream);
-                fo.Write((int)m_modeltype);
-                fo.Write((int)m_modeldirection);
+                fo.Write((int)ModelType);
+                fo.Write((int)ModelDirection);
 
                 // Signiture , 0 is for RNN or 1 is for RNN-CRF
                 int iflag = 0;
-                if (m_bCRFTraining == true)
+                if (IsCRFTraining == true)
                 {
                     iflag = 1;
                 }
@@ -421,7 +464,7 @@ namespace RNNSharp
                 fo.Write(L0);
                 fo.Write(L1);
                 fo.Write(L2);
-                fo.Write(fea_size);
+                fo.Write(DenseFeatureSize);
             }
         }
 
@@ -432,31 +475,31 @@ namespace RNNSharp
             forwardRNN.loadNetBin(filename + ".forward");
             backwardRNN.loadNetBin(filename + ".backward");
 
-            mat_hidden2output = forwardRNN.mat_hidden2output;
-            mat_CRFTagTransWeights = forwardRNN.mat_CRFTagTransWeights;
+            Hidden2OutputWeight = forwardRNN.Hidden2OutputWeight;
+            CRFTagTransWeights = forwardRNN.CRFTagTransWeights;
 
             using (StreamReader sr = new StreamReader(filename))
             {
                 BinaryReader br = new BinaryReader(sr.BaseStream);
 
-                m_modeltype = (MODELTYPE)br.ReadInt32();
-                m_modeldirection = (MODELDIRECTION)br.ReadInt32();
+                ModelType = (MODELTYPE)br.ReadInt32();
+                ModelDirection = (MODELDIRECTION)br.ReadInt32();
 
                 int iflag = br.ReadInt32();
                 if (iflag == 1)
                 {
-                    m_bCRFTraining = true;
+                    IsCRFTraining = true;
                 }
                 else
                 {
-                    m_bCRFTraining = false;
+                    IsCRFTraining = false;
                 }
 
                 //Load basic parameters
                 L0 = br.ReadInt32();
                 L1 = br.ReadInt32();
                 L2 = br.ReadInt32();
-                fea_size = br.ReadInt32();
+                DenseFeatureSize = br.ReadInt32();
             }
         }
     }

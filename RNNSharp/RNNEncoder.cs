@@ -1,51 +1,32 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
-using AdvUtils;
+﻿using AdvUtils;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class RNNEncoder
     {
         ModelSetting m_modelSetting;
-        DataSet m_TrainingSet;
-        DataSet m_ValidationSet;
-        List<List<double>> m_LabelBigramTransition;
-
-        public void SetLabelBigramTransition(List<List<double>> m)
-        {
-            m_LabelBigramTransition = m;
-        }
+        public DataSet TrainingSet { get; set; }
+        public DataSet ValidationSet { get; set; }
 
         public RNNEncoder(ModelSetting modelSetting)
         {
             m_modelSetting = modelSetting;
         }
 
-
-        public void SetTrainingSet(DataSet train)
-        {
-            m_TrainingSet = train;
-        }
-        public void SetValidationSet(DataSet validation)
-        {
-            m_ValidationSet = validation;
-        }
-
         public void Train()
         {
             RNN rnn;
 
-            if (m_modelSetting.GetModelDirection() == 0)
+            if (m_modelSetting.ModelDirection == 0)
             {
-                if (m_modelSetting.GetModelType() == 0)
+                if (m_modelSetting.ModelType == 0)
                 {
                     SimpleRNN sRNN = new SimpleRNN();
 
-                    sRNN.setBPTT(m_modelSetting.GetBptt() + 1);
+                    sRNN.setBPTT(m_modelSetting.Bptt + 1);
                     sRNN.setBPTTBlock(10);
 
                     rnn = sRNN;
@@ -57,15 +38,15 @@ namespace RNNSharp
             }
             else
             {
-                if (m_modelSetting.GetModelType() == 0)
+                if (m_modelSetting.ModelType == 0)
                 {
                     SimpleRNN sForwardRNN = new SimpleRNN();
                     SimpleRNN sBackwardRNN = new SimpleRNN();
 
-                    sForwardRNN.setBPTT(m_modelSetting.GetBptt() + 1);
+                    sForwardRNN.setBPTT(m_modelSetting.Bptt + 1);
                     sForwardRNN.setBPTTBlock(10);
 
-                    sBackwardRNN.setBPTT(m_modelSetting.GetBptt() + 1);
+                    sBackwardRNN.setBPTT(m_modelSetting.Bptt + 1);
                     sBackwardRNN.setBPTTBlock(10);
 
                     rnn = new BiRNN(sForwardRNN, sBackwardRNN);
@@ -76,37 +57,33 @@ namespace RNNSharp
                 }
             }
 
-            //Set model type
-            rnn.SetModelDirection(m_modelSetting.GetModelDirection());
+            rnn.ModelDirection = (MODELDIRECTION)m_modelSetting.ModelDirection;
+            rnn.ModelFile = m_modelSetting.ModelFile;
+            rnn.SaveStep = m_modelSetting.SaveStep;
+            rnn.MaxIter = m_modelSetting.MaxIteration;
+            rnn.IsCRFTraining = m_modelSetting.IsCRFTraining;
+            rnn.LearningRate = m_modelSetting.LearningRate;
+            rnn.GradientCutoff = 15.0f;
+            rnn.Dropout = m_modelSetting.Dropout;
+            rnn.L1 = m_modelSetting.NumHidden;
 
-            //Set feature dimension
-            rnn.SetFeatureDimension(m_TrainingSet.GetDenseDimension(), 
-                m_TrainingSet.GetSparseDimension(), 
-                m_TrainingSet.GetTagSize());
-
-
-            rnn.SetModelFile(m_modelSetting.GetModelFile());
-            rnn.SetSaveStep(m_modelSetting.GetSaveStep());
-            rnn.SetMaxIter(m_modelSetting.GetMaxIteration());
-            rnn.SetCRFTraining(m_modelSetting.IsCRFTraining());
-            rnn.SetLearningRate(m_modelSetting.GetLearningRate());
-            rnn.SetGradientCutoff(15.0);
-            rnn.SetDropout(m_modelSetting.GetDropout());
-            rnn.SetHiddenLayerSize(m_modelSetting.GetNumHidden());
+            rnn.DenseFeatureSize = TrainingSet.DenseFeatureSize();
+            rnn.L0 = TrainingSet.GetSparseDimension();
+            rnn.L2 = TrainingSet.TagSize;
 
             rnn.initMem();
             
             //Create tag-bigram transition probability matrix only for sequence RNN mode
-            if (m_modelSetting.IsCRFTraining() == true)
+            if (m_modelSetting.IsCRFTraining)
             {
-                rnn.setTagBigramTransition(m_LabelBigramTransition);
+                rnn.setTagBigramTransition(TrainingSet.CRFLabelBigramTransition);
             }
 
             Logger.WriteLine(Logger.Level.info, "");
 
             Logger.WriteLine(Logger.Level.info, "[TRACE] Iterative training begins ...");
             double lastPPL = double.MaxValue;
-            double lastAlpha = rnn.Alpha;
+            double lastAlpha = rnn.LearningRate;
             int iter = 0;
             while (true)
             {
@@ -117,37 +94,31 @@ namespace RNNSharp
                 }
 
                 //Start to train model
-                double ppl = rnn.TrainNet(m_TrainingSet, iter);
+                double ppl = rnn.TrainNet(TrainingSet, iter);
 
                 //Validate the model by validated corpus
                 bool betterValidateNet = false;
-                if (rnn.ValidateNet(m_ValidationSet) == true)
+                if (rnn.ValidateNet(ValidationSet, iter) == true)
                 {
                     //If current model is better than before, save it into file
-                    Logger.WriteLine(Logger.Level.info, "Saving better model into file {0}...", m_modelSetting.GetModelFile());
-                    rnn.saveNetBin(m_modelSetting.GetModelFile());
+                    Logger.WriteLine(Logger.Level.info, "Saving better model into file {0}...", m_modelSetting.ModelFile);
+                    rnn.saveNetBin(m_modelSetting.ModelFile);
 
                     betterValidateNet = true;
                 }
-                //else
-                //{
-                //    Logger.WriteLine(Logger.Level.info, "Loading previous best model from file {0}...", m_modelSetting.GetModelFile());
-                //    rnn.loadNetBin(m_modelSetting.GetModelFile());
-                //}
 
-
-                if (ppl >= lastPPL && lastAlpha != rnn.Alpha)
+                if (ppl >= lastPPL && lastAlpha != rnn.LearningRate)
                 {
                     //Although we reduce alpha value, we still cannot get better result.
                     Logger.WriteLine(Logger.Level.info, "Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
-                    Logger.WriteLine(Logger.Level.info, "Current alpha: {0}, the previous alpha: {1}", rnn.Alpha, lastAlpha);
+                    Logger.WriteLine(Logger.Level.info, "Current alpha: {0}, the previous alpha: {1}", rnn.LearningRate, lastAlpha);
                     break;
                 }
 
-                lastAlpha = rnn.Alpha;
+                lastAlpha = rnn.LearningRate;
                 if (betterValidateNet == false)
                 {
-                    rnn.Alpha = rnn.Alpha / 2.0;
+                    rnn.LearningRate = rnn.LearningRate / 2.0f;
                 }
 
                 lastPPL = ppl;

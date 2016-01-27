@@ -1,43 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
+/// <summary>
+/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+/// </summary>
 namespace RNNSharp
 {
     public class SparseVector : SingleVector
     {
-        KeyValuePair<int, double>[] m_Data;
+        KeyValuePair<int, float>[] m_Data;
         int m_Dimension;
         int m_Size;
 
-
-        public KeyValuePair<int, double> GetEntry(int pos) { return m_Data[pos]; }
+        public KeyValuePair<int, float> GetEntry(int pos) { return m_Data[pos]; }
 
         public override int GetDimension() { return m_Dimension; }
         public int GetNumberOfEntries() { return m_Size; }
 
-        public void ChangeValue(int positionInSparseVector, int dimension, double value)
+        public void ChangeValue(int positionInSparseVector, int dimension, float value)
         {
-            m_Data[positionInSparseVector] = new KeyValuePair<int, double>(dimension, value);
+            m_Data[positionInSparseVector] = new KeyValuePair<int, float>(dimension, value);
         }
 
         public void SetDimension(int s) { m_Dimension = s; }
 
-
-        public KeyValuePair<int, double>[] GetIndexValues()
-        {
-            return m_Data;
-        }
-
-        public void SetData(Dictionary<int, double> m)
+        public void SetData(Dictionary<int, float> m)
         {
             m_Size = m.Count;
-            m_Data = new KeyValuePair<int, double>[m_Size];
+            m_Data = new KeyValuePair<int, float>[m_Size];
 
             int count = 0;
-            foreach (KeyValuePair<int, double> pair in m)
+            foreach (KeyValuePair<int, float> pair in m)
             {
                 m_Data[count] = pair;
                 count++;
