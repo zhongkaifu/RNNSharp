@@ -216,7 +216,9 @@ namespace RNNSharp
         public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
 
         public abstract void netReset(bool updateNet = false);
-        public abstract void computeNet(State state, double[] doutput, bool isTrain = true);
+        public abstract void computeHiddenLayer(State state, bool isTrain = true);
+
+        public abstract void computeOutput(double[] doutput);
 
 
         public virtual Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
@@ -239,7 +241,10 @@ namespace RNNSharp
             {
                 State state = pSequence.States[curState];
                 setInputLayer(state, curState, numStates, predicted);
-                computeNet(state, m[curState], isTraining);
+                computeHiddenLayer(state, isTraining);
+
+                computeOutput(m[curState]);
+
                 predicted[curState] = GetBestOutputIndex();
 
                 if (runningMode != RunningMode.Test)
@@ -250,8 +255,18 @@ namespace RNNSharp
                 if (runningMode == RunningMode.Train)
                 {
                     // error propogation
-                    learnNet(state, curState);
-                    LearnBackTime(state, numStates, curState);
+                    ComputeOutputLayerErr(state, curState);
+                    ComputeHiddenLayerErr();
+
+                    Parallel.Invoke(() =>
+                    {
+                        LearnOutputWeight();
+                    },
+                    () =>
+                    {
+                        learnNet(state);
+                        LearnBackTime(state, numStates, curState);
+                    });
                 }
             }
 
@@ -319,10 +334,20 @@ namespace RNNSharp
                     // error propogation
                     State state = pSequence.States[curState];
                     setInputLayer(state, curState, numStates, null);
-                    computeNet(state, null);      //compute probability distribution
+                    computeHiddenLayer(state);      //compute probability distribution
 
-                    learnNet(state, curState);
-                    LearnBackTime(state, numStates, curState);
+                    ComputeOutputLayerErr(state, curState);
+                    ComputeHiddenLayerErr();
+
+                    Parallel.Invoke(() =>
+                    {
+                        LearnOutputWeight();
+                    },
+                    () =>
+                    {
+                        learnNet(state);
+                        LearnBackTime(state, numStates, curState);
+                    });
                 }
             }
 
@@ -445,8 +470,12 @@ namespace RNNSharp
         }
 
 
-        public abstract void learnNet(State state, int timeat, bool biRNN = false);
+        public abstract void learnNet(State state);
         public abstract void LearnBackTime(State state, int numStates, int curState);
+
+        public abstract void ComputeHiddenLayerErr();
+
+        public abstract void LearnOutputWeight();
 
         public virtual double TrainNet(DataSet trainingSet, int iter)
         {
@@ -467,8 +496,7 @@ namespace RNNSharp
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
                 Sequence pSequence = trainingSet.SequenceList[curSequence];
-                int numStates = pSequence.States.Length;
-                wordCnt += numStates;
+                wordCnt += pSequence.States.Length;
 
                 int[] predicted;
                 if (IsCRFTraining == true)
@@ -522,7 +550,9 @@ namespace RNNSharp
         public abstract void saveNetBin(string filename);
         public abstract void loadNetBin(string filename);
 
-        public abstract void GetHiddenLayer(Matrix<double> m, int curStatus);
+        public abstract SimpleCell[] GetHiddenLayer();
+
+        public abstract void SetHiddenLayer(SimpleCell[] cells);
 
         public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir)
         {
@@ -580,6 +610,105 @@ namespace RNNSharp
             }
         }
 
+        public void matrixXvectorADD(SimpleCell[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
+        {
+            if (type == 0)
+            {
+                //ac mod
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].cellOutput = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
+                    }
+                });
+
+            }
+            else
+            {
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].er = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
+                    }
+                });
+
+                for (int i = from; i < to; i++)
+                {
+                    dest[i].er = NormalizeErr(dest[i].er);
+                }
+            }
+        }
+
+        public void matrixXvectorADD(SimpleCell[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
+        {
+            if (type == 0)
+            {
+                //ac mod
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].cellOutput = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
+                    }
+                });
+
+            }
+            else
+            {
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].er = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
+                    }
+                });
+
+                for (int i = from; i < to; i++)
+                {
+                    dest[i].er = NormalizeErr(dest[i].er);
+                }
+            }
+        }
+
+
+        public void matrixXvectorADD(neuron[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
+        {
+            if (type == 0)
+            {
+                //ac mod
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].cellOutput = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
+                    }
+                });
+
+            }
+            else
+            {
+                Parallel.For(0, (to - from), parallelOption, i =>
+                {
+                    dest[i + from].er = 0;
+                    for (int j = 0; j < to2 - from2; j++)
+                    {
+                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
+                    }
+                });
+
+                for (int i = from; i < to; i++)
+                {
+                    dest[i].er = NormalizeErr(dest[i].er);
+                }
+            }
+        }
 
         public int[] GetBestResult(Matrix<double> ys)
         {
@@ -766,7 +895,7 @@ namespace RNNSharp
             return tknErrCnt;
         }
 
-        public void CalculateOutputLayerError(State state, int timeat)
+        public void ComputeOutputLayerErr(State state, int timeat)
         {
             if (IsCRFTraining == true)
             {

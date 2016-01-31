@@ -116,7 +116,8 @@ namespace RNNSharp
                 }
 
                 lastAlpha = rnn.LearningRate;
-                if (betterValidateNet == false)
+        //        if (betterValidateNet == false)
+                if (ppl >= lastPPL)
                 {
                     rnn.LearningRate = rnn.LearningRate / 2.0f;
                 }

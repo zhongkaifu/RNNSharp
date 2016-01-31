@@ -22,8 +22,8 @@ namespace RNNSharp
         protected Matrix<double> mat_bptt_synf;
         protected Matrix<double> mat_hiddenBpttWeight;
 
-        protected neuron[] neuLastHidden;		//neurons in input layer
-        protected neuron[] neuHidden;		//neurons in hidden layer
+        protected SimpleCell[] neuLastHidden;		//neurons in input layer
+        protected SimpleCell[] neuHidden;		//neurons in hidden layer
         protected Matrix<double> mat_input2hidden;
         protected Matrix<double> mat_feature2hidden;
 
@@ -90,12 +90,22 @@ namespace RNNSharp
             }
         }
 
-        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
+        public override void SetHiddenLayer(SimpleCell[] cells)
         {
+            neuHidden = cells;
+        }
+
+        public override SimpleCell[] GetHiddenLayer()
+        {
+            SimpleCell[] m = InitSimpleCell(L1);
             for (int i = 0; i < L1; i++)
             {
-                m[curStatus][i] = neuHidden[i].cellOutput;
+                m[i].cellOutput = neuHidden[i].cellOutput;
+                m[i].er = neuHidden[i].er;
+                m[i].mask = neuHidden[i].mask;
             }
+
+            return m;
         }
 
         public void computeHiddenActivity(bool isTrain)
@@ -119,14 +129,26 @@ namespace RNNSharp
             });
         }
 
+
+        private SimpleCell[] InitSimpleCell(int size)
+        {
+            SimpleCell[] cells = new SimpleCell[size];
+            for (int i = 0;i < size;i++)
+            {
+                cells[i] = new SimpleCell();
+            }
+
+            return cells;
+        }
+
         // forward process. output layer consists of tag value
-        public override void computeNet(State state, double[] doutput, bool isTrain = true)
+        public override void computeHiddenLayer(State state, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
             neuLastHidden = neuHidden;
 
             //hidden(t-1) -> hidden(t)
-            neuHidden = new neuron[L1];
+            neuHidden = InitSimpleCell(L1);
             matrixXvectorADD(neuHidden, neuLastHidden, mat_hiddenBpttWeight, 0, L1, 0, L1, 0);
 
             //Apply feature values on hidden layer
@@ -156,7 +178,10 @@ namespace RNNSharp
 
             //activate 1      --sigmoid
             computeHiddenActivity(isTrain);
+        }
 
+        public override void computeOutput(double[] doutput)
+        {
             //Calculate output layer
             matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, 0, L2, 0, L1, 0);
             if (doutput != null)
@@ -171,13 +196,8 @@ namespace RNNSharp
             SoftmaxLayer(OutputLayer);
         }
 
-        public override void learnNet(State state, int timeat, bool biRNN = false)
+        public override void ComputeHiddenLayerErr()
         {
-            if (biRNN == false)
-            {
-                CalculateOutputLayerError(state, timeat);
-            }
-
             //error output->hidden for words from specific class    	
             matrixXvectorADD(neuHidden, OutputLayer, Hidden2OutputWeight, 0, L1, 0, L2, 1);
 
@@ -189,7 +209,10 @@ namespace RNNSharp
                     neuHidden[i].er = 0;
                 }
             }
+        }
 
+        public override void LearnOutputWeight()
+        {
             //Update hidden-output weights
             Parallel.For(0, L1, parallelOption, a =>
             {
@@ -198,6 +221,11 @@ namespace RNNSharp
                     Hidden2OutputWeight[c][a] += LearningRate * OutputLayer[c].er * neuHidden[a].cellOutput;
                 }
             });
+        }
+
+        public override void learnNet(State state)
+        {
+
         }
 
         void learnBptt(State state)
@@ -377,7 +405,15 @@ namespace RNNSharp
             bptt_inputs[0] = state.SparseData;
 
             //Save hidden and feature layer nodes values for bptt
-            Array.Copy(neuHidden, 0, bptt_hidden, 0, L1);
+       //     Array.Copy(neuHidden, 0, bptt_hidden, 0, L1);
+
+            for (int i = 0; i < L1; i++)
+            {
+                bptt_hidden[i].cellOutput = neuHidden[i].cellOutput;
+                bptt_hidden[i].er = neuHidden[i].er;
+                bptt_hidden[i].mask = neuHidden[i].mask;
+            }
+
 
             for (int i = 0; i < DenseFeatureSize; i++)
             {
@@ -451,7 +487,7 @@ namespace RNNSharp
         {
             neuFeatures = new SingleVector(DenseFeatureSize);
             OutputLayer = new neuron[L2];
-            neuHidden = new neuron[L1];
+            neuHidden = InitSimpleCell(L1);
         }
 
         // save model as binary format

@@ -10,4 +10,12 @@ namespace RNNSharp
         public double er;		//error value in neuron, used by learning algorithm
         public bool mask;
     }
+
+    public class SimpleCell
+    {
+        //cell output
+        public double cellOutput;
+        public double er;
+        public bool mask;
+    }
 }

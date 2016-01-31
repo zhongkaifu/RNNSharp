@@ -9,7 +9,7 @@ using AdvUtils;
 /// </summary>
 namespace RNNSharp
 {
-    public class LSTMCell
+    public class LSTMCell : SimpleCell
     {
         //input gate
         public float netIn;
@@ -37,10 +37,6 @@ namespace RNNSharp
         //output gate
         public float netOut;
         public float yOut;
-
-        //cell output
-        public float cellOutput;
-        public bool mask;
     }
 
     public struct LSTMWeight
@@ -75,13 +71,37 @@ namespace RNNSharp
             ModelType = MODELTYPE.LSTM;
         }
 
-
-        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
+        public override void SetHiddenLayer(SimpleCell[] cells)
         {
+            neuHidden = (LSTMCell[])cells;
+        }
+
+        public override SimpleCell[] GetHiddenLayer()
+        {
+            LSTMCell[] m = new LSTMCell[L1];
             for (int i = 0; i < L1; i++)
             {
-                m[curStatus][i] = neuHidden[i].cellOutput;
+                m[i] = new LSTMCell();
+                m[i].cellOutput = neuHidden[i].cellOutput;
+                m[i].cellState = neuHidden[i].cellState;
+                m[i].dSWCellForget = neuHidden[i].dSWCellForget;
+                m[i].dSWCellIn = neuHidden[i].dSWCellIn;
+                m[i].er = neuHidden[i].er;
+                m[i].mask = neuHidden[i].mask;
+                m[i].netCellState = neuHidden[i].netCellState;
+                m[i].netForget = neuHidden[i].netForget;
+                m[i].netIn = neuHidden[i].netIn;
+                m[i].netOut = neuHidden[i].netOut;
+                m[i].previousCellState = neuHidden[i].previousCellState;
+                m[i].wCellForget = neuHidden[i].wCellForget;
+                m[i].wCellIn = neuHidden[i].wCellIn;
+                m[i].wCellOut = neuHidden[i].wCellOut;
+                m[i].yForget = neuHidden[i].yForget;
+                m[i].yIn = neuHidden[i].yIn;
+                m[i].yOut = neuHidden[i].yOut;
             }
+
+            return m;
         }
 
         public LSTMWeight[][] loadLSTMWeight(BinaryReader br)
@@ -476,14 +496,38 @@ namespace RNNSharp
         {
         }
 
-        public override void learnNet(State state, int timeat, bool biRNN = false)
+        public override void ComputeHiddenLayerErr()
         {
-            //create delta list
-            if (biRNN == false)
+            Parallel.For(0, L1, parallelOption, i =>
             {
-                CalculateOutputLayerError(state, timeat);
-            }
+                //find the error by find the product of the output errors and their weight connection.
+                neuHidden[i].er = 0.0;
 
+                if (neuHidden[i].mask == false)
+                {
+                    for (int k = 0; k < L2; k++)
+                    {
+                        neuHidden[i].er += OutputLayer[k].er * Hidden2OutputWeight[k][i];
+                    }
+                    neuHidden[i].er = NormalizeErr(neuHidden[i].er);
+                }
+            });
+        }
+
+        public override void LearnOutputWeight()
+        {
+            //update weights for hidden to output layer
+            Parallel.For(0, L1, parallelOption, i =>
+            {
+                for (int k = 0; k < L2; k++)
+                {
+                    Hidden2OutputWeight[k][i] += LearningRate * neuHidden[i].cellOutput * OutputLayer[k].er;
+                }
+            });
+        }
+
+        public override void learnNet(State state)
+        {
             //Get sparse feature and apply it into hidden layer
             var sparse = state.SparseData;
             int sparseFeatureSize = sparse.GetNumberOfEntries();
@@ -491,111 +535,86 @@ namespace RNNSharp
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, L1, parallelOption, i =>
             {
-                LSTMWeightDerivative[] w_i = input2hiddenDeri[i];
                 LSTMCell c = neuHidden[i];
-                float Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = (float)(Sigmoid2Derivative(c.netCellState) * c.yIn);
-                float Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = (float)(Sigmoid2(c.netCellState) * SigmoidDerivative(c.netIn));
-                float ci_previousCellState_mul_SigmoidDerivative_ci_netForget = (float)(c.previousCellState * SigmoidDerivative(c.netForget));
+
+                //using the error find the gradient of the output gate
+                var gradientOutputGate = LearningRate * SigmoidDerivative(c.netOut) * c.cellState * c.er;
+
+                //internal cell state error
+                var cellStateError = LearningRate * c.yOut * c.er;
+
+
+                LSTMWeight[] w_i = input2hidden[i];
+                LSTMWeightDerivative[] wd_i = input2hiddenDeri[i];
+
+                var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = Sigmoid2Derivative(c.netCellState) * c.yIn;
+                var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = Sigmoid2(c.netCellState) * SigmoidDerivative(c.netIn);
+                var ci_previousCellState_mul_SigmoidDerivative_ci_netForget = c.previousCellState * SigmoidDerivative(c.netForget);
 
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
-                    LSTMWeightDerivative w = w_i[entry.Key];
-                    w_i[entry.Key].dSInputCell = w.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * entry.Value;
-                    w_i[entry.Key].dSInputInputGate = w.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * entry.Value;
-                    w_i[entry.Key].dSInputForgetGate = w.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * entry.Value;
+                    LSTMWeightDerivative wd = wd_i[entry.Key];
+                    LSTMWeight w = w_i[entry.Key];
+
+                    wd.dSInputCell = (float)(wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * entry.Value);
+                    wd.dSInputInputGate = (float)(wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * entry.Value);
+                    wd.dSInputForgetGate = (float)(wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * entry.Value);
+
+                    //updates weights for input to hidden layer
+                    w.wInputCell += (float)(cellStateError * wd.dSInputCell);
+                    w.wInputInputGate += (float)(cellStateError * wd.dSInputInputGate);
+                    w.wInputForgetGate += (float)(cellStateError * wd.dSInputForgetGate);
+                    w.wInputOutputGate += (float)(gradientOutputGate * entry.Value);
+
+                    wd_i[entry.Key] = wd;
+                    w_i[entry.Key] = w;
                 }
 
                 if (DenseFeatureSize > 0)
                 {
-                    w_i = feature2hiddenDeri[i];
+                    w_i = feature2hidden[i];
+                    wd_i = feature2hiddenDeri[i];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
-                        LSTMWeightDerivative w = w_i[j];
-                        w_i[j].dSInputCell = w.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * neuFeatures[j];
-                        w_i[j].dSInputInputGate = w.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * neuFeatures[j];
-                        w_i[j].dSInputForgetGate = w.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * neuFeatures[j];
+                        LSTMWeightDerivative wd = wd_i[j];
+                        LSTMWeight w = w_i[j];
+
+                        wd.dSInputCell = (float)(wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * neuFeatures[j]);
+                        wd.dSInputInputGate = (float)(wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * neuFeatures[j]);
+                        wd.dSInputForgetGate = (float)(wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * neuFeatures[j]);
+
+                        //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
+                        //update connection weights
+                        w.wInputCell += (float)(cellStateError * wd.dSInputCell);
+                        w.wInputInputGate += (float)(cellStateError * wd.dSInputInputGate);
+                        w.wInputForgetGate += (float)(cellStateError * wd.dSInputForgetGate);
+                        w.wInputOutputGate += (float)(gradientOutputGate * neuFeatures[j]);
+
+                        wd_i[j] = wd;
+                        w_i[j] = w;
                     }
                 }
 
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.cellState;
+                c.dSWCellIn = (float)(c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.cellState);
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState;
+                c.dSWCellForget = (float)(c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState);
+
+
+                //update internal weights
+                c.wCellIn += (float)(cellStateError * c.dSWCellIn);
+                c.wCellForget += (float)(cellStateError * c.dSWCellForget);
+                c.wCellOut += (float)(gradientOutputGate * c.cellState);
 
                 neuHidden[i] = c;
-            });
-
-            //for each hidden neuron
-            Parallel.For(0, L1, parallelOption, i =>
-          {
-              LSTMCell c = neuHidden[i];
-
-              //find the error by find the product of the output errors and their weight connection.
-              var weightedSum = 0.0;
-              for (int k = 0; k < L2; k++)
-              {
-                  weightedSum += OutputLayer[k].er * Hidden2OutputWeight[k][i];
-              }
-              weightedSum = NormalizeErr(weightedSum);
-
-              //using the error find the gradient of the output gate
-              var gradientOutputGate = (float)(LearningRate * SigmoidDerivative(c.netOut) * c.cellState * weightedSum);
-
-              //internal cell state error
-              var cellStateError = (float)(LearningRate * c.yOut * weightedSum);
-
-              //weight updates
-              LSTMWeight[] w_i = input2hidden[i];
-              LSTMWeightDerivative[] wd_i = input2hiddenDeri[i];
-              for (int k = 0; k < sparseFeatureSize; k++)
-              {
-                  var entry = sparse.GetEntry(k);
-                  //updates weights for input to hidden layer
-                  w_i[entry.Key].wInputCell += cellStateError * wd_i[entry.Key].dSInputCell;
-                  w_i[entry.Key].wInputInputGate += cellStateError * wd_i[entry.Key].dSInputInputGate;
-                  w_i[entry.Key].wInputForgetGate += cellStateError * wd_i[entry.Key].dSInputForgetGate;
-                  w_i[entry.Key].wInputOutputGate += gradientOutputGate * entry.Value;
-              }
-
-
-              if (DenseFeatureSize > 0)
-              {
-                  w_i = feature2hidden[i];
-                  wd_i = feature2hiddenDeri[i];
-                  for (int j = 0; j < DenseFeatureSize; j++)
-                  {
-                      //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
-                      //update connection weights
-                      w_i[j].wInputCell += cellStateError * wd_i[j].dSInputCell;
-                      w_i[j].wInputInputGate += cellStateError * wd_i[j].dSInputInputGate;
-                      w_i[j].wInputForgetGate += cellStateError * wd_i[j].dSInputForgetGate;
-                      w_i[j].wInputOutputGate += gradientOutputGate * neuFeatures[j];
-                  }
-              }
-
-              //update internal weights
-              c.wCellIn += cellStateError * c.dSWCellIn;
-              c.wCellForget += cellStateError * c.dSWCellForget;
-              c.wCellOut += gradientOutputGate * c.cellState;
-
-              neuHidden[i] = c;
-          });
-
-            //update weights for hidden to output layer
-            Parallel.For(0, L1, parallelOption, i =>
-            {
-                for (int k = 0; k < L2; k++)
-                {
-                    Hidden2OutputWeight[k][i] += (float)(LearningRate * neuHidden[i].cellOutput * OutputLayer[k].er);
-                }
             });
         }
 
 
         // forward process. output layer consists of tag value
-        public override void computeNet(State state, double[] doutput, bool isTrain = true)
+        public override void computeHiddenLayer(State state, bool isTrain = true)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
@@ -661,6 +680,11 @@ namespace RNNSharp
                     cell_j.cellState = (float)(cell_j.yForget * cell_j.previousCellState + cell_j.yIn * Sigmoid2(cell_j.netCellState));
                 }
 
+                if (isTrain == false)
+                {
+                    cell_j.cellState = (float)(cell_j.cellState * (1.0 - Dropout));
+                }
+
                 ////include the internal connection multiplied by the CURRENT cell state
                 cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
 
@@ -672,7 +696,10 @@ namespace RNNSharp
 
                 neuHidden[j] = cell_j;
             });
+        }
 
+        public override void computeOutput(double[] doutput)
+        {
             matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, 0, L2, 0, L1);
             if (doutput != null)
             {
@@ -684,6 +711,7 @@ namespace RNNSharp
 
             //activation 2   --softmax on words
             SoftmaxLayer(OutputLayer);
+
         }
 
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history

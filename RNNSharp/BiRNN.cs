@@ -2,6 +2,7 @@
 using System.IO;
 using System.Threading.Tasks;
 using AdvUtils;
+using System.Collections.Generic;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -176,9 +177,14 @@ namespace RNNSharp
             }
         }
 
-        public override void GetHiddenLayer(Matrix<double> m, int curStatus)
+        public override void SetHiddenLayer(SimpleCell[] cells)
         {
-            throw new NotImplementedException("Not implement GetHiddenLayer");
+            throw new NotImplementedException("SetHiddenLayer is not implemented in BiRNN");
+        }
+
+        public override SimpleCell[] GetHiddenLayer()
+        {
+            throw new NotImplementedException("GetHiddenLayer is not implemented in BiRNN");
         }
 
         public override void initMem()
@@ -198,39 +204,38 @@ namespace RNNSharp
             }
         }
 
-        public neuron[][] InnerDecode(Sequence pSequence, out Matrix<neuron> outputHiddenLayer, out Matrix<double> rawOutputLayer)
+        public neuron[][] InnerDecode(Sequence pSequence, out Matrix<neuron> outputHiddenLayer, out Matrix<double> rawOutputLayer, out SimpleCell[][] forwardHidden, out SimpleCell[][] backwardHidden)
         {
             int numStates = pSequence.States.Length;
-            Matrix<double> mForward = null;
-            Matrix<double> mBackward = null;
-
-            //Reset the network
-            netReset(false);
+            SimpleCell[][] mForward = null;
+            SimpleCell[][] mBackward = null;
 
             Parallel.Invoke(() =>
             {
-                //Computing forward RNN
-                mForward = new Matrix<double>(numStates, forwardRNN.L1);
+                //Computing forward RNN      
+                forwardRNN.netReset(false);
+                mForward = new SimpleCell[numStates][];
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     State state = pSequence.States[curState];
                     forwardRNN.setInputLayer(state, curState, numStates, null);
-                    forwardRNN.computeNet(state, null);      //compute probability distribution
+                    forwardRNN.computeHiddenLayer(state);      //compute probability distribution
 
-                    forwardRNN.GetHiddenLayer(mForward, curState);
+                    mForward[curState] = forwardRNN.GetHiddenLayer();
                 }
             },
              () =>
              {
                  //Computing backward RNN
-                 mBackward = new Matrix<double>(numStates, backwardRNN.L1);
+                 backwardRNN.netReset(false);
+                 mBackward = new SimpleCell[numStates][];
                  for (int curState = numStates - 1; curState >= 0; curState--)
                  {
                      State state = pSequence.States[curState];
                      backwardRNN.setInputLayer(state, curState, numStates, null, false);
-                     backwardRNN.computeNet(state, null);      //compute probability distribution
+                     backwardRNN.computeHiddenLayer(state);      //compute probability distribution
 
-                     backwardRNN.GetHiddenLayer(mBackward, curState);
+                     mBackward[curState] = backwardRNN.GetHiddenLayer();
                  }
              });
 
@@ -240,7 +245,7 @@ namespace RNNSharp
             {
                 for (int i = 0; i < forwardRNN.L1; i++)
                 {
-                    mergedHiddenLayer[curState][i].cellOutput = mForward[curState][i] + mBackward[curState][i];
+                    mergedHiddenLayer[curState][i].cellOutput = mForward[curState][i].cellOutput + mBackward[curState][i].cellOutput;
                 }
             });
 
@@ -263,6 +268,8 @@ namespace RNNSharp
 
             outputHiddenLayer = mergedHiddenLayer;
             rawOutputLayer = tmp_rawOutputLayer;
+            forwardHidden = mForward;
+            backwardHidden = mBackward;
 
             return seqOutput;
         }
@@ -274,7 +281,9 @@ namespace RNNSharp
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
-            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer);
+            SimpleCell[][] forwardHidden = null;
+            SimpleCell[][] backwardHidden = null;
+            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
 
             ForwardBackward(numStates, rawOutputLayer);
 
@@ -305,7 +314,7 @@ namespace RNNSharp
                     seqOutput[curState][label].er = 1 - CRFSeqOutput[curState][label];
                 }
 
-                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput, forwardHidden, backwardHidden);
             }
 
             return predict;
@@ -319,7 +328,9 @@ namespace RNNSharp
             //Predict output
             Matrix<neuron> mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
-            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer);
+            SimpleCell[][] forwardHidden = null;
+            SimpleCell[][] backwardHidden = null;
+            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
 
             if (runningMode != RunningMode.Test)
             {
@@ -341,40 +352,47 @@ namespace RNNSharp
                     {
                         seqOutput[curState][c].er = -seqOutput[curState][c].cellOutput;
                     }
-                    seqOutput[curState][label].er = 1 - seqOutput[curState][label].cellOutput;
+                    seqOutput[curState][label].er = 1.0 - seqOutput[curState][label].cellOutput;
                 }
 
-                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
+                LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput, forwardHidden, backwardHidden);
             }
 
             return rawOutputLayer;
         }
 
-        private void LearnTwoRNN(Sequence pSequence, Matrix<neuron> mergedHiddenLayer, neuron[][] seqOutput)
+        private void LearnTwoRNN(Sequence pSequence, Matrix<neuron> mergedHiddenLayer, neuron[][] seqOutput, SimpleCell[][] forwardHidden, SimpleCell[][] backwardHidden)
         {
-            netReset(true);
-
             int numStates = pSequence.States.Length;
-            forwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
-            backwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
 
             Parallel.Invoke(() =>
-                {
-                    for (int curState = 0; curState < numStates; curState++)
-                    {
-                        for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
-                        {
-                            //update weights for hidden to output layer
+            {
+                forwardRNN.netReset(true);
+                forwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
+            },
+            () =>
+            {
+                backwardRNN.netReset(true);
+                backwardRNN.Hidden2OutputWeight = Hidden2OutputWeight.CopyTo();
+            });
 
-                            for (int k = 0; k < Hidden2OutputWeight.GetWidth(); k++)
-                            {
-                                Hidden2OutputWeight[i][k] += LearningRate * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
-                            }
+            Parallel.Invoke(() =>
+            {
+                for (int curState = 0; curState < numStates; curState++)
+                {
+                    for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
+                    {
+                        //update weights for hidden to output layer
+
+                        for (int k = 0; k < Hidden2OutputWeight.GetWidth(); k++)
+                        {
+                            Hidden2OutputWeight[i][k] += LearningRate * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
                         }
                     }
+                }
 
-                },
-                ()=>
+            },
+            ()=>
             {
 
                 //Learn forward network
@@ -382,13 +400,15 @@ namespace RNNSharp
                 {
                     // error propogation
                     State state = pSequence.States[curState];
-                    forwardRNN.setInputLayer(state, curState, numStates, null);
-                    forwardRNN.computeNet(state, null);      //compute probability distribution
 
+                    forwardRNN.setInputLayer(state, curState, numStates, null);
+                    forwardRNN.SetHiddenLayer(forwardHidden[curState]);
                     //Copy output result to forward net work's output
                     forwardRNN.OutputLayer = seqOutput[curState];
 
-                    forwardRNN.learnNet(state, curState, true);
+                    forwardRNN.ComputeHiddenLayerErr();
+
+                    forwardRNN.learnNet(state);
                     forwardRNN.LearnBackTime(state, numStates, curState);
                 }
             },
@@ -401,37 +421,53 @@ namespace RNNSharp
 
                     // error propogation
                     State state2 = pSequence.States[curState2];
-                    backwardRNN.setInputLayer(state2, curState2, numStates, null, false);
-                    backwardRNN.computeNet(state2, null);      //compute probability distribution
 
+                    backwardRNN.setInputLayer(state2, curState2, numStates, null, false);
+                    backwardRNN.SetHiddenLayer(backwardHidden[curState2]);
                     //Copy output result to forward net work's output
                     backwardRNN.OutputLayer = seqOutput[curState2];
 
-                    backwardRNN.learnNet(state2, curState2, true);
+                    backwardRNN.ComputeHiddenLayerErr();
+
+                    backwardRNN.learnNet(state2);
                     backwardRNN.LearnBackTime(state2, numStates, curState2);
                 }
             });
         }
 
+        public override void ComputeHiddenLayerErr()
+        {
+            throw new NotImplementedException("ComputeHiddenLayerErr is not implemented in BiRNN");
+        }
+
+        public override void LearnOutputWeight()
+        {
+            throw new NotImplementedException("LearnOutputWeight is not implemented in BiRNN");
+        }
 
         public override void LearnBackTime(State state, int numStates, int curState)
         {
+            throw new NotImplementedException("LearnBackTime is not implemented in BiRNN");
         }
 
-        public override void learnNet(State state, int timeat, bool biRNN = false)
+        public override void learnNet(State state)
         {
-
+            throw new NotImplementedException("learnNet is not implemented in BiRNN");
         }
 
-        public override void computeNet(State state, double[] doutput, bool isTrain = true)
+        public override void computeHiddenLayer(State state, bool isTrain = true)
         {
+            throw new NotImplementedException("computeHiddenLayer is not implemented in BiRNN");
+        }
 
+        public override void computeOutput(double[] doutput)
+        {
+            throw new NotImplementedException("computeOutput is not implemented in BiRNN");
         }
 
         public override void netReset(bool updateNet = false)
         {
-            forwardRNN.netReset(updateNet);
-            backwardRNN.netReset(updateNet);
+            throw new NotImplementedException("netReset is not implemented in BiRNN");
         }
 
         public override void saveNetBin(string filename)
