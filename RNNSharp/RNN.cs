@@ -58,7 +58,7 @@ namespace RNNSharp
 
         public MODELTYPE ModelType { get; set; }
         public Matrix<double> CRFTagTransWeights { get; set; }
-        public neuron[] OutputLayer { get; set; }
+        public SimpleCell[] OutputLayer { get; set; }
         public Matrix<double> Hidden2OutputWeight;
       
         // CRF result output
@@ -81,15 +81,23 @@ namespace RNNSharp
 
         }
 
+        protected SimpleCell[] InitSimpleCell(int size)
+        {
+            SimpleCell[] cells = new SimpleCell[size];
+            for (int i = 0; i < size; i++)
+            {
+                cells[i] = new SimpleCell();
+            }
+
+            return cells;
+        }
+
         //Save matrix into file as binary format
         protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo, bool BuildVQ = true)
         {
-            int width = mat.GetWidth();
-            int height = mat.GetHeight();
-
             //Save the width and height of the matrix
-            fo.Write(width);
-            fo.Write(height);
+            fo.Write(mat.Width);
+            fo.Write(mat.Height);
 
             if (BuildVQ == false)
             {
@@ -97,9 +105,9 @@ namespace RNNSharp
                 fo.Write(0); // non-VQ
 
                 //Save the data in matrix
-                for (int r = 0; r < height; r++)
+                for (int r = 0; r < mat.Height; r++)
                 {
-                    for (int c = 0; c < width; c++)
+                    for (int c = 0; c < mat.Width; c++)
                     {
                         fo.Write((float)mat[r][c]);
                     }
@@ -113,9 +121,9 @@ namespace RNNSharp
                 Logger.WriteLine("Saving matrix with VQ {0}...", vqSize);
 
                 int valSize = 0;
-                for (int i = 0; i < height; i++)
+                for (int i = 0; i < mat.Height; i++)
                 {
-                    for (int j = 0; j < width; j++)
+                    for (int j = 0; j < mat.Width; j++)
                     {
                         vq.Add(mat[i][j]);
                         valSize++;
@@ -138,9 +146,9 @@ namespace RNNSharp
                 }
 
                 //Save the data in matrix
-                for (int r = 0; r < height; r++)
+                for (int r = 0; r < mat.Height; r++)
                 {
-                    for (int c = 0; c < width; c++)
+                    for (int c = 0; c < mat.Width; c++)
                     {
                         fo.Write((byte)vq.ComputeVQ(mat[r][c]));
                     }
@@ -249,7 +257,7 @@ namespace RNNSharp
 
                 if (runningMode != RunningMode.Test)
                 {
-                    logp += Math.Log10(OutputLayer[state.Label].cellOutput);
+                    logp += Math.Log10(OutputLayer[state.Label].cellOutput + 0.0001);
                 }
 
                 if (runningMode == RunningMode.Train)
@@ -274,17 +282,18 @@ namespace RNNSharp
         }
 
 
-        public void SoftmaxLayer(neuron[] layer)
+        public void SoftmaxLayer(SimpleCell[] layer)
         {
             //activation 2   --softmax on words
             double sum = 0;   //sum is used for normalization: it's better to have larger precision as many numbers are summed together here
             for (int c = 0; c < L2; c++)
             {
-                if (layer[c].cellOutput > 50) layer[c].cellOutput = 50;  //for numerical stability
-                if (layer[c].cellOutput < -50) layer[c].cellOutput = -50;  //for numerical stability
-                double val = Math.Exp(layer[c].cellOutput);
+                SimpleCell cell = layer[c];
+                if (cell.cellOutput > 50) cell.cellOutput = 50;  //for numerical stability
+                if (cell.cellOutput < -50) cell.cellOutput = -50;  //for numerical stability
+                double val = Math.Exp(cell.cellOutput);
                 sum += val;
-                layer[c].cellOutput = val;
+                cell.cellOutput = val;
             }
             for (int c = 0; c < L2; c++)
             {
@@ -319,7 +328,7 @@ namespace RNNSharp
                 //Get the best result
                 for (int i = 0; i < numStates; i++)
                 {
-                    logp += Math.Log10(CRFSeqOutput[i][pSequence.States[i].Label]);
+                    logp += Math.Log10(CRFSeqOutput[i][pSequence.States[i].Label] + 0.0001);
                 }
             }
 
@@ -577,72 +586,6 @@ namespace RNNSharp
             return err;
         }
 
-        public void matrixXvectorADD(neuron[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
-        {
-            if (type == 0)
-            {
-                //ac mod
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].cellOutput = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
-                    }
-                });
-
-            }
-            else
-            {
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].er = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
-                    }
-                });
-
-                for (int i = from; i < to; i++)
-                {
-                    dest[i].er = NormalizeErr(dest[i].er);
-                }
-            }
-        }
-
-        public void matrixXvectorADD(SimpleCell[] dest, neuron[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
-        {
-            if (type == 0)
-            {
-                //ac mod
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].cellOutput = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
-                    }
-                });
-
-            }
-            else
-            {
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].er = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
-                    }
-                });
-
-                for (int i = from; i < to; i++)
-                {
-                    dest[i].er = NormalizeErr(dest[i].er);
-                }
-            }
-        }
-
         public void matrixXvectorADD(SimpleCell[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
         {
             if (type == 0)
@@ -650,10 +593,12 @@ namespace RNNSharp
                 //ac mod
                 Parallel.For(0, (to - from), parallelOption, i =>
                 {
-                    dest[i + from].cellOutput = 0;
+                    SimpleCell cell = dest[i + from];
+                    double[] vector_i = srcmatrix[i];
+                    cell.cellOutput = 0;
                     for (int j = 0; j < to2 - from2; j++)
                     {
-                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
+                        cell.cellOutput += srcvec[j + from2].cellOutput * vector_i[j];
                     }
                 });
 
@@ -662,44 +607,11 @@ namespace RNNSharp
             {
                 Parallel.For(0, (to - from), parallelOption, i =>
                 {
-                    dest[i + from].er = 0;
+                    SimpleCell cell = dest[i + from];
+                    cell.er = 0;
                     for (int j = 0; j < to2 - from2; j++)
                     {
-                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
-                    }
-                });
-
-                for (int i = from; i < to; i++)
-                {
-                    dest[i].er = NormalizeErr(dest[i].er);
-                }
-            }
-        }
-
-
-        public void matrixXvectorADD(neuron[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
-        {
-            if (type == 0)
-            {
-                //ac mod
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].cellOutput = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
-                    }
-                });
-
-            }
-            else
-            {
-                Parallel.For(0, (to - from), parallelOption, i =>
-                {
-                    dest[i + from].er = 0;
-                    for (int j = 0; j < to2 - from2; j++)
-                    {
-                        dest[i + from].er += srcvec[j + from2].er * srcmatrix[j][i];
+                        cell.er += srcvec[j + from2].er * srcmatrix[j][i];
                     }
                 });
 
@@ -712,9 +624,9 @@ namespace RNNSharp
 
         public int[] GetBestResult(Matrix<double> ys)
         {
-            int[] output = new int[ys.GetHeight()];
+            int[] output = new int[ys.Height];
 
-            for (int i = 0; i < ys.GetHeight(); i++)
+            for (int i = 0; i < ys.Height; i++)
             {
                 output[i] = MathUtil.GetMaxProbIndex(ys[i]);
             }

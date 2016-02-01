@@ -73,7 +73,7 @@ namespace RNNSharp
                 }
             }
 
-            for (b = 0; b < Hidden2OutputWeight.GetHeight(); b++)
+            for (b = 0; b < Hidden2OutputWeight.Height; b++)
             {
                 for (a = 0; a < L1; a++)
                 {
@@ -127,18 +127,6 @@ namespace RNNSharp
                 if (neuHidden[a].cellOutput < -50) neuHidden[a].cellOutput = -50;  //for numerical stability
                 neuHidden[a].cellOutput = 1.0 / (1.0 + Math.Exp(-neuHidden[a].cellOutput));
             });
-        }
-
-
-        private SimpleCell[] InitSimpleCell(int size)
-        {
-            SimpleCell[] cells = new SimpleCell[size];
-            for (int i = 0;i < size;i++)
-            {
-                cells[i] = new SimpleCell();
-            }
-
-            return cells;
         }
 
         // forward process. output layer consists of tag value
@@ -216,9 +204,10 @@ namespace RNNSharp
             //Update hidden-output weights
             Parallel.For(0, L1, parallelOption, a =>
             {
+                double cellOutput = neuHidden[a].cellOutput;
                 for (int c = 0; c < L2; c++)
                 {
-                    Hidden2OutputWeight[c][a] += LearningRate * OutputLayer[c].er * neuHidden[a].cellOutput;
+                    Hidden2OutputWeight[c][a] += LearningRate * OutputLayer[c].er * cellOutput;
                 }
             });
         }
@@ -486,7 +475,7 @@ namespace RNNSharp
         private void CreateCells()
         {
             neuFeatures = new SingleVector(DenseFeatureSize);
-            OutputLayer = new neuron[L2];
+            OutputLayer = InitSimpleCell(L2);
             neuHidden = InitSimpleCell(L1);
         }
 

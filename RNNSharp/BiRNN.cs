@@ -195,16 +195,16 @@ namespace RNNSharp
             //Create and intialise the weights from hidden to output layer, these are just normal weights
             Hidden2OutputWeight = new Matrix<double>(L2, L1);
 
-            for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
+            for (int i = 0; i < Hidden2OutputWeight.Height; i++)
             {
-                for (int j = 0; j < Hidden2OutputWeight.GetWidth(); j++)
+                for (int j = 0; j < Hidden2OutputWeight.Width; j++)
                 {
                     Hidden2OutputWeight[i][j] = RandInitWeight();
                 }
             }
         }
 
-        public neuron[][] InnerDecode(Sequence pSequence, out Matrix<neuron> outputHiddenLayer, out Matrix<double> rawOutputLayer, out SimpleCell[][] forwardHidden, out SimpleCell[][] backwardHidden)
+        public SimpleCell[][] InnerDecode(Sequence pSequence, out SimpleCell[][] outputHiddenLayer, out Matrix<double> rawOutputLayer, out SimpleCell[][] forwardHidden, out SimpleCell[][] backwardHidden)
         {
             int numStates = pSequence.States.Length;
             SimpleCell[][] mForward = null;
@@ -240,30 +240,37 @@ namespace RNNSharp
              });
 
             //Merge forward and backward
-            Matrix<neuron> mergedHiddenLayer = new Matrix<neuron>(numStates, forwardRNN.L1);
+            SimpleCell[][] mergedHiddenLayer = new SimpleCell[numStates][];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
+                mergedHiddenLayer[curState] = InitSimpleCell(L1);
+                SimpleCell[] cells = mergedHiddenLayer[curState];
+                SimpleCell[] forwardCells = mForward[curState];
+                SimpleCell[] backwardCells = mBackward[curState];
+
                 for (int i = 0; i < forwardRNN.L1; i++)
                 {
-                    mergedHiddenLayer[curState][i].cellOutput = mForward[curState][i].cellOutput + mBackward[curState][i].cellOutput;
+                    cells[i].cellOutput = forwardCells[i].cellOutput + backwardCells[i].cellOutput;
                 }
             });
 
             //Calculate output layer
             Matrix<double> tmp_rawOutputLayer = new Matrix<double>(numStates, L2);
-            neuron[][] seqOutput = new neuron[numStates][];
+            SimpleCell[][] seqOutput = new SimpleCell[numStates][];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
-                seqOutput[curState] = new neuron[L2];
-                matrixXvectorADD(seqOutput[curState], mergedHiddenLayer[curState], Hidden2OutputWeight, 0, L2, 0, L1, 0);
+                seqOutput[curState] = InitSimpleCell(L2);
+                SimpleCell[] outputCells = seqOutput[curState];
+
+                matrixXvectorADD(outputCells, mergedHiddenLayer[curState], Hidden2OutputWeight, 0, L2, 0, L1, 0);
 
                 for (int i = 0; i < L2; i++)
                 {
-                    tmp_rawOutputLayer[curState][i] = seqOutput[curState][i].cellOutput;
+                    tmp_rawOutputLayer[curState][i] = outputCells[i].cellOutput;
                 }
 
                 //Activation on output layer
-                SoftmaxLayer(seqOutput[curState]);
+                SoftmaxLayer(outputCells);
             });
 
             outputHiddenLayer = mergedHiddenLayer;
@@ -279,11 +286,11 @@ namespace RNNSharp
             //Reset the network
             int numStates = pSequence.States.Length;
             //Predict output
-            Matrix<neuron> mergedHiddenLayer = null;
+            SimpleCell[][] mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
             SimpleCell[][] forwardHidden = null;
             SimpleCell[][] backwardHidden = null;
-            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
+            SimpleCell[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
 
             ForwardBackward(numStates, rawOutputLayer);
 
@@ -292,7 +299,7 @@ namespace RNNSharp
                 //Get the best result
                 for (int i = 0; i < numStates; i++)
                 {
-                    logp += Math.Log10(CRFSeqOutput[i][pSequence.States[i].Label]);
+                    logp += Math.Log10(CRFSeqOutput[i][pSequence.States[i].Label] + 0.0001);
                 }
             }
 
@@ -306,12 +313,15 @@ namespace RNNSharp
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     int label = pSequence.States[curState].Label;
+                    SimpleCell[] layer = seqOutput[curState];
+                    double[] CRFOutputLayer = CRFSeqOutput[curState];
+
                     //For standard RNN
                     for (int c = 0; c < L2; c++)
                     {
-                        seqOutput[curState][c].er = -CRFSeqOutput[curState][c];
+                        layer[c].er = -CRFOutputLayer[c];
                     }
-                    seqOutput[curState][label].er = 1 - CRFSeqOutput[curState][label];
+                    layer[label].er = 1 - CRFOutputLayer[label];
                 }
 
                 LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput, forwardHidden, backwardHidden);
@@ -326,18 +336,18 @@ namespace RNNSharp
             int numStates = pSequence.States.Length;
 
             //Predict output
-            Matrix<neuron> mergedHiddenLayer = null;
+            SimpleCell[][] mergedHiddenLayer = null;
             Matrix<double> rawOutputLayer = null;
             SimpleCell[][] forwardHidden = null;
             SimpleCell[][] backwardHidden = null;
-            neuron[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
+            SimpleCell[][] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer, out forwardHidden, out backwardHidden);
 
             if (runningMode != RunningMode.Test)
             {
                 //Merge forward and backward
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    logp += Math.Log10(seqOutput[curState][pSequence.States[curState].Label].cellOutput);
+                    logp += Math.Log10(seqOutput[curState][pSequence.States[curState].Label].cellOutput + 0.0001);
                 }
             }
 
@@ -347,12 +357,14 @@ namespace RNNSharp
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     int label = pSequence.States[curState].Label;
+                    SimpleCell[] layer = seqOutput[curState];
+
                     //For standard RNN
                     for (int c = 0; c < L2; c++)
                     {
-                        seqOutput[curState][c].er = -seqOutput[curState][c].cellOutput;
+                        layer[c].er = -layer[c].cellOutput;
                     }
-                    seqOutput[curState][label].er = 1.0 - seqOutput[curState][label].cellOutput;
+                    layer[label].er = 1.0 - layer[label].cellOutput;
                 }
 
                 LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput, forwardHidden, backwardHidden);
@@ -361,7 +373,7 @@ namespace RNNSharp
             return rawOutputLayer;
         }
 
-        private void LearnTwoRNN(Sequence pSequence, Matrix<neuron> mergedHiddenLayer, neuron[][] seqOutput, SimpleCell[][] forwardHidden, SimpleCell[][] backwardHidden)
+        private void LearnTwoRNN(Sequence pSequence, SimpleCell[][] mergedHiddenLayer, SimpleCell[][] seqOutput, SimpleCell[][] forwardHidden, SimpleCell[][] backwardHidden)
         {
             int numStates = pSequence.States.Length;
 
@@ -380,13 +392,17 @@ namespace RNNSharp
             {
                 for (int curState = 0; curState < numStates; curState++)
                 {
-                    for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
+                    SimpleCell[] outputCells = seqOutput[curState];
+                    SimpleCell[] mergedHiddenCells = mergedHiddenLayer[curState];
+                    for (int i = 0; i < Hidden2OutputWeight.Height; i++)
                     {
                         //update weights for hidden to output layer
 
-                        for (int k = 0; k < Hidden2OutputWeight.GetWidth(); k++)
+                        double er = outputCells[i].er;
+                        double[] vector_i = Hidden2OutputWeight[i];
+                        for (int k = 0; k < Hidden2OutputWeight.Width; k++)
                         {
-                            Hidden2OutputWeight[i][k] += LearningRate * mergedHiddenLayer[curState][k].cellOutput * seqOutput[curState][i].er;
+                            vector_i[k] += LearningRate * mergedHiddenCells[k].cellOutput * er;
                         }
                     }
                 }

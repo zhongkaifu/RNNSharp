@@ -7,18 +7,18 @@ namespace RNNSharp
     public class Matrix<T>
     {
 
-        private int m_nHeight; // the number of rows
-        private int m_nWidth; // the number of columns
+        public int Height { get; set; } // the number of rows
+        public int Width { get; set; } // the number of columns
         private T[][] m_saData;
 
         public Matrix(int h, int w)
         {
-            m_nHeight = h;
-            m_nWidth = w;
-            m_saData = new T[m_nHeight][];
-            for (int i = 0; i < m_nHeight; i++)
+            Height = h;
+            Width = w;
+            m_saData = new T[Height][];
+            for (int i = 0; i < Height; i++)
             {
-                m_saData[i] = new T[m_nWidth];
+                m_saData[i] = new T[Width];
             }
         }
 
@@ -35,23 +35,13 @@ namespace RNNSharp
             }
         }
 
-        public int GetWidth()
-        {
-            return m_nWidth;
-        }
-
-        public int GetHeight()
-        {
-            return m_nHeight;
-        }
-
         public Matrix<T> CopyTo()
         {
-            Matrix<T> m = new Matrix<T>(m_nHeight, m_nWidth);
+            Matrix<T> m = new Matrix<T>(Height, Width);
 
-            for (int i = 0; i < m_nHeight; i++)
+            for (int i = 0; i < Height; i++)
             {
-                for (int j = 0; j < m_nWidth; j++)
+                for (int j = 0; j < Width; j++)
                 {
                     m[i][j] = m_saData[i][j];
                 }

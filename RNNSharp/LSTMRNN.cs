@@ -30,8 +30,8 @@ namespace RNNSharp
         public float wCellOut;
 
         //partial derivatives
-        public float dSWCellIn;
-        public float dSWCellForget;
+        public double dSWCellIn;
+        public double dSWCellForget;
         //double dSWCellState;
 
         //output gate
@@ -52,9 +52,9 @@ namespace RNNSharp
     public struct LSTMWeightDerivative
     {
         //partial derivatives. dont need partial derivative for output gate as it uses BP not RTRL
-        public float dSInputCell;
-        public float dSInputInputGate;
-        public float dSInputForgetGate;
+        public double dSInputCell;
+        public double dSInputInputGate;
+        public double dSInputForgetGate;
     }
 
     public class LSTMRNN : RNN
@@ -378,9 +378,9 @@ namespace RNNSharp
             //Create and intialise the weights from hidden to output layer, these are just normal weights
             Hidden2OutputWeight = new Matrix<double>(L2, L1);
 
-            for (int i = 0; i < Hidden2OutputWeight.GetHeight(); i++)
+            for (int i = 0; i < Hidden2OutputWeight.Height; i++)
             {
-                for (int j = 0; j < Hidden2OutputWeight.GetWidth(); j++)
+                for (int j = 0; j < Hidden2OutputWeight.Width; j++)
                 {
                     Hidden2OutputWeight[i][j] = RandInitWeight();
                 }
@@ -441,7 +441,7 @@ namespace RNNSharp
         private void CreateCell(BinaryReader br)
         {
             neuFeatures = new SingleVector(DenseFeatureSize);
-            OutputLayer = new neuron[L2];
+            OutputLayer = InitSimpleCell(L2);
 
             for (int a = 0; a < L2; a++)
             {
@@ -479,19 +479,6 @@ namespace RNNSharp
             }
         }
 
-        public void matrixXvectorADD(neuron[] dest, LSTMCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2)
-        {
-            //ac mod
-            Parallel.For(0, (to - from), parallelOption, i =>
-            {
-                dest[i + from].cellOutput = 0;
-                for (int j = 0; j < to2 - from2; j++)
-                {
-                    dest[i + from].cellOutput += srcvec[j + from2].cellOutput * srcmatrix[i][j];
-                }
-            });
-        }
-
         public override void LearnBackTime(State state, int numStates, int curState)
         {
         }
@@ -501,15 +488,17 @@ namespace RNNSharp
             Parallel.For(0, L1, parallelOption, i =>
             {
                 //find the error by find the product of the output errors and their weight connection.
-                neuHidden[i].er = 0.0;
+                SimpleCell cell = neuHidden[i];
 
-                if (neuHidden[i].mask == false)
+                cell.er = 0.0;
+
+                if (cell.mask == false)
                 {
                     for (int k = 0; k < L2; k++)
                     {
-                        neuHidden[i].er += OutputLayer[k].er * Hidden2OutputWeight[k][i];
+                        cell.er += OutputLayer[k].er * Hidden2OutputWeight[k][i];
                     }
-                    neuHidden[i].er = NormalizeErr(neuHidden[i].er);
+                    cell.er = NormalizeErr(neuHidden[i].er);
                 }
             });
         }
@@ -519,9 +508,10 @@ namespace RNNSharp
             //update weights for hidden to output layer
             Parallel.For(0, L1, parallelOption, i =>
             {
+                double cellOutput = neuHidden[i].cellOutput;
                 for (int k = 0; k < L2; k++)
                 {
-                    Hidden2OutputWeight[k][i] += LearningRate * neuHidden[i].cellOutput * OutputLayer[k].er;
+                    Hidden2OutputWeight[k][i] += LearningRate * cellOutput * OutputLayer[k].er;
                 }
             });
         }
@@ -557,9 +547,9 @@ namespace RNNSharp
                     LSTMWeightDerivative wd = wd_i[entry.Key];
                     LSTMWeight w = w_i[entry.Key];
 
-                    wd.dSInputCell = (float)(wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * entry.Value);
-                    wd.dSInputInputGate = (float)(wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * entry.Value);
-                    wd.dSInputForgetGate = (float)(wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * entry.Value);
+                    wd.dSInputCell = wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * entry.Value;
+                    wd.dSInputInputGate = wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * entry.Value;
+                    wd.dSInputForgetGate = wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * entry.Value;
 
                     //updates weights for input to hidden layer
                     w.wInputCell += (float)(cellStateError * wd.dSInputCell);
@@ -580,9 +570,9 @@ namespace RNNSharp
                         LSTMWeightDerivative wd = wd_i[j];
                         LSTMWeight w = w_i[j];
 
-                        wd.dSInputCell = (float)(wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * neuFeatures[j]);
-                        wd.dSInputInputGate = (float)(wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * neuFeatures[j]);
-                        wd.dSInputForgetGate = (float)(wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * neuFeatures[j]);
+                        wd.dSInputCell = wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * neuFeatures[j];
+                        wd.dSInputInputGate = wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * neuFeatures[j];
+                        wd.dSInputForgetGate = wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * neuFeatures[j];
 
                         //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
                         //update connection weights
@@ -597,10 +587,10 @@ namespace RNNSharp
                 }
 
                 //partial derivatives for internal connections
-                c.dSWCellIn = (float)(c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.cellState);
+                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.cellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = (float)(c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState);
+                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState;
 
 
                 //update internal weights
@@ -700,7 +690,7 @@ namespace RNNSharp
 
         public override void computeOutput(double[] doutput)
         {
-            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, 0, L2, 0, L1);
+            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, 0, L2, 0, L1, 0);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
