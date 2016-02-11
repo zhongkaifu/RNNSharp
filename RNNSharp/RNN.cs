@@ -586,39 +586,36 @@ namespace RNNSharp
             return err;
         }
 
-        public void matrixXvectorADD(SimpleCell[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int from, int to, int from2, int to2, int type)
+        public void matrixXvectorADD(SimpleCell[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
         {
             if (type == 0)
             {
                 //ac mod
-                Parallel.For(0, (to - from), parallelOption, i =>
+                Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    SimpleCell cell = dest[i + from];
+                    SimpleCell cell = dest[i];
                     double[] vector_i = srcmatrix[i];
                     cell.cellOutput = 0;
-                    for (int j = 0; j < to2 - from2; j++)
+                    for (int j = 0; j < SrcSize; j++)
                     {
-                        cell.cellOutput += srcvec[j + from2].cellOutput * vector_i[j];
+                        cell.cellOutput += srcvec[j].cellOutput * vector_i[j];
                     }
                 });
 
             }
             else
             {
-                Parallel.For(0, (to - from), parallelOption, i =>
+                Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    SimpleCell cell = dest[i + from];
+                    SimpleCell cell = dest[i];
                     cell.er = 0;
-                    for (int j = 0; j < to2 - from2; j++)
+                    for (int j = 0; j < SrcSize; j++)
                     {
-                        cell.er += srcvec[j + from2].er * srcmatrix[j][i];
+                        cell.er += srcvec[j].er * srcmatrix[j][i];
                     }
-                });
 
-                for (int i = from; i < to; i++)
-                {
-                    dest[i].er = NormalizeErr(dest[i].er);
-                }
+                    cell.er = NormalizeErr(cell.er);
+                });
             }
         }
 

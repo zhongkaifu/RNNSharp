@@ -262,7 +262,7 @@ namespace RNNSharp
                 seqOutput[curState] = InitSimpleCell(L2);
                 SimpleCell[] outputCells = seqOutput[curState];
 
-                matrixXvectorADD(outputCells, mergedHiddenLayer[curState], Hidden2OutputWeight, 0, L2, 0, L1, 0);
+                matrixXvectorADD(outputCells, mergedHiddenLayer[curState], Hidden2OutputWeight, L2, L1, 0);
 
                 for (int i = 0; i < L2; i++)
                 {

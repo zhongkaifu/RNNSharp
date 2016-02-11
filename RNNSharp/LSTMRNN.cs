@@ -740,7 +740,7 @@ namespace RNNSharp
 
         public override void computeOutput(double[] doutput)
         {
-            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, 0, L2, 0, L1, 0);
+            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, L2, L1, 0);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
