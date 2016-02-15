@@ -20,7 +20,7 @@ namespace RNNSharp
 
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
-                Logger.WriteLine(Logger.Level.info, "Model Structure: Bi-directional RNN");
+                Logger.WriteLine("Model Structure: Bi-directional RNN");
                 if (modelType == MODELTYPE.SIMPLE)
                 {
                     m_Rnn = new BiRNN(new SimpleRNN(), new SimpleRNN());
@@ -34,18 +34,18 @@ namespace RNNSharp
             {
                 if (modelType == MODELTYPE.SIMPLE)
                 {
-                    Logger.WriteLine(Logger.Level.info, "Model Structure: Simple RNN");
+                    Logger.WriteLine("Model Structure: Simple RNN");
                     m_Rnn = new SimpleRNN();
                 }
                 else
                 {
-                    Logger.WriteLine(Logger.Level.info, "Model Structure: LSTM-RNN");
+                    Logger.WriteLine("Model Structure: LSTM-RNN");
                     m_Rnn = new LSTMRNN();
                 }
             }
 
             m_Rnn.loadNetBin(strModelFileName);
-            Logger.WriteLine(Logger.Level.info, "CRF Model: {0}", m_Rnn.IsCRFTraining);
+            Logger.WriteLine("CRF Model: {0}", m_Rnn.IsCRFTraining);
             m_Featurizer = featurizer;
         }
 

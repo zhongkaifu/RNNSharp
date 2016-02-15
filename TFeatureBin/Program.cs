@@ -28,7 +28,7 @@ namespace TFeatureBin
                 {
                     if (a == args.Length - 1)
                     {
-                        Logger.WriteLine(Logger.Level.info, "Argument missing for {0}", str);
+                        Logger.WriteLine("Argument missing for {0}", str);
                         return -1;
                     }
                     return a;
@@ -162,11 +162,11 @@ namespace TFeatureBin
         static IDictionary<string, int> ExtractFeatureSetFromFile()
         {
             //Load templates from given file
-            Logger.WriteLine(Logger.Level.info, "Loading feature template from {0}...", strTemplateFile);
+            Logger.WriteLine("Loading feature template from {0}...", strTemplateFile);
             templateFeaturizer = new TemplateFeaturizer();
             templateFeaturizer.LoadTemplateFromFile(strTemplateFile);
 
-            Logger.WriteLine(Logger.Level.info, "Generate feature set...");
+            Logger.WriteLine("Generate feature set...");
             BigDictionary<string, int> feature2freq = new BigDictionary<string, int>();
 
 
@@ -223,7 +223,7 @@ namespace TFeatureBin
             }
 
             //Only save the feature whose frequency is not less than minfreq
-            Logger.WriteLine(Logger.Level.info, "Filter out features whose frequency is less than {0}", minfreq);
+            Logger.WriteLine("Filter out features whose frequency is less than {0}", minfreq);
             SortedDictionary<string, int> features = new SortedDictionary<string, int>(StringComparer.Ordinal);
             foreach (KeyValuePair<string, int> pair in feature2freq)
             {

@@ -71,11 +71,6 @@ namespace RNNSharp
             ModelType = MODELTYPE.LSTM;
         }
 
-        public override void SetHiddenLayer(SimpleCell[] cells)
-        {
-            neuHidden = (LSTMCell[])cells;
-        }
-
         public override SimpleCell[] GetHiddenLayer()
         {
             LSTMCell[] m = new LSTMCell[L1];
@@ -244,7 +239,7 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
-            Logger.WriteLine(Logger.Level.info, "Loading LSTM-RNN model: {0}", filename);
+            Logger.WriteLine("Loading LSTM-RNN model: {0}", filename);
 
             StreamReader sr = new StreamReader(filename);
             BinaryReader br = new BinaryReader(sr.BaseStream);
@@ -485,7 +480,7 @@ namespace RNNSharp
                 }
             }
 
-            Logger.WriteLine(Logger.Level.info, "[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
+            Logger.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
         }
 
@@ -549,7 +544,6 @@ namespace RNNSharp
                     {
                         cell.er += OutputLayer[k].er * Hidden2OutputWeight[k][i];
                     }
-                    //cell.er = NormalizeErr(cell.er);
                 }
             });
         }
@@ -562,7 +556,7 @@ namespace RNNSharp
                 double cellOutput = neuHidden[i].cellOutput;
                 for (int k = 0; k < L2; k++)
                 {
-                    Hidden2OutputWeight[k][i] += LearningRate * NormalizeErr(cellOutput * OutputLayer[k].er);
+                    Hidden2OutputWeight[k][i] += LearningRate * NormalizeGradient(cellOutput * OutputLayer[k].er);
                 }
             });
         }
@@ -579,10 +573,10 @@ namespace RNNSharp
                 LSTMCell c = neuHidden[i];
 
                 //using the error find the gradient of the output gate
-                var gradientOutputGate = LearningRate * NormalizeErr(SigmoidDerivative(c.netOut) * c.cellState * c.er);
+                var gradientOutputGate = LearningRate * NormalizeGradient(SigmoidDerivative(c.netOut) * c.cellState * c.er);
 
                 //internal cell state error
-                var cellStateError = LearningRate * NormalizeErr(c.yOut * c.er);
+                var cellStateError = LearningRate * NormalizeGradient(c.yOut * c.er);
 
                 LSTMWeight[] w_i = input2hidden[i];
                 LSTMWeightDerivative[] wd_i = input2hiddenDeri[i];

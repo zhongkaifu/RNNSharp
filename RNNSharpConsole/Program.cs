@@ -176,7 +176,7 @@ namespace RNNSharpConsole
                 {
                     if (a == args.Length - 1)
                     {
-                        Logger.WriteLine(Logger.Level.info, "Argument missing for {0}", str);
+                        Logger.WriteLine("Argument missing for {0}", str);
                         return -1;
                     }
                     return a;
@@ -208,7 +208,7 @@ namespace RNNSharpConsole
                 }
             }
 
-            Logger.WriteLine(Logger.Level.info, "Record set size in {0}: {1}", strFileName, RecordCount);
+            Logger.WriteLine("Record set size in {0}: {1}", strFileName, RecordCount);
             sr.Close();
 
         }
@@ -242,7 +242,7 @@ namespace RNNSharpConsole
                 RecordCount++;
                 if (RecordCount % 10000 == 0)
                 {
-                    Logger.WriteLine(Logger.Level.info, "{0}...", RecordCount);
+                    Logger.WriteLine("{0}...", RecordCount);
                 }
             }
 
@@ -455,13 +455,6 @@ namespace RNNSharpConsole
                 return;
             }
 
-            if (File.Exists(strValidFile) == false)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The validation corpus doesn't exist.");
-                UsageTrain();
-                return;
-            }
-
             //Create RNN encoder and save necessary parameters
             RNNEncoder encoder = new RNNEncoder(RNNConfig);
 
@@ -469,13 +462,22 @@ namespace RNNSharpConsole
             encoder.TrainingSet = new DataSet(tagSet.GetSize());
             LoadDataset(strTrainFile, featurizer, encoder.TrainingSet);
 
-            //LoadFeatureConfig validated corpus and extract feature set
-            encoder.ValidationSet = new DataSet(tagSet.GetSize());
-            LoadDataset(strValidFile, featurizer, encoder.ValidationSet);
+            if (String.IsNullOrEmpty(strValidFile) == false)
+            {
+                //LoadFeatureConfig validated corpus and extract feature set
+                Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                encoder.ValidationSet = new DataSet(tagSet.GetSize());
+                LoadDataset(strValidFile, featurizer, encoder.ValidationSet);
+            }
+            else
+            {
+                Logger.WriteLine("Validated corpus isn't specified.");
+                encoder.ValidationSet = null;
+            }
 
             if (iCRF == 1)
             {
-                Logger.WriteLine(Logger.Level.info, "Initialize output tag bigram transition probability...");
+                Logger.WriteLine("Initialize output tag bigram transition probability...");
                 //Build tag bigram transition matrix
                 encoder.TrainingSet.BuildLabelBigramTransition();
             }

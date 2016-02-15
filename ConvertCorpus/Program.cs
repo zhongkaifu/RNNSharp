@@ -19,7 +19,7 @@ namespace ConvertCorpus
                 {
                     if (a == args.Length - 1)
                     {
-                        Logger.WriteLine(Logger.Level.info, "Argument missing for {0}", str);
+                        Logger.WriteLine("Argument missing for {0}", str);
                         return -1;
                     }
                     return a;

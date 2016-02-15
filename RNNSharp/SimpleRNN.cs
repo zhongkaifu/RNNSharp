@@ -90,11 +90,6 @@ namespace RNNSharp
             }
         }
 
-        public override void SetHiddenLayer(SimpleCell[] cells)
-        {
-            neuHidden = cells;
-        }
-
         public override SimpleCell[] GetHiddenLayer()
         {
             SimpleCell[] m = InitSimpleCell(L1);
@@ -340,7 +335,7 @@ namespace RNNSharp
             mat_hiddenBpttWeight = new Matrix<double>(L1, L1);
 
 
-            Logger.WriteLine(Logger.Level.info, "[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
+            Logger.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
 
             //Initialize BPTT
@@ -418,7 +413,7 @@ namespace RNNSharp
 
         public override void loadNetBin(string filename)
         {
-            Logger.WriteLine(Logger.Level.info, "Loading SimpleRNN model: {0}", filename);
+            Logger.WriteLine("Loading SimpleRNN model: {0}", filename);
 
             StreamReader sr = new StreamReader(filename);
             BinaryReader br = new BinaryReader(sr.BaseStream);
@@ -457,8 +452,11 @@ namespace RNNSharp
             Logger.WriteLine("Loading bptt hidden weights...");
             mat_hiddenBpttWeight = loadMatrixBin(br);
 
-            Logger.WriteLine("Loading feature2hidden weights...");
-            mat_feature2hidden = loadMatrixBin(br);
+            if (DenseFeatureSize > 0)
+            {
+                Logger.WriteLine("Loading feature2hidden weights...");
+                mat_feature2hidden = loadMatrixBin(br);
+            }
 
             Logger.WriteLine("Loading hidden2output weights...");
             Hidden2OutputWeight = loadMatrixBin(br);
@@ -509,9 +507,12 @@ namespace RNNSharp
             Logger.WriteLine("Saving bptt hidden weights...");
             saveMatrixBin(mat_hiddenBpttWeight, fo);
 
-            //weight fea->hidden
-            Logger.WriteLine("Saving feature2hidden weights...");
-            saveMatrixBin(mat_feature2hidden, fo);
+            if (DenseFeatureSize > 0)
+            {
+                //weight fea->hidden
+                Logger.WriteLine("Saving feature2hidden weights...");
+                saveMatrixBin(mat_feature2hidden, fo);
+            }
 
             //weight hidden->output
             Logger.WriteLine("Saving hidden2output weights...");
