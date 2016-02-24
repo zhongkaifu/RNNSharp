@@ -8,9 +8,9 @@ RNNSharp supports many different types of recurrent neural network (aka RNN) str
 
 For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. This type RNN is not good at preserving long time historical memory, but since the cost of its decoding is lower than LSTM, it can be easily applied on real product environment which needs high performance.
 
-LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure which helps it to save very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences and its encoding process is easier to be paralleled than BPTT-RNN. However, since its decoding cost is much higher than BPTT, to apply it on real product environment directly, its decoding latency will be high than BPTT.
+LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure which helps it to save very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences and its encoding process is easier to be paralleled than BPTT-RNN.
 
-For naive output layer and recurrent CRFs. Actually, naive output layer means the standard RNN output layer. Many widely experiments and applications have proved that it's an excellent algorithm for online sequence labeling task, such as speech recognition, auto suggestion and so on. It has better performance than MMEM and other traditionals algorithms.
+For native RNN output, many widely experiments and applications have proved that it's an excellent algorithm for online sequence labeling tasks, such as speech recognition, auto suggestion and so on. It has better performance than MMEM and other traditionals algorithms.
 
 For recurrent CRFs (recurrent conditional random fields), it's a new type of CRF based on RNN. Compared with the above one, Recurrent-CRF can be used for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF, since the representation of its feature is richer than before.
 
