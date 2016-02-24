@@ -9,12 +9,11 @@ namespace RNNSharp
     {
         KeyValuePair<int, float>[] m_Data;
         int m_Dimension;
-        int m_Size;
+        public int Count { get; set; }
 
         public KeyValuePair<int, float> GetEntry(int pos) { return m_Data[pos]; }
 
         public override int GetDimension() { return m_Dimension; }
-        public int GetNumberOfEntries() { return m_Size; }
 
         public void ChangeValue(int positionInSparseVector, int dimension, float value)
         {
@@ -25,8 +24,8 @@ namespace RNNSharp
 
         public void SetData(Dictionary<int, float> m)
         {
-            m_Size = m.Count;
-            m_Data = new KeyValuePair<int, float>[m_Size];
+            Count = m.Count;
+            m_Data = new KeyValuePair<int, float>[Count];
 
             int count = 0;
             foreach (KeyValuePair<int, float> pair in m)

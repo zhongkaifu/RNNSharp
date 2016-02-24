@@ -29,6 +29,7 @@ namespace RNNSharpConsole
         static int modelType = 0;
         static int nBest = 1;
         static int iDir = 0;
+        static int iVQ = 0;
 
         static void UsageTitle()
         {
@@ -90,8 +91,11 @@ namespace RNNSharpConsole
             Console.WriteLine(" -savestep <int>");
             Console.WriteLine("\tSave temporary model after every <int> sentences, default is 0");
 
+            Console.WriteLine(" -vq <int>");
+            Console.WriteLine("\tModel vector quantization, 0 is disable, 1 is enable. default is 0");
+
             Console.WriteLine();
-            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0");
+            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0 -vq 0");
 
         }
 
@@ -142,6 +146,7 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1]);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
             if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
+            if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1]);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
             {
@@ -421,6 +426,7 @@ namespace RNNSharpConsole
             RNNConfig.NumHidden = layersize;
             RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
             RNNConfig.ModelDirection = iDir;
+            RNNConfig.VQ = iVQ;
             RNNConfig.ModelType = modelType;
             RNNConfig.MaxIteration = maxIter;
             RNNConfig.SaveStep = savestep;

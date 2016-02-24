@@ -17,6 +17,7 @@ namespace RNNSharp
         public long SaveStep { get; set; }
         public int ModelType { get; set; }
         public int ModelDirection { get; set; }
+        public int VQ { get; set; }
 
         public void DumpSetting()
         {

@@ -46,7 +46,8 @@ namespace RNNSharp
         public virtual string ModelFile { get; set; }
         public string ModelTempFile { get { return ModelFile + ".tmp"; } }
         public virtual MODELDIRECTION ModelDirection { get; set; }
-        public virtual float GradientCutoff { get; set; }
+        public virtual bool bVQ { get; set; }
+        public virtual double GradientCutoff { get; set; }
         public virtual float Dropout { get; set; }
         public virtual float LearningRate { get; set; }
         public virtual int MaxIter { get; set; }
@@ -58,8 +59,9 @@ namespace RNNSharp
 
         public MODELTYPE ModelType { get; set; }
         public Matrix<double> CRFTagTransWeights { get; set; }
-        public SimpleCell[] OutputLayer { get; set; }
+        public SimpleLayer OutputLayer { get; set; }
         public Matrix<double> Hidden2OutputWeight;
+        public Matrix<float> Hidden2OutputWeightLearningRate;
       
         // CRF result output
         protected Matrix<double> CRFSeqOutput;
@@ -68,17 +70,19 @@ namespace RNNSharp
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected static Random rand = new Random(DateTime.Now.Millisecond);
         //multiple processor declaration
-        protected Vector neuFeatures;		//features in input layer
+        protected VectorBase neuFeatures;		//features in input layer
         protected const int MAX_RNN_HIST = 64;
 
         public virtual void setTagBigramTransition(List<List<float>> m)
         {
             CRFTagTransWeights = new Matrix<double>(L2, L2);
-
             for (int i = 0; i < L2; i++)
+            {
                 for (int j = 0; j < L2; j++)
+                {
                     CRFTagTransWeights[i][j] = m[i][j];
-
+                }
+            }
         }
 
         protected SimpleCell[] InitSimpleCell(int size)
@@ -92,14 +96,22 @@ namespace RNNSharp
             return cells;
         }
 
+        public double UpdateLearningRate(Matrix<float> m, int i, int j, double delta)
+        {
+            double dg = m[i][j] + delta * delta;
+            m[i][j] = (float)dg;
+
+            return LearningRate / (1.0 + Math.Sqrt(dg));
+        }
+
         //Save matrix into file as binary format
-        protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo, bool BuildVQ = true)
+        protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo)
         {
             //Save the width and height of the matrix
             fo.Write(mat.Width);
             fo.Write(mat.Height);
 
-            if (BuildVQ == false)
+            if (bVQ == false)
             {
                 Logger.WriteLine("Saving matrix without VQ...");
                 fo.Write(0); // non-VQ
@@ -257,7 +269,7 @@ namespace RNNSharp
 
                 if (runningMode != RunningMode.Test)
                 {
-                    logp += Math.Log10(OutputLayer[state.Label].cellOutput + 0.0001);
+                    logp += Math.Log10(OutputLayer.cellOutput[state.Label] + 0.0001);
                 }
 
                 if (runningMode == RunningMode.Train)
@@ -268,12 +280,13 @@ namespace RNNSharp
 
                     Parallel.Invoke(() =>
                     {
+                        //Update net weights
                         LearnOutputWeight();
                     },
                     () =>
                     {
-                        learnNet(state);
-                        LearnBackTime(state, numStates, curState);
+                        //Update net weights
+                        LearnNet(state, numStates, curState);
                     });
                 }
             }
@@ -282,34 +295,34 @@ namespace RNNSharp
         }
 
 
-        public void SoftmaxLayer(SimpleCell[] layer)
+        public void SoftmaxLayer(SimpleLayer layer)
         {
             //activation 2   --softmax on words
             double sum = 0;   //sum is used for normalization: it's better to have larger precision as many numbers are summed together here
             for (int c = 0; c < L2; c++)
             {
-                SimpleCell cell = layer[c];
-                if (cell.cellOutput > 50) cell.cellOutput = 50;  //for numerical stability
-                if (cell.cellOutput < -50) cell.cellOutput = -50;  //for numerical stability
-                double val = Math.Exp(cell.cellOutput);
+                double cellOutput = layer.cellOutput[c];
+                if (cellOutput > 50) cellOutput = 50;  //for numerical stability
+                if (cellOutput < -50) cellOutput = -50;  //for numerical stability
+                double val = Math.Exp(cellOutput);
                 sum += val;
-                cell.cellOutput = val;
+                layer.cellOutput[c] = val;
             }
             for (int c = 0; c < L2; c++)
             {
-                layer[c].cellOutput /= sum;
+                layer.cellOutput[c] /= sum;
             }
         }
 
         public int GetBestOutputIndex()
         {
             int imax = 0;
-            double dmax = OutputLayer[0].cellOutput;
+            double dmax = OutputLayer.cellOutput[0];
             for (int k = 1; k < L2; k++)
             {
-                if (OutputLayer[k].cellOutput > dmax)
+                if (OutputLayer.cellOutput[k] > dmax)
                 {
-                    dmax = OutputLayer[k].cellOutput;
+                    dmax = OutputLayer.cellOutput[k];
                     imax = k;
                 }
             }
@@ -350,12 +363,13 @@ namespace RNNSharp
 
                     Parallel.Invoke(() =>
                     {
+                        //Update net weights
                         LearnOutputWeight();
                     },
                     () =>
                     {
-                        learnNet(state);
-                        LearnBackTime(state, numStates, curState);
+                        //Update net weights
+                        LearnNet(state, numStates, curState);
                     });
                 }
             }
@@ -386,9 +400,11 @@ namespace RNNSharp
             //Update tag Bigram LM
             for (int b = 0;b < L2;b++)
             {
+                double[] vector_b = CRFTagTransWeights[b];
+                double[] vector_delta_b = m_DeltaBigramLM[b];
                 for (int a = 0; a < L2; a++)
                 {
-                    CRFTagTransWeights[b][a] += LearningRate * m_DeltaBigramLM[b][a];
+                    vector_b[a] += LearningRate * NormalizeGradient(vector_delta_b[a]);
                 }
             }
         }
@@ -479,8 +495,7 @@ namespace RNNSharp
         }
 
 
-        public abstract void learnNet(State state);
-        public abstract void LearnBackTime(State state, int numStates, int curState);
+        public abstract void LearnNet(State state, int numStates, int curState);
 
         public abstract void ComputeHiddenLayerErr();
 
@@ -538,7 +553,7 @@ namespace RNNSharp
                 {
                     //After processed every m_SaveStep sentences, save current model into a temporary file
                     Logger.WriteLine("Saving temporary model into file...");
-                    saveNetBin(ModelTempFile);
+                    SaveModel(ModelTempFile);
                 }
             }
 
@@ -554,12 +569,12 @@ namespace RNNSharp
             return ppl;
         }
 
-        public abstract void initMem();
+        public abstract void CleanStatus();
+        public abstract void InitMem();
+        public abstract void SaveModel(string filename);
+        public abstract void LoadModel(string filename);
 
-        public abstract void saveNetBin(string filename);
-        public abstract void loadNetBin(string filename);
-
-        public abstract SimpleCell[] GetHiddenLayer();
+        public abstract SimpleLayer GetHiddenLayer();
 
         public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir)
         {
@@ -577,27 +592,31 @@ namespace RNNSharp
         protected double NormalizeGradient(double err)
         {
             if (err > GradientCutoff)
+            {
                 err = GradientCutoff;
-            if (err < -GradientCutoff)
+            }
+            else if (err < -GradientCutoff)
+            {
                 err = -GradientCutoff;
-
+            }
             return err;
         }
 
-        public void matrixXvectorADD(SimpleCell[] dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
+        public void matrixXvectorADD(SimpleLayer dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
         {
             if (type == 0)
             {
                 //ac mod
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    SimpleCell cell = dest[i];
                     double[] vector_i = srcmatrix[i];
-                    cell.cellOutput = 0;
+                    double cellOutput = 0;
                     for (int j = 0; j < SrcSize; j++)
                     {
-                        cell.cellOutput += srcvec[j].cellOutput * vector_i[j];
+                        cellOutput += srcvec[j].cellOutput * vector_i[j];
                     }
+
+                    dest.cellOutput[i] = cellOutput;
                 });
 
             }
@@ -605,14 +624,45 @@ namespace RNNSharp
             {
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    SimpleCell cell = dest[i];
-                    cell.er = 0;
+                    double er = 0;
                     for (int j = 0; j < SrcSize; j++)
                     {
-                        cell.er += srcvec[j].er * srcmatrix[j][i];
+                        er += srcvec[j].er * srcmatrix[j][i];
                     }
 
-                    cell.er = NormalizeGradient(cell.er);
+                    dest.er[i] = NormalizeGradient(er);
+                });
+            }
+        }
+
+        public void matrixXvectorADD(SimpleLayer dest, SimpleLayer srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
+        {
+            if (type == 0)
+            {
+                //ac mod
+                Parallel.For(0, DestSize, parallelOption, i =>
+                {
+                    double[] vector_i = srcmatrix[i];
+                    double cellOutput = 0;
+                    for (int j = 0; j < SrcSize; j++)
+                    {
+                        cellOutput += srcvec.cellOutput[j] * vector_i[j];
+                    }
+                    dest.cellOutput[i] = cellOutput;
+                });
+
+            }
+            else
+            {
+                Parallel.For(0, DestSize, parallelOption, i =>
+                {
+                    double er = 0;
+                    for (int j = 0; j < SrcSize; j++)
+                    {
+                        er += srcvec.er[j] * srcmatrix[j][i];
+                    }
+
+                    dest.er[i] = NormalizeGradient(er);
                 });
             }
         }
@@ -809,18 +859,18 @@ namespace RNNSharp
                 //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
                 for (int c = 0; c < L2; c++)
                 {
-                    OutputLayer[c].er = -CRFSeqOutput[timeat][c];
+                    OutputLayer.er[c] = -CRFSeqOutput[timeat][c];
                 }
-                OutputLayer[state.Label].er = 1 - CRFSeqOutput[timeat][state.Label];
+                OutputLayer.er[state.Label] = 1 - CRFSeqOutput[timeat][state.Label];
             }
             else
             {
                 //For standard RNN
                 for (int c = 0; c < L2; c++)
                 {
-                    OutputLayer[c].er = -OutputLayer[c].cellOutput;
+                    OutputLayer.er[c] = -OutputLayer.cellOutput[c];
                 }
-                OutputLayer[state.Label].er = 1 - OutputLayer[state.Label].cellOutput;
+                OutputLayer.er[state.Label] = 1 - OutputLayer.cellOutput[state.Label];
             }
 
         }

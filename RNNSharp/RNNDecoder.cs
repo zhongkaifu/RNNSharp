@@ -44,7 +44,7 @@ namespace RNNSharp
                 }
             }
 
-            m_Rnn.loadNetBin(strModelFileName);
+            m_Rnn.LoadModel(strModelFileName);
             Logger.WriteLine("CRF Model: {0}", m_Rnn.IsCRFTraining);
             m_Featurizer = featurizer;
         }

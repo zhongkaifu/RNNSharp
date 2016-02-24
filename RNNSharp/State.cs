@@ -16,7 +16,7 @@ namespace RNNSharp
         //Store sparse features, such as template features
         public SparseVector SparseData { get;}
         //Store dense features, such as word embedding
-        public Vector DenseData { get; set; }
+        public VectorBase DenseData { get; set; }
         public int Label { get; set; }
         //Store run time features
         public PriviousLabelFeature[] RuntimeFeatures { get; set; }

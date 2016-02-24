@@ -6,7 +6,7 @@ using System.Collections.Generic;
 /// </summary>
 namespace RNNSharp
 {
-    public class Vector
+    public class VectorBase
     {
         public virtual int GetDimension()
         {
@@ -27,7 +27,7 @@ namespace RNNSharp
     }
 
 
-    public class CombinedVector : Vector
+    public class CombinedVector : VectorBase
     {
         private List<SingleVector> m_innerData;
         int m_nLenPerBlock;
@@ -72,7 +72,7 @@ namespace RNNSharp
     }
 
 
-    public class SingleVector : Vector
+    public class SingleVector : VectorBase
     {
         private float[] m_innerData;
         int m_nLen;

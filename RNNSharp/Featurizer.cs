@@ -239,7 +239,7 @@ namespace RNNSharp
         }
 
         //Extract word embedding features from current context
-        public Vector ExtractDenseFeature(int currentState, int numStates, List<string[]> features)
+        public VectorBase ExtractDenseFeature(int currentState, int numStates, List<string[]> features)
         {
             var fc = m_FeatureConfiguration;
 

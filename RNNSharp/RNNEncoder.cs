@@ -58,12 +58,13 @@ namespace RNNSharp
             }
 
             rnn.ModelDirection = (MODELDIRECTION)m_modelSetting.ModelDirection;
+            rnn.bVQ = (m_modelSetting.VQ != 0) ? true : false;
             rnn.ModelFile = m_modelSetting.ModelFile;
             rnn.SaveStep = m_modelSetting.SaveStep;
             rnn.MaxIter = m_modelSetting.MaxIteration;
             rnn.IsCRFTraining = m_modelSetting.IsCRFTraining;
             rnn.LearningRate = m_modelSetting.LearningRate;
-            rnn.GradientCutoff = 15.0f;
+            rnn.GradientCutoff = 15.0;
             rnn.Dropout = m_modelSetting.Dropout;
             rnn.L1 = m_modelSetting.NumHidden;
 
@@ -71,7 +72,7 @@ namespace RNNSharp
             rnn.L0 = TrainingSet.GetSparseDimension();
             rnn.L2 = TrainingSet.TagSize;
 
-            rnn.initMem();
+            rnn.InitMem();
             
             //Create tag-bigram transition probability matrix only for sequence RNN mode
             if (m_modelSetting.IsCRFTraining)
@@ -87,6 +88,9 @@ namespace RNNSharp
             int iter = 0;
             while (true)
             {
+                Logger.WriteLine("Cleaning training status...");
+                rnn.CleanStatus();
+
                 if (rnn.MaxIter > 0 && iter > rnn.MaxIter)
                 {
                     Logger.WriteLine("We have trained this model {0} iteration, exit.");
@@ -113,7 +117,7 @@ namespace RNNSharp
                 }
 
                 if ((ValidationSet != null && betterValidateNet == false) ||
-                    (ValidationSet == null && ppl * 1.003 >= lastPPL))
+                    (ValidationSet == null && ppl >= lastPPL))
                 {
                     rnn.LearningRate = rnn.LearningRate / 2.0f;
                 }
@@ -121,7 +125,7 @@ namespace RNNSharp
                 {
                     //If current model is better than before, save it into file
                     Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
-                    rnn.saveNetBin(m_modelSetting.ModelFile);
+                    rnn.SaveModel(m_modelSetting.ModelFile);
                 }
 
                 lastPPL = ppl;

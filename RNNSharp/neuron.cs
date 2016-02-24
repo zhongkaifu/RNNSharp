@@ -4,18 +4,28 @@
 /// </summary>
 namespace RNNSharp
 {
-    public struct neuron
-    {
-        public double cellOutput;		//actual value stored in neuron
-        public double er;		//error value in neuron, used by learning algorithm
-        public bool mask;
-    }
-
     public class SimpleCell
     {
         //cell output
         public double cellOutput;
         public double er;
         public bool mask;
+    }
+
+    public class SimpleLayer
+    {
+        public double[] cellOutput;
+        public double[] er;
+        public bool[] mask;
+        public int size;
+
+        public SimpleLayer(int m)
+        {
+            cellOutput = new double[m];
+            er = new double[m];
+            mask = new bool[m];
+
+            size = m;
+        }
     }
 }

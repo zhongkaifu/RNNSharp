@@ -41,10 +41,7 @@ namespace RNNSharp
 
             for (int i = 0; i < Height; i++)
             {
-                for (int j = 0; j < Width; j++)
-                {
-                    m[i][j] = m_saData[i][j];
-                }
+                m_saData[i].CopyTo(m[i], 0);
             }
 
             return m;

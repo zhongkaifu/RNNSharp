@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -12,22 +13,26 @@ namespace RNNSharp
     public class LSTMCell : SimpleCell
     {
         //input gate
-        public float netIn;
-        public float yIn;
+        public double netIn;
+        public double yIn;
 
         //forget gate
-        public float netForget;
-        public float yForget;
+        public double netForget;
+        public double yForget;
 
         //cell state
-        public float netCellState;
-        public float previousCellState;
-        public float cellState;
+        public double netCellState;
+        public double previousCellState;
+        public double cellState;
 
         //internal weights and deltas
-        public float wCellIn;
-        public float wCellForget;
-        public float wCellOut;
+        public double wCellIn;
+        public double wCellForget;
+        public double wCellOut;
+
+        public float dCellInLearningRate;
+        public float dCellForgetLearningRate;
+        public float dCellOutLearningRate;
 
         //partial derivatives
         public double dSWCellIn;
@@ -35,27 +40,33 @@ namespace RNNSharp
         //double dSWCellState;
 
         //output gate
-        public float netOut;
-        public float yOut;
+        public double netOut;
+        public double yOut;
     }
 
     public struct LSTMWeight
     {
-        //variables
-        public float wInputCell;
         public float wInputInputGate;
         public float wInputForgetGate;
+        public float wInputCell;
         public float wInputOutputGate;
-
     }
 
-    public struct LSTMWeightDerivative
-    {
-        //partial derivatives. dont need partial derivative for output gate as it uses BP not RTRL
-        public double dSInputCell;
-        public double dSInputInputGate;
-        public double dSInputForgetGate;
-    }
+    //public struct LSTMWeightLearningRate
+    //{
+    //    public float dInputCellLearningRate;
+    //    public float dInputInputGateLearningRate;
+    //    public float dInputForgetGateLearningRate;
+    //    public float dInputOutputGateLearningRate;
+    //}
+
+    //public struct LSTMWeightDerivative
+    //{
+    //    //partial derivatives. dont need partial derivative for output gate as it uses BP not RTRL
+    //    public double dSInputCell;
+    //    public double dSInputInputGate;
+    //    public double dSInputForgetGate;
+    //}
 
     public class LSTMRNN : RNN
     {
@@ -63,37 +74,25 @@ namespace RNNSharp
         protected LSTMWeight[][] input2hidden;
         protected LSTMWeight[][] feature2hidden;
 
-        protected LSTMWeightDerivative[][] input2hiddenDeri;
-        protected LSTMWeightDerivative[][] feature2hiddenDeri;
+        protected Vector4[][] Input2HiddenLearningRate;
+        protected Vector4[][] Feature2HiddenLearningRate;
+
+        protected Vector3[][] input2hiddenDeri;
+        protected Vector3[][] feature2hiddenDeri;
 
         public LSTMRNN()
         {
             ModelType = MODELTYPE.LSTM;
         }
 
-        public override SimpleCell[] GetHiddenLayer()
+        public override SimpleLayer GetHiddenLayer()
         {
-            LSTMCell[] m = new LSTMCell[L1];
+            SimpleLayer m = new SimpleLayer(L1);
             for (int i = 0; i < L1; i++)
             {
-                m[i] = new LSTMCell();
-                m[i].cellOutput = neuHidden[i].cellOutput;
-                m[i].cellState = neuHidden[i].cellState;
-                m[i].dSWCellForget = neuHidden[i].dSWCellForget;
-                m[i].dSWCellIn = neuHidden[i].dSWCellIn;
-                m[i].er = neuHidden[i].er;
-                m[i].mask = neuHidden[i].mask;
-                m[i].netCellState = neuHidden[i].netCellState;
-                m[i].netForget = neuHidden[i].netForget;
-                m[i].netIn = neuHidden[i].netIn;
-                m[i].netOut = neuHidden[i].netOut;
-                m[i].previousCellState = neuHidden[i].previousCellState;
-                m[i].wCellForget = neuHidden[i].wCellForget;
-                m[i].wCellIn = neuHidden[i].wCellIn;
-                m[i].wCellOut = neuHidden[i].wCellOut;
-                m[i].yForget = neuHidden[i].yForget;
-                m[i].yIn = neuHidden[i].yIn;
-                m[i].yOut = neuHidden[i].yOut;
+                m.cellOutput[i] = neuHidden[i].cellOutput;
+                m.er[i] = neuHidden[i].er;
+                m.mask[i] = neuHidden[i].mask;
             }
 
             return m;
@@ -104,52 +103,67 @@ namespace RNNSharp
             int w = br.ReadInt32();
             int h = br.ReadInt32();
             int vqSize = br.ReadInt32();
-
-            Logger.WriteLine("Loading LSTM-Weight: width:{0}, height:{1}, vqSize:{2}...", w, h, vqSize);
-
-            List<double> codeBookInputCell = new List<double>();
-            List<double> codeBookInputForgetGate = new List<double>();
-            List<double> codeBookInputInputGate = new List<double>();
-            List<double> codeBookInputOutputGate = new List<double>();
-
-            for (int i = 0; i < vqSize; i++)
-            {
-                codeBookInputCell.Add(br.ReadDouble());
-            }
-
-            for (int i = 0; i < vqSize; i++)
-            {
-                codeBookInputForgetGate.Add(br.ReadDouble());
-            }
-
-            for (int i = 0; i < vqSize; i++)
-            {
-                codeBookInputInputGate.Add(br.ReadDouble());
-            }
-
-            for (int i = 0; i < vqSize; i++)
-            {
-                codeBookInputOutputGate.Add(br.ReadDouble());
-            }
-
             LSTMWeight[][] m = new LSTMWeight[w][];
 
-            for (int i = 0; i < w; i++)
+            Logger.WriteLine("Loading LSTM-Weight: width:{0}, height:{1}, vqSize:{2}...", w, h, vqSize);
+            if (vqSize == 0)
             {
-                m[i] = new LSTMWeight[h];
-                for (int j = 0; j < h; j++)
+                for (int i = 0; i < w; i++)
                 {
-                    int vqIdx = br.ReadByte();
-                    m[i][j].wInputCell = (float)codeBookInputCell[vqIdx];
+                    m[i] = new LSTMWeight[h];
+                    for (int j = 0; j < h; j++)
+                    {
+                        m[i][j].wInputInputGate = br.ReadSingle();
+                        m[i][j].wInputForgetGate = br.ReadSingle();
+                        m[i][j].wInputCell = br.ReadSingle();
+                        m[i][j].wInputOutputGate = br.ReadSingle();
+                    }
+                }
+            }
+            else
+            {
+                List<double> codeBookInputCell = new List<double>();
+                List<double> codeBookInputForgetGate = new List<double>();
+                List<double> codeBookInputInputGate = new List<double>();
+                List<double> codeBookInputOutputGate = new List<double>();
 
-                    vqIdx = br.ReadByte();
-                    m[i][j].wInputForgetGate = (float)codeBookInputForgetGate[vqIdx];
+                for (int i = 0; i < vqSize; i++)
+                {
+                    codeBookInputInputGate.Add(br.ReadDouble());
+                }
 
-                    vqIdx = br.ReadByte();
-                    m[i][j].wInputInputGate = (float)codeBookInputInputGate[vqIdx];
+                for (int i = 0; i < vqSize; i++)
+                {
+                    codeBookInputForgetGate.Add(br.ReadDouble());
+                }
 
-                    vqIdx = br.ReadByte();
-                    m[i][j].wInputOutputGate = (float)codeBookInputOutputGate[vqIdx];
+                for (int i = 0; i < vqSize; i++)
+                {
+                    codeBookInputCell.Add(br.ReadDouble());
+                }
+
+                for (int i = 0; i < vqSize; i++)
+                {
+                    codeBookInputOutputGate.Add(br.ReadDouble());
+                }
+
+                for (int i = 0; i < w; i++)
+                {
+                    m[i] = new LSTMWeight[h];
+                    for (int j = 0; j < h; j++)
+                    {
+                        int vqIdx = br.ReadByte();
+                        m[i][j].wInputInputGate = (float)codeBookInputInputGate[vqIdx];
+
+                        vqIdx = br.ReadByte();
+                        m[i][j].wInputForgetGate = (float)codeBookInputForgetGate[vqIdx];
+
+                        vqIdx = br.ReadByte();
+                        m[i][j].wInputCell = (float)codeBookInputCell[vqIdx];
+
+                        vqIdx = br.ReadByte();
+                        m[i][j].wInputOutputGate = (float)codeBookInputOutputGate[vqIdx];
+                    }
                 }
             }
 
@@ -162,82 +176,99 @@ namespace RNNSharp
             int h = weight[0].Length;
             int vqSize = 256;
 
-            Logger.WriteLine("Saving LSTM weight matrix. width:{0}, height:{1}, vqSize:{2}", w, h, vqSize);
+            Logger.WriteLine("Saving LSTM weight matrix. width:{0}, height:{1}, vq:{2}", w, h, bVQ);
 
             fo.Write(weight.Length);
             fo.Write(weight[0].Length);
 
-            //Build vector quantization model
-            VectorQuantization vqInputCell = new VectorQuantization();
-            VectorQuantization vqInputForgetGate = new VectorQuantization();
-            VectorQuantization vqInputInputGate = new VectorQuantization();
-            VectorQuantization vqInputOutputGate = new VectorQuantization();
-            for (int i = 0; i < w; i++)
+            if (bVQ == false)
             {
-                for (int j = 0; j < h; j++)
+                fo.Write(0);
+
+                for (int i = 0; i < w; i++)
                 {
-                    vqInputCell.Add(weight[i][j].wInputCell);
-                    vqInputForgetGate.Add(weight[i][j].wInputForgetGate);
-                    vqInputInputGate.Add(weight[i][j].wInputInputGate);
-                    vqInputOutputGate.Add(weight[i][j].wInputOutputGate);
+                    for (int j = 0; j < h; j++)
+                    {
+                        fo.Write(weight[i][j].wInputInputGate);
+                        fo.Write(weight[i][j].wInputForgetGate);
+                        fo.Write(weight[i][j].wInputCell);
+                        fo.Write(weight[i][j].wInputOutputGate);
+                    }
                 }
             }
-
-
-            double distortion = 0.0;
-
-            vqInputCell.BuildCodebook(vqSize);
-            Logger.WriteLine("InputCell distortion: {0}", distortion);
-
-            vqInputForgetGate.BuildCodebook(vqSize);
-            Logger.WriteLine("InputForgetGate distortion: {0}", distortion);
-
-            vqInputInputGate.BuildCodebook(vqSize);
-            Logger.WriteLine("InputInputGate distortion: {0}", distortion);
-
-            vqInputOutputGate.BuildCodebook(vqSize);
-            Logger.WriteLine("InputOutputGate distortion: {0}", distortion);
-
-            fo.Write(vqSize);
-
-            //Save InputCell VQ codebook into file
-            for (int j = 0; j < vqSize; j++)
+            else
             {
-                fo.Write(vqInputCell.CodeBook[j]);
-            }
-
-            //Save InputForgetGate VQ codebook into file
-            for (int j = 0; j < vqSize; j++)
-            {
-                fo.Write(vqInputForgetGate.CodeBook[j]);
-            }
-
-            //Save InputInputGate VQ codebook into file
-            for (int j = 0; j < vqSize; j++)
-            {
-                fo.Write(vqInputInputGate.CodeBook[j]);
-            }
-
-            //Save InputOutputGate VQ codebook into file
-            for (int j = 0; j < vqSize; j++)
-            {
-                fo.Write(vqInputOutputGate.CodeBook[j]);
-            }
-
-            for (int i = 0; i < w; i++)
-            {
-                for (int j = 0; j < h; j++)
+                //Build vector quantization model
+                VectorQuantization vqInputCell = new VectorQuantization();
+                VectorQuantization vqInputForgetGate = new VectorQuantization();
+                VectorQuantization vqInputInputGate = new VectorQuantization();
+                VectorQuantization vqInputOutputGate = new VectorQuantization();
+                for (int i = 0; i < w; i++)
                 {
-                    fo.Write((byte)vqInputCell.ComputeVQ(weight[i][j].wInputCell));
-                    fo.Write((byte)vqInputForgetGate.ComputeVQ(weight[i][j].wInputForgetGate));
-                    fo.Write((byte)vqInputInputGate.ComputeVQ(weight[i][j].wInputInputGate));
-                    fo.Write((byte)vqInputOutputGate.ComputeVQ(weight[i][j].wInputOutputGate));
+                    for (int j = 0; j < h; j++)
+                    {
+                        vqInputInputGate.Add(weight[i][j].wInputInputGate);
+                        vqInputForgetGate.Add(weight[i][j].wInputForgetGate);
+                        vqInputCell.Add(weight[i][j].wInputCell);
+                        vqInputOutputGate.Add(weight[i][j].wInputOutputGate);
+                    }
+                }
+
+
+                double distortion = 0.0;
+
+                distortion = vqInputInputGate.BuildCodebook(vqSize);
+                Logger.WriteLine("InputInputGate distortion: {0}", distortion);
+
+                distortion = vqInputForgetGate.BuildCodebook(vqSize);
+                Logger.WriteLine("InputForgetGate distortion: {0}", distortion);
+
+                distortion = vqInputCell.BuildCodebook(vqSize);
+                Logger.WriteLine("InputCell distortion: {0}", distortion);
+
+                distortion = vqInputOutputGate.BuildCodebook(vqSize);
+                Logger.WriteLine("InputOutputGate distortion: {0}", distortion);
+
+                fo.Write(vqSize);
+
+                //Save InputInputGate VQ codebook into file
+                for (int j = 0; j < vqSize; j++)
+                {
+                    fo.Write(vqInputInputGate.CodeBook[j]);
+                }
+
+                //Save InputForgetGate VQ codebook into file
+                for (int j = 0; j < vqSize; j++)
+                {
+                    fo.Write(vqInputForgetGate.CodeBook[j]);
+                }
+
+                //Save InputCell VQ codebook into file
+                for (int j = 0; j < vqSize; j++)
+                {
+                    fo.Write(vqInputCell.CodeBook[j]);
+                }
+
+                //Save InputOutputGate VQ codebook into file
+                for (int j = 0; j < vqSize; j++)
+                {
+                    fo.Write(vqInputOutputGate.CodeBook[j]);
+                }
+
+                for (int i = 0; i < w; i++)
+                {
+                    for (int j = 0; j < h; j++)
+                    {
+                        fo.Write((byte)vqInputInputGate.ComputeVQ(weight[i][j].wInputInputGate));
+                        fo.Write((byte)vqInputForgetGate.ComputeVQ(weight[i][j].wInputForgetGate));
+                        fo.Write((byte)vqInputCell.ComputeVQ(weight[i][j].wInputCell));
+                        fo.Write((byte)vqInputOutputGate.ComputeVQ(weight[i][j].wInputOutputGate));
+                    }
                 }
             }
-
         }
 
-        public override void loadNetBin(string filename)
+        public override void LoadModel(string filename)
         {
             Logger.WriteLine("Loading LSTM-RNN model: {0}", filename);
 
@@ -308,7 +339,7 @@ namespace RNNSharp
         }
 
         // save model as binary format
-        public override void saveNetBin(string filename)
+        public override void SaveModel(string filename)
         {
             StreamWriter sw = new StreamWriter(filename);
             BinaryWriter fo = new BinaryWriter(sw.BaseStream);
@@ -460,23 +491,49 @@ namespace RNNSharp
             c.cellOutput = 0;
         }
 
-        public override void initMem()
+        public override void CleanStatus()
+        {
+            Input2HiddenLearningRate = new Vector4[L1][];
+            if (DenseFeatureSize > 0)
+            {
+                Feature2HiddenLearningRate = new Vector4[L1][];
+            }
+
+            Parallel.For(0, L1, parallelOption, i =>
+            {
+                neuHidden[i].dCellForgetLearningRate = 0;
+                neuHidden[i].dCellInLearningRate = 0;
+                neuHidden[i].dCellOutLearningRate = 0;
+
+                Input2HiddenLearningRate[i] = new Vector4[L0];
+
+                if (DenseFeatureSize > 0)
+                {
+                    Feature2HiddenLearningRate[i] = new Vector4[DenseFeatureSize];
+                }
+
+            });
+
+            Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
+        }
+
+        public override void InitMem()
         {
             CreateCell(null);
 
-            input2hiddenDeri = new LSTMWeightDerivative[L1][];
+            input2hiddenDeri = new Vector3[L1][];
             if (DenseFeatureSize > 0)
             {
-                feature2hiddenDeri = new LSTMWeightDerivative[L1][];
+                feature2hiddenDeri = new Vector3[L1][];
             }
 
             for (int i = 0; i < L1; i++)
             {
-                input2hiddenDeri[i] = new LSTMWeightDerivative[L0];
+                input2hiddenDeri[i] = new Vector3[L0];
 
                 if (DenseFeatureSize > 0)
                 {
-                    feature2hiddenDeri[i] = new LSTMWeightDerivative[DenseFeatureSize];
+                    feature2hiddenDeri[i] = new Vector3[DenseFeatureSize];
                 }
             }
 
@@ -487,13 +544,7 @@ namespace RNNSharp
         private void CreateCell(BinaryReader br)
         {
             neuFeatures = new SingleVector(DenseFeatureSize);
-            OutputLayer = InitSimpleCell(L2);
-
-            for (int a = 0; a < L2; a++)
-            {
-                OutputLayer[a].cellOutput = 0;
-                OutputLayer[a].er = 0;
-            }
+            OutputLayer = new SimpleLayer(L2);
 
             neuHidden = new LSTMCell[L1];
             for (int i = 0; i < L1; i++)
@@ -507,9 +558,9 @@ namespace RNNSharp
                 //Load weight from input file
                 for (int i = 0; i < L1; i++)
                 {
-                    neuHidden[i].wCellIn = br.ReadSingle();
-                    neuHidden[i].wCellForget = br.ReadSingle();
-                    neuHidden[i].wCellOut = br.ReadSingle();
+                    neuHidden[i].wCellIn = br.ReadDouble();
+                    neuHidden[i].wCellForget = br.ReadDouble();
+                    neuHidden[i].wCellOut = br.ReadDouble();
                 }
             }
             else
@@ -525,10 +576,6 @@ namespace RNNSharp
             }
         }
 
-        public override void LearnBackTime(State state, int numStates, int curState)
-        {
-        }
-
         public override void ComputeHiddenLayerErr()
         {
             Parallel.For(0, L1, parallelOption, i =>
@@ -542,7 +589,7 @@ namespace RNNSharp
                 {
                     for (int k = 0; k < L2; k++)
                     {
-                        cell.er += OutputLayer[k].er * Hidden2OutputWeight[k][i];
+                        cell.er += OutputLayer.er[k] * Hidden2OutputWeight[k][i];
                     }
                 }
             });
@@ -556,16 +603,27 @@ namespace RNNSharp
                 double cellOutput = neuHidden[i].cellOutput;
                 for (int k = 0; k < L2; k++)
                 {
-                    Hidden2OutputWeight[k][i] += LearningRate * NormalizeGradient(cellOutput * OutputLayer[k].er);
+                    double delta = NormalizeGradient(cellOutput * OutputLayer.er[k]);
+                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, i, k, delta);
+
+                    Hidden2OutputWeight[k][i] += newLearningRate * delta;
                 }
             });
         }
 
-        public override void learnNet(State state)
+        public double UpdateLearningRate(ref float mg, double delta)
+        {
+            double dg = mg + delta * delta;
+            mg = (float)dg;
+            return LearningRate / (1.0 + Math.Sqrt(dg));
+        }
+
+        public override void LearnNet(State state, int numStates, int curState)
         {
             //Get sparse feature and apply it into hidden layer
             var sparse = state.SparseData;
-            int sparseFeatureSize = sparse.GetNumberOfEntries();
+            int sparseFeatureSize = sparse.Count;
+            Vector4 vecLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
 
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, L1, parallelOption, i =>
@@ -573,33 +631,57 @@ namespace RNNSharp
                 LSTMCell c = neuHidden[i];
 
                 //using the error find the gradient of the output gate
-                var gradientOutputGate = LearningRate * NormalizeGradient(SigmoidDerivative(c.netOut) * c.cellState * c.er);
+                var gradientOutputGate = (float)NormalizeGradient(SigmoidDerivative(c.netOut) * c.cellState * c.er);
 
                 //internal cell state error
-                var cellStateError = LearningRate * NormalizeGradient(c.yOut * c.er);
+                var cellStateError = (float)NormalizeGradient(c.yOut * c.er);
+
+                Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
 
                 LSTMWeight[] w_i = input2hidden[i];
-                LSTMWeightDerivative[] wd_i = input2hiddenDeri[i];
+                Vector3[] wd_i = input2hiddenDeri[i];
+                Vector4[] wlr_i = Input2HiddenLearningRate[i];
 
                 var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = TanHDerivative(c.netCellState) * c.yIn;
                 var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = TanH(c.netCellState) * SigmoidDerivative(c.netIn);
                 var ci_previousCellState_mul_SigmoidDerivative_ci_netForget = c.previousCellState * SigmoidDerivative(c.netForget);
 
+                Vector3 vecDerivate = new Vector3((float)Sigmoid2Derivative_ci_netCellState_mul_ci_yIn,
+                        (float)Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn,
+                        (float)ci_previousCellState_mul_SigmoidDerivative_ci_netForget);
+
+                double delta = 0;
+                double newLearningRate = 0;
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
-                    LSTMWeightDerivative wd = wd_i[entry.Key];
                     LSTMWeight w = w_i[entry.Key];
+                    Vector4 wlr = wlr_i[entry.Key];
 
-                    wd.dSInputCell = wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * entry.Value;
-                    wd.dSInputInputGate = wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * entry.Value;
-                    wd.dSInputForgetGate = wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * entry.Value;
+                    Vector3 wd = vecDerivate * entry.Value;
+                    if (curState > 0)
+                    {
+                        wd += wd_i[entry.Key] * (float)c.yForget;
+                    }
+                    wd_i[entry.Key] = wd;
 
-                    //updates weights for input to hidden layer
-                    w.wInputCell += (float)(cellStateError * wd.dSInputCell);
-                    w.wInputInputGate += (float)(cellStateError * wd.dSInputInputGate);
-                    w.wInputForgetGate += (float)(cellStateError * wd.dSInputForgetGate);
-                    w.wInputOutputGate += (float)(gradientOutputGate * entry.Value);
+                    //Get new learning rate according weight delta
+                    Vector4 vecDelta = new Vector4(wd, entry.Value);
+                    vecDelta = vecErr * vecDelta;
+
+                    Vector4 vecAlpha = vecDelta * vecDelta;
+                    vecAlpha = wlr + vecAlpha;
+                    wlr_i[entry.Key] = vecAlpha;
+
+                    vecAlpha = Vector4.SquareRoot(vecAlpha) + Vector4.One;
+                    vecAlpha = vecLearningRate / vecAlpha;
+
+                    vecDelta = vecAlpha * vecDelta;
+
+                    w.wInputCell += vecDelta.X;
+                    w.wInputInputGate += vecDelta.Y;
+                    w.wInputForgetGate += vecDelta.Z;
+                    w.wInputOutputGate += vecDelta.W;
 
                     wd_i[entry.Key] = wd;
                     w_i[entry.Key] = w;
@@ -609,21 +691,37 @@ namespace RNNSharp
                 {
                     w_i = feature2hidden[i];
                     wd_i = feature2hiddenDeri[i];
+                    wlr_i = Feature2HiddenLearningRate[i];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
-                        LSTMWeightDerivative wd = wd_i[j];
                         LSTMWeight w = w_i[j];
+                        Vector4 wlr = wlr_i[j];
+                        float feature = neuFeatures[j];
 
-                        wd.dSInputCell = wd.dSInputCell * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * neuFeatures[j];
-                        wd.dSInputInputGate = wd.dSInputInputGate * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * neuFeatures[j];
-                        wd.dSInputForgetGate = wd.dSInputForgetGate * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * neuFeatures[j];
+                        Vector3 wd = vecDerivate * feature;
+                        if (curState > 0)
+                        {
+                            wd += wd_i[j] * (float)c.yForget;
+                        }
+                        wd_i[j] = wd;
 
-                        //make the delta equal to the learning rate multiplied by the gradient multipled by the input for the connection
-                        //update connection weights
-                        w.wInputCell += (float)(cellStateError * wd.dSInputCell);
-                        w.wInputInputGate += (float)(cellStateError * wd.dSInputInputGate);
-                        w.wInputForgetGate += (float)(cellStateError * wd.dSInputForgetGate);
-                        w.wInputOutputGate += (float)(gradientOutputGate * neuFeatures[j]);
+                        //Get new learning rate according weight delta
+                        Vector4 vecDelta = new Vector4(wd, feature);
+                        vecDelta = vecErr * vecDelta;
+
+                        Vector4 vecAlpha = vecDelta * vecDelta;
+                        vecAlpha = wlr + vecAlpha;
+                        wlr_i[j] = vecAlpha;
+
+                        vecAlpha = Vector4.SquareRoot(vecAlpha) + Vector4.One;
+                        vecAlpha = vecLearningRate / vecAlpha;
+
+                        vecDelta = vecAlpha * vecDelta;
+
+                        w.wInputCell += vecDelta.X;
+                        w.wInputInputGate += vecDelta.Y;
+                        w.wInputForgetGate += vecDelta.Z;
+                        w.wInputOutputGate += vecDelta.W;
 
                         wd_i[j] = wd;
                         w_i[j] = w;
@@ -638,9 +736,17 @@ namespace RNNSharp
 
 
                 //update internal weights
-                c.wCellIn += (float)(cellStateError * c.dSWCellIn);
-                c.wCellForget += (float)(cellStateError * c.dSWCellForget);
-                c.wCellOut += (float)(gradientOutputGate * c.cellState);
+                delta = cellStateError * c.dSWCellIn;
+                newLearningRate = UpdateLearningRate(ref c.dCellInLearningRate, delta);
+                c.wCellIn += newLearningRate * delta;
+
+                delta = cellStateError * c.dSWCellForget;
+                newLearningRate = UpdateLearningRate(ref c.dCellForgetLearningRate, delta);
+                c.wCellForget += newLearningRate * delta;
+
+                delta = gradientOutputGate * c.cellState;
+                newLearningRate = UpdateLearningRate(ref c.dCellOutLearningRate, delta);
+                c.wCellOut += newLearningRate * delta;
 
                 neuHidden[i] = c;
             });
@@ -653,7 +759,7 @@ namespace RNNSharp
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
             var sparse = state.SparseData;
-            int sparseFeatureSize = sparse.GetNumberOfEntries();
+            int sparseFeatureSize = sparse.Count;
 
             Parallel.For(0, L1, parallelOption, j =>
             {
@@ -662,47 +768,49 @@ namespace RNNSharp
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
 
-                //rest the value of the net input to zero
-                cell_j.netIn = 0;
+                Vector4 vecCell_j = Vector4.Zero;
 
-                cell_j.netForget = 0;
-                //reset each netCell state to zero
-                cell_j.netCellState = 0;
-                //reset each netOut to zero
-                cell_j.netOut = 0;
+                LSTMWeight[] weights = input2hidden[j];
                 for (int i = 0; i < sparseFeatureSize; i++)
                 {
                     var entry = sparse.GetEntry(i);
-                    LSTMWeight w = input2hidden[j][entry.Key];
-                    //loop through all forget gates in hiddden layer
-                    cell_j.netIn += entry.Value * w.wInputInputGate;
-                    cell_j.netForget += entry.Value * w.wInputForgetGate;
-                    cell_j.netCellState += entry.Value * w.wInputCell;
-                    cell_j.netOut += entry.Value * w.wInputOutputGate;
-                }
+                    LSTMWeight w = weights[entry.Key];
 
+                    Vector4 vecW = new Vector4(w.wInputInputGate, w.wInputForgetGate, w.wInputCell, w.wInputOutputGate);
+                    vecW *= entry.Value;
+                    vecCell_j += vecW;
+                }
 
                 //fea(t) -> hidden(t) 
                 if (DenseFeatureSize > 0)
                 {
+                    weights = feature2hidden[j];
                     for (int i = 0; i < DenseFeatureSize; i++)
                     {
-                        LSTMWeight w = feature2hidden[j][i];
-                        cell_j.netIn += neuFeatures[i] * w.wInputInputGate;
-                        cell_j.netForget += neuFeatures[i] * w.wInputForgetGate;
-                        cell_j.netCellState += neuFeatures[i] * w.wInputCell;
-                        cell_j.netOut += neuFeatures[i] * w.wInputOutputGate;
+                        LSTMWeight w = weights[i];
+                        Vector4 vecW = new Vector4(w.wInputInputGate, w.wInputForgetGate, w.wInputCell, w.wInputOutputGate);
+                        vecW *= neuFeatures[i];
+                        vecCell_j += vecW;
                     }
                 }
+
+                //rest the value of the net input to zero
+                cell_j.netIn = vecCell_j.X;
+                cell_j.netForget = vecCell_j.Y;
+                //reset each netCell state to zero
+                cell_j.netCellState = vecCell_j.Z;
+                //reset each netOut to zero
+                cell_j.netOut = vecCell_j.W;
+
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;
                 //squash input
-                cell_j.yIn = (float)Sigmoid(cell_j.netIn);
+                cell_j.yIn = Sigmoid(cell_j.netIn);
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netForget += cell_j.previousCellState * cell_j.wCellForget;
-                cell_j.yForget = (float)Sigmoid(cell_j.netForget);
+                cell_j.yForget = Sigmoid(cell_j.netForget);
 
                 if (cell_j.mask == true)
                 {
@@ -711,19 +819,19 @@ namespace RNNSharp
                 else
                 {
                     //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
-                    cell_j.cellState = (float)(cell_j.yForget * cell_j.previousCellState + cell_j.yIn * TanH(cell_j.netCellState));
+                    cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * TanH(cell_j.netCellState);
                 }
 
                 if (isTrain == false)
                 {
-                    cell_j.cellState = (float)(cell_j.cellState * (1.0 - Dropout));
+                    cell_j.cellState = cell_j.cellState * (1.0 - Dropout);
                 }
 
                 ////include the internal connection multiplied by the CURRENT cell state
                 cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
 
                 //squash output gate 
-                cell_j.yOut = (float)(Sigmoid(cell_j.netOut));
+                cell_j.yOut = Sigmoid(cell_j.netOut);
 
                 cell_j.cellOutput = cell_j.cellState * cell_j.yOut;
 
@@ -732,15 +840,13 @@ namespace RNNSharp
             });
         }
 
+
         public override void computeOutput(double[] doutput)
         {
             matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, L2, L1, 0);
             if (doutput != null)
             {
-                for (int i = 0; i < L2; i++)
-                {
-                    doutput[i] = OutputLayer[i].cellOutput;
-                }
+                OutputLayer.cellOutput.CopyTo(doutput, 0);
             }
 
             //activation 2   --softmax on words
@@ -750,22 +856,13 @@ namespace RNNSharp
 
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
-            Parallel.For(0, L1, parallelOption, i =>
+            for (int i = 0; i < L1; i++)
             {
                 neuHidden[i].mask = false;
                 LSTMCellInit(neuHidden[i]);
+            }
 
-                if (updateNet == true)
-                {
-                    Array.Clear(input2hiddenDeri[i], 0, L0);
-                    if (DenseFeatureSize > 0)
-                    {
-                        Array.Clear(feature2hiddenDeri[i], 0, DenseFeatureSize);
-                    }
-                }
-            });
-
-            if (updateNet == true)
+            if (Dropout > 0 && updateNet == true)
             {
                 //Train mode
                 for (int a = 0; a < L1; a++)
