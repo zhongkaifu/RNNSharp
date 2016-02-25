@@ -1,11 +1,10 @@
-﻿using System.Numerics;
-
+﻿
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
 namespace RNNSharp
 {
-    public class Matrix<T> where T : struct
+    public class Matrix<T>
     {
 
         public int Height { get; set; } // the number of rows
@@ -42,13 +41,7 @@ namespace RNNSharp
 
             for (int i = 0; i < Height; i++)
             {
-                T[] m_i = m[i];
-                T[] m_saData_i = m_saData[i];
-                for (int j = 0; j < Width; j += Vector<T>.Count)
-                {
-                    Vector<T> v1 = new Vector<T>(m_saData_i, j);
-                    v1.CopyTo(m_i, j);
-                }
+                m_saData[i].CopyTo(m[i], 0);
             }
 
             return m;

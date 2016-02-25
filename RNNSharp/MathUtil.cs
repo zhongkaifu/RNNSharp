@@ -7,7 +7,7 @@ namespace RNNSharp
 {
     class MathUtil
     {
-        public static int GetMaxProbIndex(float [] array)
+        public static int GetMaxProbIndex(double [] array)
         {
             int dim = array.Length;
             double maxValue = array[0];
