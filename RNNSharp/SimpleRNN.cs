@@ -401,7 +401,7 @@ namespace RNNSharp
             Feature2HiddenWeights = new Matrix<double>(L1, DenseFeatureSize);
             HiddenBpttWeights = new Matrix<double>(L1, L1);
 
-            Logger.WriteLine("[TRACE] Initializing weights, random value is {0}", rand.NextDouble());// yy debug
+            Logger.WriteLine("Initializing weights, random value is {0}", rand.NextDouble());// yy debug
             initWeights();
 
             //Initialize BPTT

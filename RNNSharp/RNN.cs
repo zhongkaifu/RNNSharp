@@ -504,7 +504,7 @@ namespace RNNSharp
         public virtual double TrainNet(DataSet trainingSet, int iter)
         {
             DateTime start = DateTime.Now;
-            Logger.WriteLine("[TRACE] Iter " + iter + " begins with learning rate alpha = " + LearningRate + " ...");
+            Logger.WriteLine("Iter " + iter + " begins with learning rate alpha = " + LearningRate + " ...");
 
             //Initialize varibles
             logp = 0;
@@ -516,7 +516,7 @@ namespace RNNSharp
             int wordCnt = 0;
             int tknErrCnt = 0;
             int sentErrCnt = 0;
-            Logger.WriteLine("[TRACE] Progress = 0/" + numSequence / 1000.0 + "K\r");
+            Logger.WriteLine("Progress = 0/" + numSequence / 1000.0 + "K\r");
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
                 Sequence pSequence = trainingSet.SequenceList[curSequence];
@@ -543,8 +543,8 @@ namespace RNNSharp
 
                 if ((curSequence + 1) % 1000 == 0)
                 {
-                    Logger.WriteLine("[TRACE] Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
-                    Logger.WriteLine(" train cross-entropy = {0} ", -logp / Math.Log10(2.0) / wordCnt);
+                    Logger.WriteLine("Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
+                    Logger.WriteLine(" Train cross-entropy = {0} ", -logp / Math.Log10(2.0) / wordCnt);
                     Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)wordCnt * 100.0);
                     Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100.0);
                 }
@@ -562,9 +562,9 @@ namespace RNNSharp
 
             double entropy = -logp / Math.Log10(2.0) / wordCnt;
             double ppl = exp_10(-logp / wordCnt);
-            Logger.WriteLine("[TRACE] Iter " + iter + " completed");
-            Logger.WriteLine("[TRACE] Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
-            Logger.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+            Logger.WriteLine("Iter " + iter + " completed");
+            Logger.WriteLine("Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
 
             return ppl;
         }
@@ -877,7 +877,7 @@ namespace RNNSharp
 
         public virtual bool ValidateNet(DataSet validationSet, int iter)
         {
-            Logger.WriteLine("[TRACE] Start validation ...");
+            Logger.WriteLine("Start validation ...");
             int wordcn = 0;
             int tknErrCnt = 0;
             int sentErrCnt = 0;
@@ -915,8 +915,8 @@ namespace RNNSharp
             double tknErrRatio = (double)tknErrCnt / (double)wordcn * 100.0;
             double sentErrRatio = (double)sentErrCnt / (double)numSequence * 100.0;
 
-            Logger.WriteLine("[TRACE] In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
-            Logger.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
+            Logger.WriteLine("In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
             Logger.WriteLine("");
 
             bool bUpdate = false;

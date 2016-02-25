@@ -82,7 +82,7 @@ namespace RNNSharp
 
             Logger.WriteLine("");
 
-            Logger.WriteLine("[TRACE] Iterative training begins ...");
+            Logger.WriteLine("Iterative training begins ...");
             double lastPPL = double.MaxValue;
             double lastAlpha = rnn.LearningRate;
             int iter = 0;
