@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using AdvUtils;
 using System.Collections.Generic;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -13,6 +14,7 @@ namespace RNNSharp
     {
         private RNN forwardRNN;
         private RNN backwardRNN;
+        private Vector<float> vecConst2 = new Vector<float>(2.0f);
 
         public BiRNN(RNN s_forwardRNN, RNN s_backwardRNN)
         {
@@ -129,7 +131,7 @@ namespace RNNSharp
             }
         }
 
-        public override double GradientCutoff
+        public override float GradientCutoff
         {
             get
             {
@@ -209,7 +211,7 @@ namespace RNNSharp
             backwardRNN.InitMem();
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
-            Hidden2OutputWeight = new Matrix<double>(L2, L1);
+            Hidden2OutputWeight = new Matrix<float>(L2, L1);
 
             for (int i = 0; i < Hidden2OutputWeight.Height; i++)
             {
@@ -222,7 +224,7 @@ namespace RNNSharp
             Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
         }
 
-        public SimpleLayer[] InnerDecode(Sequence pSequence, out SimpleLayer[] outputHiddenLayer, out Matrix<double> rawOutputLayer)
+        public SimpleLayer[] InnerDecode(Sequence pSequence, out SimpleLayer[] outputHiddenLayer, out Matrix<float> rawOutputLayer)
         {
             int numStates = pSequence.States.Length;
             SimpleLayer[] mForward = null;
@@ -266,14 +268,18 @@ namespace RNNSharp
                 SimpleLayer forwardCells = mForward[curState];
                 SimpleLayer backwardCells = mBackward[curState];
 
-                for (int i = 0; i < forwardRNN.L1; i++)
+                for (int i = 0; i < forwardRNN.L1; i+=Vector<float>.Count)
                 {
-                    cells.cellOutput[i] = (forwardCells.cellOutput[i] + backwardCells.cellOutput[i]) / 2.0;
+                    Vector<float> v1 = new Vector<float>(forwardCells.cellOutput, i);
+                    Vector<float> v2 = new Vector<float>(backwardCells.cellOutput, i);
+                    Vector<float> v = (v1 + v2) / vecConst2;
+
+                    v.CopyTo(cells.cellOutput, i);
                 }
             });
 
             //Calculate output layer
-            Matrix<double> tmp_rawOutputLayer = new Matrix<double>(numStates, L2);
+            Matrix<float> tmp_rawOutputLayer = new Matrix<float>(numStates, L2);
             SimpleLayer[] seqOutput = new SimpleLayer[numStates];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
@@ -282,7 +288,7 @@ namespace RNNSharp
 
                 matrixXvectorADD(outputCells, mergedHiddenLayer[curState], Hidden2OutputWeight, L2, L1, 0);
 
-                double[] tmp_vector = tmp_rawOutputLayer[curState];
+                float[] tmp_vector = tmp_rawOutputLayer[curState];
                 outputCells.cellOutput.CopyTo(tmp_vector, 0);
 
                 //Activation on output layer
@@ -301,7 +307,7 @@ namespace RNNSharp
             int numStates = pSequence.States.Length;
             //Predict output
             SimpleLayer[] mergedHiddenLayer = null;
-            Matrix<double> rawOutputLayer = null;
+            Matrix<float> rawOutputLayer = null;
             SimpleLayer[] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer);
 
             ForwardBackward(numStates, rawOutputLayer);
@@ -326,7 +332,7 @@ namespace RNNSharp
                 {
                     int label = pSequence.States[curState].Label;
                     SimpleLayer layer = seqOutput[curState];
-                    double[] CRFOutputLayer = CRFSeqOutput[curState];
+                    float[] CRFOutputLayer = CRFSeqOutput[curState];
 
                     //For standard RNN
                     for (int c = 0; c < L2; c++)
@@ -342,14 +348,14 @@ namespace RNNSharp
             return predict;
         }
 
-        public override Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
+        public override Matrix<float> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
             //Reset the network
             int numStates = pSequence.States.Length;
 
             //Predict output
             SimpleLayer[] mergedHiddenLayer = null;
-            Matrix<double> rawOutputLayer = null;
+            Matrix<float> rawOutputLayer = null;
             SimpleLayer[] seqOutput = InnerDecode(pSequence, out mergedHiddenLayer, out rawOutputLayer);
 
             if (runningMode != RunningMode.Test)
@@ -374,7 +380,7 @@ namespace RNNSharp
                     {
                         layer.er[c] = -layer.cellOutput[c];
                     }
-                    layer.er[label] = 1.0 - layer.cellOutput[label];
+                    layer.er[label] = 1.0f - layer.cellOutput[label];
                 }
 
                 LearnTwoRNN(pSequence, mergedHiddenLayer, seqOutput);
@@ -407,18 +413,17 @@ namespace RNNSharp
                     for (int i = 0; i < Hidden2OutputWeight.Height; i++)
                     {
                         //update weights for hidden to output layer
-                        double er = outputCells.er[i];
-                        double[] vector_i = Hidden2OutputWeight[i];
+                        float er = outputCells.er[i];
+                        float[] vector_i = Hidden2OutputWeight[i];
                         for (int k = 0; k < Hidden2OutputWeight.Width; k++)
                         {
                             double delta = NormalizeGradient(mergedHiddenCells.cellOutput[k] * er);
                             double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, i, k, delta);
 
-                            vector_i[k] += newLearningRate * delta;
+                            vector_i[k] += (float)(newLearningRate * delta);
                         }
                     }
                 }
-
             },
             ()=>
             {
@@ -485,7 +490,7 @@ namespace RNNSharp
             throw new NotImplementedException("computeHiddenLayer is not implemented in BiRNN");
         }
 
-        public override void computeOutput(double[] doutput)
+        public override void computeOutput(float[] doutput)
         {
             throw new NotImplementedException("computeOutput is not implemented in BiRNN");
         }

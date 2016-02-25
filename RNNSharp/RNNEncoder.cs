@@ -64,7 +64,7 @@ namespace RNNSharp
             rnn.MaxIter = m_modelSetting.MaxIteration;
             rnn.IsCRFTraining = m_modelSetting.IsCRFTraining;
             rnn.LearningRate = m_modelSetting.LearningRate;
-            rnn.GradientCutoff = 15.0;
+            rnn.GradientCutoff = 15.0f;
             rnn.Dropout = m_modelSetting.Dropout;
             rnn.L1 = m_modelSetting.NumHidden;
 
@@ -82,7 +82,7 @@ namespace RNNSharp
 
             Logger.WriteLine("");
 
-            Logger.WriteLine("[TRACE] Iterative training begins ...");
+            Logger.WriteLine("Iterative training begins ...");
             double lastPPL = double.MaxValue;
             double lastAlpha = rnn.LearningRate;
             int iter = 0;

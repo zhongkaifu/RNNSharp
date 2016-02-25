@@ -7,22 +7,22 @@ namespace RNNSharp
     public class SimpleCell
     {
         //cell output
-        public double cellOutput;
-        public double er;
+        public float cellOutput;
+        public float er;
         public bool mask;
     }
 
     public class SimpleLayer
     {
-        public double[] cellOutput;
-        public double[] er;
+        public float[] cellOutput;
+        public float[] er;
         public bool[] mask;
         public int size;
 
         public SimpleLayer(int m)
         {
-            cellOutput = new double[m];
-            er = new double[m];
+            cellOutput = new float[m];
+            er = new float[m];
             mask = new bool[m];
 
             size = m;

@@ -30,10 +30,6 @@ namespace RNNSharp
         public double wCellForget;
         public double wCellOut;
 
-        public float dCellInLearningRate;
-        public float dCellForgetLearningRate;
-        public float dCellOutLearningRate;
-
         //partial derivatives
         public double dSWCellIn;
         public double dSWCellForget;
@@ -52,22 +48,6 @@ namespace RNNSharp
         public float wInputOutputGate;
     }
 
-    //public struct LSTMWeightLearningRate
-    //{
-    //    public float dInputCellLearningRate;
-    //    public float dInputInputGateLearningRate;
-    //    public float dInputForgetGateLearningRate;
-    //    public float dInputOutputGateLearningRate;
-    //}
-
-    //public struct LSTMWeightDerivative
-    //{
-    //    //partial derivatives. dont need partial derivative for output gate as it uses BP not RTRL
-    //    public double dSInputCell;
-    //    public double dSInputInputGate;
-    //    public double dSInputForgetGate;
-    //}
-
     public class LSTMRNN : RNN
     {
         public LSTMCell[] neuHidden;		//neurons in hidden layer
@@ -76,9 +56,14 @@ namespace RNNSharp
 
         protected Vector4[][] Input2HiddenLearningRate;
         protected Vector4[][] Feature2HiddenLearningRate;
+        protected Vector3[] CellLearningRate;
 
         protected Vector3[][] input2hiddenDeri;
         protected Vector3[][] feature2hiddenDeri;
+
+        private Vector4 vecLearningRate;
+        private Vector3 vecLearningRate3;
+
 
         public LSTMRNN()
         {
@@ -368,7 +353,7 @@ namespace RNNSharp
             //weight input->hidden
             Logger.WriteLine("Saving input2hidden weights...");
             saveLSTMWeight(input2hidden, fo);
-  
+
             if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
@@ -453,7 +438,7 @@ namespace RNNSharp
             }
 
             //Create and intialise the weights from hidden to output layer, these are just normal weights
-            Hidden2OutputWeight = new Matrix<double>(L2, L1);
+            Hidden2OutputWeight = new Matrix<float>(L2, L1);
 
             for (int i = 0; i < Hidden2OutputWeight.Height; i++)
             {
@@ -499,12 +484,9 @@ namespace RNNSharp
                 Feature2HiddenLearningRate = new Vector4[L1][];
             }
 
+            CellLearningRate = new Vector3[L1];
             Parallel.For(0, L1, parallelOption, i =>
             {
-                neuHidden[i].dCellForgetLearningRate = 0;
-                neuHidden[i].dCellInLearningRate = 0;
-                neuHidden[i].dCellOutLearningRate = 0;
-
                 Input2HiddenLearningRate[i] = new Vector4[L0];
 
                 if (DenseFeatureSize > 0)
@@ -515,6 +497,8 @@ namespace RNNSharp
             });
 
             Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
+            vecLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
+            vecLearningRate3 = new Vector3(LearningRate, LearningRate, LearningRate);
         }
 
         public override void InitMem()
@@ -583,7 +567,7 @@ namespace RNNSharp
                 //find the error by find the product of the output errors and their weight connection.
                 SimpleCell cell = neuHidden[i];
 
-                cell.er = 0.0;
+                cell.er = 0.0f;
 
                 if (cell.mask == false)
                 {
@@ -600,22 +584,15 @@ namespace RNNSharp
             //update weights for hidden to output layer
             Parallel.For(0, L1, parallelOption, i =>
             {
-                double cellOutput = neuHidden[i].cellOutput;
+                float cellOutput = neuHidden[i].cellOutput;
                 for (int k = 0; k < L2; k++)
                 {
-                    double delta = NormalizeGradient(cellOutput * OutputLayer.er[k]);
-                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, i, k, delta);
+                    float delta = NormalizeGradient(cellOutput * OutputLayer.er[k]);
+                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, k, i, delta);
 
-                    Hidden2OutputWeight[k][i] += newLearningRate * delta;
+                    Hidden2OutputWeight[k][i] += (float)(newLearningRate * delta);
                 }
             });
-        }
-
-        public double UpdateLearningRate(ref float mg, double delta)
-        {
-            double dg = mg + delta * delta;
-            mg = (float)dg;
-            return LearningRate / (1.0 + Math.Sqrt(dg));
         }
 
         public override void LearnNet(State state, int numStates, int curState)
@@ -623,7 +600,6 @@ namespace RNNSharp
             //Get sparse feature and apply it into hidden layer
             var sparse = state.SparseData;
             int sparseFeatureSize = sparse.Count;
-            Vector4 vecLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
 
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, L1, parallelOption, i =>
@@ -650,8 +626,6 @@ namespace RNNSharp
                         (float)Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn,
                         (float)ci_previousCellState_mul_SigmoidDerivative_ci_netForget);
 
-                double delta = 0;
-                double newLearningRate = 0;
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
@@ -673,9 +647,7 @@ namespace RNNSharp
                     vecAlpha = wlr + vecAlpha;
                     wlr_i[entry.Key] = vecAlpha;
 
-                    vecAlpha = Vector4.SquareRoot(vecAlpha) + Vector4.One;
-                    vecAlpha = vecLearningRate / vecAlpha;
-
+                    vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
                     vecDelta = vecAlpha * vecDelta;
 
                     w.wInputCell += vecDelta.X;
@@ -713,9 +685,7 @@ namespace RNNSharp
                         vecAlpha = wlr + vecAlpha;
                         wlr_i[j] = vecAlpha;
 
-                        vecAlpha = Vector4.SquareRoot(vecAlpha) + Vector4.One;
-                        vecAlpha = vecLearningRate / vecAlpha;
-
+                        vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
                         vecDelta = vecAlpha * vecDelta;
 
                         w.wInputCell += vecDelta.X;
@@ -736,17 +706,22 @@ namespace RNNSharp
 
 
                 //update internal weights
-                delta = cellStateError * c.dSWCellIn;
-                newLearningRate = UpdateLearningRate(ref c.dCellInLearningRate, delta);
-                c.wCellIn += newLearningRate * delta;
+                Vector3 vecCellDelta = new Vector3((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.cellState);
+                Vector3 vecCellErr = new Vector3(cellStateError, cellStateError, gradientOutputGate);
+                Vector3 vecCellLearningRate = CellLearningRate[i];
 
-                delta = cellStateError * c.dSWCellForget;
-                newLearningRate = UpdateLearningRate(ref c.dCellForgetLearningRate, delta);
-                c.wCellForget += newLearningRate * delta;
+                vecCellDelta = vecCellErr * vecCellDelta;
+                vecCellLearningRate += (vecCellDelta * vecCellDelta);
+                CellLearningRate[i] = vecCellLearningRate;
 
-                delta = gradientOutputGate * c.cellState;
-                newLearningRate = UpdateLearningRate(ref c.dCellOutLearningRate, delta);
-                c.wCellOut += newLearningRate * delta;
+                //LearningRate / (1.0 + Math.Sqrt(dg));
+                vecCellLearningRate = vecLearningRate3 / (Vector3.One + Vector3.SquareRoot(vecCellLearningRate));
+                vecCellDelta = vecCellLearningRate * vecCellDelta;
+
+                c.wCellIn += vecCellDelta.X;
+                c.wCellForget += vecCellDelta.Y;
+                c.wCellOut += vecCellDelta.Z;
+
 
                 neuHidden[i] = c;
             });
@@ -833,7 +808,7 @@ namespace RNNSharp
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);
 
-                cell_j.cellOutput = cell_j.cellState * cell_j.yOut;
+                cell_j.cellOutput = (float)(cell_j.cellState * cell_j.yOut);
 
 
                 neuHidden[j] = cell_j;
@@ -841,7 +816,7 @@ namespace RNNSharp
         }
 
 
-        public override void computeOutput(double[] doutput)
+        public override void computeOutput(float[] doutput)
         {
             matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, L2, L1, 0);
             if (doutput != null)

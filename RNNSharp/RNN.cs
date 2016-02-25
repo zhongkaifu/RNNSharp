@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -47,7 +48,7 @@ namespace RNNSharp
         public string ModelTempFile { get { return ModelFile + ".tmp"; } }
         public virtual MODELDIRECTION ModelDirection { get; set; }
         public virtual bool bVQ { get; set; }
-        public virtual double GradientCutoff { get; set; }
+        public virtual float GradientCutoff { get; set; }
         public virtual float Dropout { get; set; }
         public virtual float LearningRate { get; set; }
         public virtual int MaxIter { get; set; }
@@ -58,13 +59,13 @@ namespace RNNSharp
         public virtual int L2 { get; set; }
 
         public MODELTYPE ModelType { get; set; }
-        public Matrix<double> CRFTagTransWeights { get; set; }
+        public Matrix<float> CRFTagTransWeights { get; set; }
         public SimpleLayer OutputLayer { get; set; }
-        public Matrix<double> Hidden2OutputWeight;
+        public Matrix<float> Hidden2OutputWeight;
         public Matrix<float> Hidden2OutputWeightLearningRate;
       
         // CRF result output
-        protected Matrix<double> CRFSeqOutput;
+        protected Matrix<float> CRFSeqOutput;
         protected double logp;
         protected double minTknErrRatio = double.MaxValue;
         protected ParallelOptions parallelOption = new ParallelOptions();
@@ -75,7 +76,7 @@ namespace RNNSharp
 
         public virtual void setTagBigramTransition(List<List<float>> m)
         {
-            CRFTagTransWeights = new Matrix<double>(L2, L2);
+            CRFTagTransWeights = new Matrix<float>(L2, L2);
             for (int i = 0; i < L2; i++)
             {
                 for (int j = 0; j < L2; j++)
@@ -105,7 +106,7 @@ namespace RNNSharp
         }
 
         //Save matrix into file as binary format
-        protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo)
+        protected void saveMatrixBin(Matrix<float> mat, BinaryWriter fo)
         {
             //Save the width and height of the matrix
             fo.Write(mat.Width);
@@ -168,14 +169,14 @@ namespace RNNSharp
             }
         }
 
-        protected Matrix<double> loadMatrixBin(BinaryReader br)
+        protected Matrix<float> loadMatrixBin(BinaryReader br)
         {
             int width = br.ReadInt32();
             int height = br.ReadInt32();
             int vqSize = br.ReadInt32();
             Logger.WriteLine("Loading matrix. width: {0}, height: {1}, vqSize: {2}", width, height, vqSize);
 
-            Matrix<double> m = new Matrix<double>(height, width);
+            Matrix<float> m = new Matrix<float>(height, width);
             if (vqSize == 0)
             {
                 for (int r = 0; r < height; r++)
@@ -201,7 +202,7 @@ namespace RNNSharp
                     for (int c = 0; c < width; c++)
                     {
                         int vqIndex = br.ReadByte();
-                        m[r][c] = codeBook[vqIndex];
+                        m[r][c] = (float)codeBook[vqIndex];
                     }
                 }
             }
@@ -238,13 +239,13 @@ namespace RNNSharp
         public abstract void netReset(bool updateNet = false);
         public abstract void computeHiddenLayer(State state, bool isTrain = true);
 
-        public abstract void computeOutput(double[] doutput);
+        public abstract void computeOutput(float[] doutput);
 
 
-        public virtual Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
+        public virtual Matrix<float> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
             int numStates = pSequence.States.Length;
-            Matrix<double> m = new Matrix<double>(numStates, L2);
+            Matrix<float> m = new Matrix<float>(numStates, L2);
             int[] predicted = new int[numStates];
             bool isTraining = true;
             if (runningMode == RunningMode.Train)
@@ -306,11 +307,13 @@ namespace RNNSharp
                 if (cellOutput < -50) cellOutput = -50;  //for numerical stability
                 double val = Math.Exp(cellOutput);
                 sum += val;
-                layer.cellOutput[c] = val;
+                layer.cellOutput[c] = (float)val;
             }
+
+            float sumf = (float)sum;
             for (int c = 0; c < L2; c++)
             {
-                layer.cellOutput[c] /= sum;
+                layer.cellOutput[c] /= sumf;
             }
         }
 
@@ -333,7 +336,7 @@ namespace RNNSharp
         {
             int numStates = pSequence.States.Length;
 
-            Matrix<double> nnOutput = PredictSentence(pSequence, RunningMode.Test);
+            Matrix<float> nnOutput = PredictSentence(pSequence, RunningMode.Test);
             ForwardBackward(numStates, nnOutput);
 
             if (runningMode != RunningMode.Test)
@@ -400,16 +403,16 @@ namespace RNNSharp
             //Update tag Bigram LM
             for (int b = 0;b < L2;b++)
             {
-                double[] vector_b = CRFTagTransWeights[b];
+                float[] vector_b = CRFTagTransWeights[b];
                 double[] vector_delta_b = m_DeltaBigramLM[b];
                 for (int a = 0; a < L2; a++)
                 {
-                    vector_b[a] += LearningRate * NormalizeGradient(vector_delta_b[a]);
+                    vector_b[a] += (float)(LearningRate * NormalizeGradient(vector_delta_b[a]));
                 }
             }
         }
 
-        public void ForwardBackward(int numStates, Matrix<double> m_RawOutput)
+        public void ForwardBackward(int numStates, Matrix<float> m_RawOutput)
         {
             //forward
             double[][] alphaSet = new double[numStates][];
@@ -469,12 +472,12 @@ namespace RNNSharp
             }
 
             //Calculate the output probability of each node
-            CRFSeqOutput = new Matrix<double>(numStates, L2);
+            CRFSeqOutput = new Matrix<float>(numStates, L2);
             for (int i = 0; i < numStates; i++)
             {
                 for (int j = 0; j < L2; j++)
                 {
-                    CRFSeqOutput[i][j] = Math.Exp(alphaSet[i][j] + betaSet[i][j] - m_RawOutput[i][j] - Z_);
+                    CRFSeqOutput[i][j] = (float)Math.Exp(alphaSet[i][j] + betaSet[i][j] - m_RawOutput[i][j] - Z_);
                 }
             }
 
@@ -504,7 +507,7 @@ namespace RNNSharp
         public virtual double TrainNet(DataSet trainingSet, int iter)
         {
             DateTime start = DateTime.Now;
-            Logger.WriteLine("[TRACE] Iter " + iter + " begins with learning rate alpha = " + LearningRate + " ...");
+            Logger.WriteLine("Iter " + iter + " begins with learning rate alpha = " + LearningRate + " ...");
 
             //Initialize varibles
             logp = 0;
@@ -516,7 +519,7 @@ namespace RNNSharp
             int wordCnt = 0;
             int tknErrCnt = 0;
             int sentErrCnt = 0;
-            Logger.WriteLine("[TRACE] Progress = 0/" + numSequence / 1000.0 + "K\r");
+            Logger.WriteLine("Progress = 0/" + numSequence / 1000.0 + "K\r");
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
                 Sequence pSequence = trainingSet.SequenceList[curSequence];
@@ -529,7 +532,7 @@ namespace RNNSharp
                 }
                 else
                 {
-                    Matrix<double> m;
+                    Matrix<float> m;
                     m = PredictSentence(pSequence, RunningMode.Train);
                     predicted = GetBestResult(m);
                 }
@@ -543,10 +546,10 @@ namespace RNNSharp
 
                 if ((curSequence + 1) % 1000 == 0)
                 {
-                    Logger.WriteLine("[TRACE] Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
-                    Logger.WriteLine(" train cross-entropy = {0} ", -logp / Math.Log10(2.0) / wordCnt);
-                    Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)wordCnt * 100.0);
-                    Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100.0);
+                    Logger.WriteLine("Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
+                    Logger.WriteLine("Training cross-entropy = {0} ", -logp / Math.Log10(2.0) / wordCnt);
+                    Logger.WriteLine("Error token ratio = {0}%", (double)tknErrCnt / (double)wordCnt * 100.0);
+                    Logger.WriteLine("Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100.0);
                 }
 
                 if (SaveStep > 0 && (curSequence + 1) % SaveStep == 0)
@@ -562,9 +565,9 @@ namespace RNNSharp
 
             double entropy = -logp / Math.Log10(2.0) / wordCnt;
             double ppl = exp_10(-logp / wordCnt);
-            Logger.WriteLine("[TRACE] Iter " + iter + " completed");
-            Logger.WriteLine("[TRACE] Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
-            Logger.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+            Logger.WriteLine("Iter " + iter + " completed");
+            Logger.WriteLine("Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
 
             return ppl;
         }
@@ -589,7 +592,7 @@ namespace RNNSharp
         }
 
 
-        protected double NormalizeGradient(double err)
+        protected float NormalizeGradient(float err)
         {
             if (err > GradientCutoff)
             {
@@ -602,15 +605,27 @@ namespace RNNSharp
             return err;
         }
 
-        public void matrixXvectorADD(SimpleLayer dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
+        protected double NormalizeGradient(double err)
+        {
+            if (err > GradientCutoff)
+            {
+                err = GradientCutoff;
+            }
+            else if (err < -GradientCutoff)
+            {
+                err = -GradientCutoff;
+            }
+            return err;
+        }
+        public void matrixXvectorADD(SimpleLayer dest, SimpleCell[] srcvec, Matrix<float> srcmatrix, int DestSize, int SrcSize, int type)
         {
             if (type == 0)
             {
                 //ac mod
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    double[] vector_i = srcmatrix[i];
-                    double cellOutput = 0;
+                    float[] vector_i = srcmatrix[i];
+                    float cellOutput = 0;
                     for (int j = 0; j < SrcSize; j++)
                     {
                         cellOutput += srcvec[j].cellOutput * vector_i[j];
@@ -624,7 +639,7 @@ namespace RNNSharp
             {
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    double er = 0;
+                    float er = 0;
                     for (int j = 0; j < SrcSize; j++)
                     {
                         er += srcvec[j].er * srcmatrix[j][i];
@@ -635,18 +650,20 @@ namespace RNNSharp
             }
         }
 
-        public void matrixXvectorADD(SimpleLayer dest, SimpleLayer srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
+        public void matrixXvectorADD(SimpleLayer dest, SimpleLayer srcvec, Matrix<float> srcmatrix, int DestSize, int SrcSize, int type)
         {
             if (type == 0)
             {
                 //ac mod
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    double[] vector_i = srcmatrix[i];
-                    double cellOutput = 0;
-                    for (int j = 0; j < SrcSize; j++)
+                    float[] vector_i = srcmatrix[i];
+                    float cellOutput = 0;
+                    for (int j = 0; j < SrcSize; j+=Vector<float>.Count)
                     {
-                        cellOutput += srcvec.cellOutput[j] * vector_i[j];
+                        Vector<float> v1 = new Vector<float>(srcvec.cellOutput, j);
+                        Vector<float> v2 = new Vector<float>(vector_i, j);
+                        cellOutput += Vector.Dot<float>(v1, v2);
                     }
                     dest.cellOutput[i] = cellOutput;
                 });
@@ -656,7 +673,7 @@ namespace RNNSharp
             {
                 Parallel.For(0, DestSize, parallelOption, i =>
                 {
-                    double er = 0;
+                    float er = 0;
                     for (int j = 0; j < SrcSize; j++)
                     {
                         er += srcvec.er[j] * srcmatrix[j][i];
@@ -667,7 +684,7 @@ namespace RNNSharp
             }
         }
 
-        public int[] GetBestResult(Matrix<double> ys)
+        public int[] GetBestResult(Matrix<float> ys)
         {
             int[] output = new int[ys.Height];
 
@@ -681,7 +698,7 @@ namespace RNNSharp
 
         public int[] DecodeNN(Sequence seq)
         {
-            Matrix<double> ys = PredictSentence(seq, RunningMode.Test);
+            Matrix<float> ys = PredictSentence(seq, RunningMode.Test);
             return GetBestResult(ys);
         }
 
@@ -690,11 +707,11 @@ namespace RNNSharp
         {
 
             //ys contains the output of RNN for each word
-            Matrix<double> ys = PredictSentence(seq, RunningMode.Test);
+            Matrix<float> ys = PredictSentence(seq, RunningMode.Test);
 
             int n = seq.States.Length;
             int K = L2;
-            Matrix<double> STP = CRFTagTransWeights;
+            Matrix<float> STP = CRFTagTransWeights;
             PAIR<int, int>[, ,] vPath = new PAIR<int, int>[n, K, N];
             int DUMP_LABEL = -1;
             double[,] vPreAlpha = new double[K, N];
@@ -779,7 +796,7 @@ namespace RNNSharp
             return vTagOutput;
         }
 
-        public int[] Viterbi(Matrix<double> ys, int seqLen)
+        public int[] Viterbi(Matrix<float> ys, int seqLen)
         {
             int[,] vPath = new int[seqLen, L2];
 
@@ -833,7 +850,7 @@ namespace RNNSharp
         public int[] DecodeCRF(Sequence seq)
         {
             //ys contains the output of RNN for each word
-            Matrix<double> ys = PredictSentence(seq, RunningMode.Test);
+            Matrix<float> ys = PredictSentence(seq, RunningMode.Test);
             return Viterbi(ys, seq.States.Length);
         }
 
@@ -877,7 +894,7 @@ namespace RNNSharp
 
         public virtual bool ValidateNet(DataSet validationSet, int iter)
         {
-            Logger.WriteLine("[TRACE] Start validation ...");
+            Logger.WriteLine("Start validation ...");
             int wordcn = 0;
             int tknErrCnt = 0;
             int sentErrCnt = 0;
@@ -897,7 +914,7 @@ namespace RNNSharp
                 }
                 else
                 {
-                    Matrix<double> m;
+                    Matrix<float> m;
                     m = PredictSentence(pSequence, RunningMode.Validate);
                     predicted = GetBestResult(m);
                 }
@@ -915,8 +932,8 @@ namespace RNNSharp
             double tknErrRatio = (double)tknErrCnt / (double)wordcn * 100.0;
             double sentErrRatio = (double)sentErrCnt / (double)numSequence * 100.0;
 
-            Logger.WriteLine("[TRACE] In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
-            Logger.WriteLine("[TRACE] In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
+            Logger.WriteLine("In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);         
             Logger.WriteLine("");
 
             bool bUpdate = false;
