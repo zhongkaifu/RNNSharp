@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -61,7 +62,7 @@ namespace RNNSharp
         public Matrix<double> CRFTagTransWeights { get; set; }
         public SimpleLayer OutputLayer { get; set; }
         public Matrix<double> Hidden2OutputWeight;
-        public Matrix<float> Hidden2OutputWeightLearningRate;
+        public Matrix<double> Hidden2OutputWeightLearningRate;
       
         // CRF result output
         protected Matrix<double> CRFSeqOutput;
@@ -96,10 +97,10 @@ namespace RNNSharp
             return cells;
         }
 
-        public double UpdateLearningRate(Matrix<float> m, int i, int j, double delta)
+        public double UpdateLearningRate(Matrix<double> m, int i, int j, double delta)
         {
             double dg = m[i][j] + delta * delta;
-            m[i][j] = (float)dg;
+            m[i][j] = dg;
 
             return LearningRate / (1.0 + Math.Sqrt(dg));
         }
@@ -644,10 +645,23 @@ namespace RNNSharp
                 {
                     double[] vector_i = srcmatrix[i];
                     double cellOutput = 0;
-                    for (int j = 0; j < SrcSize; j++)
+                    int j = 0;
+
+                    while (j < SrcSize - Vector<double>.Count)
+                    {
+                        Vector<double> v1 = new Vector<double>(srcvec.cellOutput, j);
+                        Vector<double> v2 = new Vector<double>(vector_i, j);
+                        cellOutput += Vector.Dot<double>(v1, v2);
+
+                        j += Vector<double>.Count;
+                    }
+
+                    while (j < SrcSize)
                     {
                         cellOutput += srcvec.cellOutput[j] * vector_i[j];
+                        j++;
                     }
+
                     dest.cellOutput[i] = cellOutput;
                 });
 

@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using AdvUtils;
 using System.Collections.Generic;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -13,6 +14,7 @@ namespace RNNSharp
     {
         private RNN forwardRNN;
         private RNN backwardRNN;
+        private Vector<double> vecConst2 = new Vector<double>(2.0f);
 
         public BiRNN(RNN s_forwardRNN, RNN s_backwardRNN)
         {
@@ -56,7 +58,7 @@ namespace RNNSharp
             forwardRNN.CleanStatus();
             backwardRNN.CleanStatus();
 
-            Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
+            Hidden2OutputWeightLearningRate = new Matrix<double>(L2, L1);
         }
 
         public override void initWeights()
@@ -219,7 +221,7 @@ namespace RNNSharp
                 }
             }
 
-            Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
+            Hidden2OutputWeightLearningRate = new Matrix<double>(L2, L1);
         }
 
         public SimpleLayer[] InnerDecode(Sequence pSequence, out SimpleLayer[] outputHiddenLayer, out Matrix<double> rawOutputLayer)
@@ -266,9 +268,22 @@ namespace RNNSharp
                 SimpleLayer forwardCells = mForward[curState];
                 SimpleLayer backwardCells = mBackward[curState];
 
-                for (int i = 0; i < forwardRNN.L1; i++)
+                int i = 0;
+                while (i < forwardRNN.L1 - Vector<double>.Count)
+                {
+                    Vector<double> v1 = new Vector<double>(forwardCells.cellOutput, i);
+                    Vector<double> v2 = new Vector<double>(backwardCells.cellOutput, i);
+                    Vector<double> v = (v1 + v2) / vecConst2;
+
+                    v.CopyTo(cells.cellOutput, i);
+
+                    i += Vector<float>.Count;
+                }
+
+                while (i < forwardRNN.L1)
                 {
                     cells.cellOutput[i] = (forwardCells.cellOutput[i] + backwardCells.cellOutput[i]) / 2.0;
+                    i++;
                 }
             });
 

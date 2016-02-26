@@ -496,7 +496,7 @@ namespace RNNSharp
 
             });
 
-            Hidden2OutputWeightLearningRate = new Matrix<float>(L2, L1);
+            Hidden2OutputWeightLearningRate = new Matrix<double>(L2, L1);
             vecLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
             vecLearningRate3 = new Vector3(LearningRate, LearningRate, LearningRate);
         }
