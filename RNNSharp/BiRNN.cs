@@ -238,7 +238,7 @@ namespace RNNSharp
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     State state = pSequence.States[curState];
-                    forwardRNN.setInputLayer(state, curState, numStates, null);
+                    forwardRNN.SetInputLayer(state, curState, numStates, null);
                     forwardRNN.computeHiddenLayer(state);      //compute probability distribution
 
                     mForward[curState] = forwardRNN.GetHiddenLayer();
@@ -252,7 +252,7 @@ namespace RNNSharp
                  for (int curState = numStates - 1; curState >= 0; curState--)
                  {
                      State state = pSequence.States[curState];
-                     backwardRNN.setInputLayer(state, curState, numStates, null, false);
+                     backwardRNN.SetInputLayer(state, curState, numStates, null, false);
                      backwardRNN.computeHiddenLayer(state);      //compute probability distribution
 
                      mBackward[curState] = backwardRNN.GetHiddenLayer();
@@ -444,7 +444,7 @@ namespace RNNSharp
                     // error propogation
                     State state = pSequence.States[curState];
 
-                    forwardRNN.setInputLayer(state, curState, numStates, null);
+                    forwardRNN.SetInputLayer(state, curState, numStates, null);
 
                     forwardRNN.computeHiddenLayer(state, true);
 
@@ -466,7 +466,7 @@ namespace RNNSharp
                     // error propogation
                     State state2 = pSequence.States[curState2];
 
-                    backwardRNN.setInputLayer(state2, curState2, numStates, null, false);
+                    backwardRNN.SetInputLayer(state2, curState2, numStates, null, false);
 
                     backwardRNN.computeHiddenLayer(state2, true);
 

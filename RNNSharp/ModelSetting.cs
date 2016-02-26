@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -46,6 +47,8 @@ namespace RNNSharp
             Logger.WriteLine("Max Iteration: {0}", MaxIteration);
             Logger.WriteLine("Hidden layer size： {0}", NumHidden);
             Logger.WriteLine("RNN-CRF: {0}", IsCRFTraining);
+            Logger.WriteLine("SIMD: {0}, Size: {1}bits", System.Numerics.Vector.IsHardwareAccelerated, 
+                Vector<double>.Count * sizeof(double) * 8);
             if (SaveStep > 0)
             {
                 Logger.WriteLine("Save temporary model after every {0} sentences", SaveStep);

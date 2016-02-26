@@ -40,19 +40,17 @@ namespace RNNSharp
         public double yOut;
     }
 
-    public struct LSTMWeight
-    {
-        public float wInputInputGate;
-        public float wInputForgetGate;
-        public float wInputCell;
-        public float wInputOutputGate;
-    }
-
     public class LSTMRNN : RNN
     {
-        public LSTMCell[] neuHidden;		//neurons in hidden layer
-        protected LSTMWeight[][] input2hidden;
-        protected LSTMWeight[][] feature2hidden;
+        public LSTMCell[] neuHidden;
+
+
+        //X - wInputInputGate
+        //Y - wInputForgetGate
+        //Z - wInputCell
+        //W - wInputOutputGate
+        protected Vector4[][] input2hidden;
+        protected Vector4[][] feature2hidden;
 
         protected Vector4[][] Input2HiddenLearningRate;
         protected Vector4[][] Feature2HiddenLearningRate;
@@ -83,25 +81,25 @@ namespace RNNSharp
             return m;
         }
 
-        public LSTMWeight[][] loadLSTMWeight(BinaryReader br)
+        public Vector4[][] loadLSTMWeight(BinaryReader br)
         {
             int w = br.ReadInt32();
             int h = br.ReadInt32();
             int vqSize = br.ReadInt32();
-            LSTMWeight[][] m = new LSTMWeight[w][];
+            Vector4[][] m = new Vector4[w][];
 
             Logger.WriteLine("Loading LSTM-Weight: width:{0}, height:{1}, vqSize:{2}...", w, h, vqSize);
             if (vqSize == 0)
             {
                 for (int i = 0; i < w; i++)
                 {
-                    m[i] = new LSTMWeight[h];
+                    m[i] = new Vector4[h];
                     for (int j = 0; j < h; j++)
                     {
-                        m[i][j].wInputInputGate = br.ReadSingle();
-                        m[i][j].wInputForgetGate = br.ReadSingle();
-                        m[i][j].wInputCell = br.ReadSingle();
-                        m[i][j].wInputOutputGate = br.ReadSingle();
+                        m[i][j].X = br.ReadSingle();
+                        m[i][j].Y = br.ReadSingle();
+                        m[i][j].Z = br.ReadSingle();
+                        m[i][j].W = br.ReadSingle();
                     }
                 }
             }
@@ -134,20 +132,20 @@ namespace RNNSharp
 
                 for (int i = 0; i < w; i++)
                 {
-                    m[i] = new LSTMWeight[h];
+                    m[i] = new Vector4[h];
                     for (int j = 0; j < h; j++)
                     {
                         int vqIdx = br.ReadByte();
-                        m[i][j].wInputInputGate = (float)codeBookInputInputGate[vqIdx];
+                        m[i][j].X = (float)codeBookInputInputGate[vqIdx];
 
                         vqIdx = br.ReadByte();
-                        m[i][j].wInputForgetGate = (float)codeBookInputForgetGate[vqIdx];
+                        m[i][j].Y = (float)codeBookInputForgetGate[vqIdx];
 
                         vqIdx = br.ReadByte();
-                        m[i][j].wInputCell = (float)codeBookInputCell[vqIdx];
+                        m[i][j].Z = (float)codeBookInputCell[vqIdx];
 
                         vqIdx = br.ReadByte();
-                        m[i][j].wInputOutputGate = (float)codeBookInputOutputGate[vqIdx];
+                        m[i][j].W = (float)codeBookInputOutputGate[vqIdx];
                     }
                 }
             }
@@ -155,7 +153,7 @@ namespace RNNSharp
             return m;
         }
 
-        private void saveLSTMWeight(LSTMWeight[][] weight, BinaryWriter fo)
+        private void saveLSTMWeight(Vector4[][] weight, BinaryWriter fo)
         {
             int w = weight.Length;
             int h = weight[0].Length;
@@ -174,10 +172,10 @@ namespace RNNSharp
                 {
                     for (int j = 0; j < h; j++)
                     {
-                        fo.Write(weight[i][j].wInputInputGate);
-                        fo.Write(weight[i][j].wInputForgetGate);
-                        fo.Write(weight[i][j].wInputCell);
-                        fo.Write(weight[i][j].wInputOutputGate);
+                        fo.Write(weight[i][j].X);
+                        fo.Write(weight[i][j].Y);
+                        fo.Write(weight[i][j].Z);
+                        fo.Write(weight[i][j].W);
                     }
                 }
             }
@@ -192,10 +190,10 @@ namespace RNNSharp
                 {
                     for (int j = 0; j < h; j++)
                     {
-                        vqInputInputGate.Add(weight[i][j].wInputInputGate);
-                        vqInputForgetGate.Add(weight[i][j].wInputForgetGate);
-                        vqInputCell.Add(weight[i][j].wInputCell);
-                        vqInputOutputGate.Add(weight[i][j].wInputOutputGate);
+                        vqInputInputGate.Add(weight[i][j].X);
+                        vqInputForgetGate.Add(weight[i][j].Y);
+                        vqInputCell.Add(weight[i][j].Z);
+                        vqInputOutputGate.Add(weight[i][j].W);
                     }
                 }
 
@@ -244,10 +242,10 @@ namespace RNNSharp
                 {
                     for (int j = 0; j < h; j++)
                     {
-                        fo.Write((byte)vqInputInputGate.ComputeVQ(weight[i][j].wInputInputGate));
-                        fo.Write((byte)vqInputForgetGate.ComputeVQ(weight[i][j].wInputForgetGate));
-                        fo.Write((byte)vqInputCell.ComputeVQ(weight[i][j].wInputCell));
-                        fo.Write((byte)vqInputOutputGate.ComputeVQ(weight[i][j].wInputOutputGate));
+                        fo.Write((byte)vqInputInputGate.ComputeVQ(weight[i][j].X));
+                        fo.Write((byte)vqInputForgetGate.ComputeVQ(weight[i][j].Y));
+                        fo.Write((byte)vqInputCell.ComputeVQ(weight[i][j].Z));
+                        fo.Write((byte)vqInputOutputGate.ComputeVQ(weight[i][j].W));
                     }
                 }
             }
@@ -301,12 +299,12 @@ namespace RNNSharp
 
             //weight hidden->output
             Logger.WriteLine("Loading hidden2output weights...");
-            Hidden2OutputWeight = loadMatrixBin(br);
+            Hidden2OutputWeight = LoadMatrix(br);
 
             if (iflag == 1)
             {
                 Logger.WriteLine("Loading CRF tag trans weights...");
-                CRFTagTransWeights = loadMatrixBin(br);
+                CRFTagTransWeights = LoadMatrix(br);
             }
 
             sr.Close();
@@ -363,13 +361,13 @@ namespace RNNSharp
 
             //weight hidden->output
             Logger.WriteLine("Saving hidden2output weights...");
-            saveMatrixBin(Hidden2OutputWeight, fo);
+            SaveMatrix(Hidden2OutputWeight, fo);
 
             if (iflag == 1)
             {
                 // Save Bigram
                 Logger.WriteLine("Saving CRF tag trans weights...");
-                saveMatrixBin(CRFTagTransWeights, fo);
+                SaveMatrix(CRFTagTransWeights, fo);
             }
 
             fo.Close();
@@ -398,15 +396,15 @@ namespace RNNSharp
         }
 
 
-        public LSTMWeight LSTMWeightInit()
+        public Vector4 LSTMWeightInit()
         {
-            LSTMWeight w;
+            Vector4 w;
 
             //initialise each weight to random value
-            w.wInputCell = RandInitWeight();
-            w.wInputInputGate = RandInitWeight();
-            w.wInputForgetGate = RandInitWeight();
-            w.wInputOutputGate = RandInitWeight();
+            w.X = RandInitWeight();
+            w.Y = RandInitWeight();
+            w.Z = RandInitWeight();
+            w.W = RandInitWeight();
 
             return w;
         }
@@ -414,10 +412,10 @@ namespace RNNSharp
         public override void initWeights()
         {
             //create and initialise the weights from input to hidden layer
-            input2hidden = new LSTMWeight[L1][];
+            input2hidden = new Vector4[L1][];
             for (int i = 0; i < L1; i++)
             {
-                input2hidden[i] = new LSTMWeight[L0];
+                input2hidden[i] = new Vector4[L0];
                 for (int j = 0; j < L0; j++)
                 {
                     input2hidden[i][j] = LSTMWeightInit();
@@ -426,10 +424,10 @@ namespace RNNSharp
 
             if (DenseFeatureSize > 0)
             {
-                feature2hidden = new LSTMWeight[L1][];
+                feature2hidden = new Vector4[L1][];
                 for (int i = 0; i < L1; i++)
                 {
-                    feature2hidden[i] = new LSTMWeight[DenseFeatureSize];
+                    feature2hidden[i] = new Vector4[DenseFeatureSize];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
                         feature2hidden[i][j] = LSTMWeightInit();
@@ -614,7 +612,7 @@ namespace RNNSharp
 
                 Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
 
-                LSTMWeight[] w_i = input2hidden[i];
+                Vector4[] w_i = input2hidden[i];
                 Vector3[] wd_i = input2hiddenDeri[i];
                 Vector4[] wlr_i = Input2HiddenLearningRate[i];
 
@@ -622,20 +620,20 @@ namespace RNNSharp
                 var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = TanH(c.netCellState) * SigmoidDerivative(c.netIn);
                 var ci_previousCellState_mul_SigmoidDerivative_ci_netForget = c.previousCellState * SigmoidDerivative(c.netForget);
 
-                Vector3 vecDerivate = new Vector3((float)Sigmoid2Derivative_ci_netCellState_mul_ci_yIn,
+                Vector3 vecDerivate = new Vector3(
                         (float)Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn,
-                        (float)ci_previousCellState_mul_SigmoidDerivative_ci_netForget);
+                        (float)ci_previousCellState_mul_SigmoidDerivative_ci_netForget,
+                        (float)Sigmoid2Derivative_ci_netCellState_mul_ci_yIn);
+                float c_yForget = (float)c.yForget;
 
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
-                    LSTMWeight w = w_i[entry.Key];
                     Vector4 wlr = wlr_i[entry.Key];
-
                     Vector3 wd = vecDerivate * entry.Value;
                     if (curState > 0)
                     {
-                        wd += wd_i[entry.Key] * (float)c.yForget;
+                        wd += wd_i[entry.Key] * c_yForget;
                     }
                     wd_i[entry.Key] = wd;
 
@@ -650,13 +648,8 @@ namespace RNNSharp
                     vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
                     vecDelta = vecAlpha * vecDelta;
 
-                    w.wInputCell += vecDelta.X;
-                    w.wInputInputGate += vecDelta.Y;
-                    w.wInputForgetGate += vecDelta.Z;
-                    w.wInputOutputGate += vecDelta.W;
-
+                    w_i[entry.Key] += vecDelta;
                     wd_i[entry.Key] = wd;
-                    w_i[entry.Key] = w;
                 }
 
                 if (DenseFeatureSize > 0)
@@ -666,14 +659,13 @@ namespace RNNSharp
                     wlr_i = Feature2HiddenLearningRate[i];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
-                        LSTMWeight w = w_i[j];
                         Vector4 wlr = wlr_i[j];
                         float feature = neuFeatures[j];
 
                         Vector3 wd = vecDerivate * feature;
                         if (curState > 0)
                         {
-                            wd += wd_i[j] * (float)c.yForget;
+                            wd += wd_i[j] * c_yForget;
                         }
                         wd_i[j] = wd;
 
@@ -688,13 +680,8 @@ namespace RNNSharp
                         vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
                         vecDelta = vecAlpha * vecDelta;
 
-                        w.wInputCell += vecDelta.X;
-                        w.wInputInputGate += vecDelta.Y;
-                        w.wInputForgetGate += vecDelta.Z;
-                        w.wInputOutputGate += vecDelta.W;
-
+                        w_i[j] += vecDelta;
                         wd_i[j] = wd;
-                        w_i[j] = w;
                     }
                 }
 
@@ -743,15 +730,11 @@ namespace RNNSharp
 
                 Vector4 vecCell_j = Vector4.Zero;
 
-                LSTMWeight[] weights = input2hidden[j];
+                Vector4[] weights = input2hidden[j];
                 for (int i = 0; i < sparseFeatureSize; i++)
                 {
                     var entry = sparse.GetEntry(i);
-                    LSTMWeight w = weights[entry.Key];
-
-                    Vector4 vecW = new Vector4(w.wInputInputGate, w.wInputForgetGate, w.wInputCell, w.wInputOutputGate);
-                    vecW *= entry.Value;
-                    vecCell_j += vecW;
+                    vecCell_j += weights[entry.Key] * entry.Value;
                 }
 
                 //fea(t) -> hidden(t) 
@@ -760,10 +743,7 @@ namespace RNNSharp
                     weights = feature2hidden[j];
                     for (int i = 0; i < DenseFeatureSize; i++)
                     {
-                        LSTMWeight w = weights[i];
-                        Vector4 vecW = new Vector4(w.wInputInputGate, w.wInputForgetGate, w.wInputCell, w.wInputOutputGate);
-                        vecW *= neuFeatures[i];
-                        vecCell_j += vecW;
+                        vecCell_j += weights[i] * neuFeatures[i];
                     }
                 }
 

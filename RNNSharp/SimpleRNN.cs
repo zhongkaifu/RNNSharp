@@ -614,24 +614,24 @@ namespace RNNSharp
 
             //Load weight matrix between each two layer pairs
             Logger.WriteLine("Loading input2hidden weights...");
-            Input2HiddenWeights = loadMatrixBin(br);
+            Input2HiddenWeights = LoadMatrix(br);
 
             Logger.WriteLine("Loading bptt hidden weights...");
-            HiddenBpttWeights = loadMatrixBin(br);
+            HiddenBpttWeights = LoadMatrix(br);
 
             if (DenseFeatureSize > 0)
             {
                 Logger.WriteLine("Loading feature2hidden weights...");
-                Feature2HiddenWeights = loadMatrixBin(br);
+                Feature2HiddenWeights = LoadMatrix(br);
             }
 
             Logger.WriteLine("Loading hidden2output weights...");
-            Hidden2OutputWeight = loadMatrixBin(br);
+            Hidden2OutputWeight = LoadMatrix(br);
 
             if (iflag == 1)
             {
                 Logger.WriteLine("Loading CRF tag trans weights...");
-                CRFTagTransWeights = loadMatrixBin(br);
+                CRFTagTransWeights = LoadMatrix(br);
             }
 
             sr.Close();
@@ -669,26 +669,26 @@ namespace RNNSharp
 
             //weight input->hidden
             Logger.WriteLine("Saving input2hidden weights...");
-            saveMatrixBin(Input2HiddenWeights, fo);
+            SaveMatrix(Input2HiddenWeights, fo);
 
             Logger.WriteLine("Saving bptt hidden weights...");
-            saveMatrixBin(HiddenBpttWeights, fo);
+            SaveMatrix(HiddenBpttWeights, fo);
 
             if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
                 Logger.WriteLine("Saving feature2hidden weights...");
-                saveMatrixBin(Feature2HiddenWeights, fo);
+                SaveMatrix(Feature2HiddenWeights, fo);
             }
 
             //weight hidden->output
             Logger.WriteLine("Saving hidden2output weights...");
-            saveMatrixBin(Hidden2OutputWeight, fo);
+            SaveMatrix(Hidden2OutputWeight, fo);
 
             if (iflag == 1)
             {
                 // Save Bigram
-                saveMatrixBin(CRFTagTransWeights, fo);
+                SaveMatrix(CRFTagTransWeights, fo);
             }
 
             fo.Close();

@@ -86,17 +86,6 @@ namespace RNNSharp
             }
         }
 
-        protected SimpleCell[] InitSimpleCell(int size)
-        {
-            SimpleCell[] cells = new SimpleCell[size];
-            for (int i = 0; i < size; i++)
-            {
-                cells[i] = new SimpleCell();
-            }
-
-            return cells;
-        }
-
         public double UpdateLearningRate(Matrix<double> m, int i, int j, double delta)
         {
             double dg = m[i][j] + delta * delta;
@@ -106,7 +95,7 @@ namespace RNNSharp
         }
 
         //Save matrix into file as binary format
-        protected void saveMatrixBin(Matrix<double> mat, BinaryWriter fo)
+        protected void SaveMatrix(Matrix<double> mat, BinaryWriter fo)
         {
             //Save the width and height of the matrix
             fo.Write(mat.Width);
@@ -169,7 +158,7 @@ namespace RNNSharp
             }
         }
 
-        protected Matrix<double> loadMatrixBin(BinaryReader br)
+        protected Matrix<double> LoadMatrix(BinaryReader br)
         {
             int width = br.ReadInt32();
             int height = br.ReadInt32();
@@ -210,7 +199,7 @@ namespace RNNSharp
             return m;
         }
 
-        public void setInputLayer(State state, int curState, int numStates, int[] predicted, bool forward = true)
+        public void SetInputLayer(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
             if (predicted != null && state.RuntimeFeatures != null)
             {
@@ -261,7 +250,7 @@ namespace RNNSharp
             for (int curState = 0; curState < numStates; curState++)
             {
                 State state = pSequence.States[curState];
-                setInputLayer(state, curState, numStates, predicted);
+                SetInputLayer(state, curState, numStates, predicted);
                 computeHiddenLayer(state, isTraining);
 
                 computeOutput(m[curState]);
@@ -298,13 +287,12 @@ namespace RNNSharp
 
         public void SoftmaxLayer(SimpleLayer layer)
         {
-            //activation 2   --softmax on words
-            double sum = 0;   //sum is used for normalization: it's better to have larger precision as many numbers are summed together here
+            double sum = 0;
             for (int c = 0; c < L2; c++)
             {
                 double cellOutput = layer.cellOutput[c];
-                if (cellOutput > 50) cellOutput = 50;  //for numerical stability
-                if (cellOutput < -50) cellOutput = -50;  //for numerical stability
+                if (cellOutput > 50) cellOutput = 50;
+                if (cellOutput < -50) cellOutput = -50;
                 double val = Math.Exp(cellOutput);
                 sum += val;
                 layer.cellOutput[c] = val;
@@ -356,7 +344,7 @@ namespace RNNSharp
                 {
                     // error propogation
                     State state = pSequence.States[curState];
-                    setInputLayer(state, curState, numStates, null);
+                    SetInputLayer(state, curState, numStates, null);
                     computeHiddenLayer(state);      //compute probability distribution
 
                     ComputeOutputLayerErr(state, curState);
@@ -414,58 +402,65 @@ namespace RNNSharp
         {
             //forward
             double[][] alphaSet = new double[numStates][];
-            for (int i = 0; i < numStates; i++)
-            {
-                alphaSet[i] = new double[L2];
-                for (int j = 0; j < L2; j++)
-                {
-                    double dscore0 = 0;
-                    if (i > 0)
-                    {
-                        for (int k = 0; k < L2; k++)
-                        {
-                            double fbgm = CRFTagTransWeights[j][k];
-                            double finit = alphaSet[i - 1][k];
-                            double ftmp = fbgm + finit;
-
-                            dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
-                        }
-                    }
-                    alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
-
-                }
-            }
-
-            //backward
             double[][] betaSet = new double[numStates][];
-            for (int i = numStates - 1; i >= 0; i--)
-            {
-                betaSet[i] = new double[L2];
-                for (int j = 0; j < L2; j++)
-                {
-                    double dscore0 = 0;
-                    if (i < numStates - 1)
-                    {
-                        for (int k = 0; k < L2; k++)
-                        {
-                            double fbgm = CRFTagTransWeights[k][j];
-                            double finit = betaSet[i + 1][k];
-                            double ftmp = fbgm + finit;
 
-                            dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
+            Parallel.Invoke(() =>
+            {
+                for (int i = 0; i < numStates; i++)
+                {
+                    alphaSet[i] = new double[L2];
+                    for (int j = 0; j < L2; j++)
+                    {
+                        double dscore0 = 0;
+                        if (i > 0)
+                        {
+                            for (int k = 0; k < L2; k++)
+                            {
+                                double fbgm = CRFTagTransWeights[j][k];
+                                double finit = alphaSet[i - 1][k];
+                                double ftmp = fbgm + finit;
+
+                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
+                            }
                         }
+                        alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
 
                     }
-                    betaSet[i][j] = dscore0 + m_RawOutput[i][j];
-
                 }
-            }
+            },
+            () =>
+            {
+                //backward
+                for (int i = numStates - 1; i >= 0; i--)
+                {
+                    betaSet[i] = new double[L2];
+                    for (int j = 0; j < L2; j++)
+                    {
+                        double dscore0 = 0;
+                        if (i < numStates - 1)
+                        {
+                            for (int k = 0; k < L2; k++)
+                            {
+                                double fbgm = CRFTagTransWeights[k][j];
+                                double finit = betaSet[i + 1][k];
+                                double ftmp = fbgm + finit;
+
+                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
+                            }
+
+                        }
+                        betaSet[i][j] = dscore0 + m_RawOutput[i][j];
+
+                    }
+                }
+            });
 
             //Z_
             double Z_ = 0.0;
+            double[] betaSet_0 = betaSet[0];
             for (int i = 0; i < L2; i++)
             {
-                Z_ = MathUtil.logsumexp(Z_, betaSet[0][i], i == 0);
+                Z_ = MathUtil.logsumexp(Z_, betaSet_0[i], i == 0);
 
             }
 
@@ -473,9 +468,13 @@ namespace RNNSharp
             CRFSeqOutput = new Matrix<double>(numStates, L2);
             for (int i = 0; i < numStates; i++)
             {
+                double[] CRFSeqOutput_i = CRFSeqOutput[i];
+                double[] alphaSet_i = alphaSet[i];
+                double[] betaSet_i = betaSet[i];
+                double[] m_RawOutput_i = m_RawOutput[i];
                 for (int j = 0; j < L2; j++)
                 {
-                    CRFSeqOutput[i][j] = Math.Exp(alphaSet[i][j] + betaSet[i][j] - m_RawOutput[i][j] - Z_);
+                    CRFSeqOutput_i[j] = Math.Exp(alphaSet_i[j] + betaSet_i[j] - m_RawOutput_i[j] - Z_);
                 }
             }
 
