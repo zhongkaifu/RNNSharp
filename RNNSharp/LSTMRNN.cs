@@ -729,7 +729,7 @@ namespace RNNSharp
                 cell_j.previousCellState = cell_j.cellState;
 
                 Vector4 vecCell_j = Vector4.Zero;
-
+                //Apply sparse weights
                 Vector4[] weights = input2hidden[j];
                 for (int i = 0; i < sparseFeatureSize; i++)
                 {
@@ -737,7 +737,7 @@ namespace RNNSharp
                     vecCell_j += weights[entry.Key] * entry.Value;
                 }
 
-                //fea(t) -> hidden(t) 
+                //Apply dense weights
                 if (DenseFeatureSize > 0)
                 {
                     weights = feature2hidden[j];
@@ -754,7 +754,6 @@ namespace RNNSharp
                 cell_j.netCellState = vecCell_j.Z;
                 //reset each netOut to zero
                 cell_j.netOut = vecCell_j.W;
-
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;

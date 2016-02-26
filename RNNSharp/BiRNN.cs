@@ -59,6 +59,10 @@ namespace RNNSharp
             backwardRNN.CleanStatus();
 
             Hidden2OutputWeightLearningRate = new Matrix<double>(L2, L1);
+
+            vecMaxGrad = new Vector<double>(GradientCutoff);
+            vecMinGrad = new Vector<double>(-GradientCutoff);
+            vecNormalLearningRate = new Vector<double>(LearningRate);
         }
 
         public override void initWeights()
@@ -423,13 +427,47 @@ namespace RNNSharp
                     {
                         //update weights for hidden to output layer
                         double er = outputCells.er[i];
+                        double[] vector_hidden = mergedHiddenCells.cellOutput;
                         double[] vector_i = Hidden2OutputWeight[i];
-                        for (int k = 0; k < Hidden2OutputWeight.Width; k++)
+                        double[] vector_lr = Hidden2OutputWeightLearningRate[i];
+                        int k = 0;
+
+                        Vector<double> vecErr = new Vector<double>(er);
+                        while (k < Hidden2OutputWeight.Width - Vector<double>.Count)
+                        {
+                            Vector<double> vecDelta = new Vector<double>(vector_hidden, k);
+                            Vector<double> vecLearningRate = new Vector<double>(vector_lr, k);
+                            Vector<double> vecB = new Vector<double>(vector_i, k);
+
+                            //Get delta
+                            vecDelta *= er;
+
+                            //Normalize weight
+                            vecDelta = Vector.Min<double>(vecDelta, vecMaxGrad);
+                            vecDelta = Vector.Max<double>(vecDelta, vecMinGrad);
+
+                            //Calculating new learning rate
+                            vecLearningRate += (vecDelta * vecDelta);
+                            //Save new learning rate
+                            vecLearningRate.CopyTo(vector_lr, k);
+                            //Dynmatic learning rate
+                            vecLearningRate = vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRate));
+                            //Update weights
+                            vecB += (vecLearningRate * vecDelta);
+                            vecB.CopyTo(vector_i, k);
+
+                            k += Vector<double>.Count;
+
+                        }
+
+                        while (k < Hidden2OutputWeight.Width)
                         {
                             double delta = NormalizeGradient(mergedHiddenCells.cellOutput[k] * er);
                             double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, i, k, delta);
 
                             vector_i[k] += newLearningRate * delta;
+
+                            k++;
                         }
                     }
                 }

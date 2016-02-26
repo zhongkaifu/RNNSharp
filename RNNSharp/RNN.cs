@@ -74,6 +74,10 @@ namespace RNNSharp
         protected VectorBase neuFeatures;		//features in input layer
         protected const int MAX_RNN_HIST = 64;
 
+        protected Vector<double> vecMaxGrad;
+        protected Vector<double> vecMinGrad;
+        protected Vector<double> vecNormalLearningRate;
+
         public virtual void setTagBigramTransition(List<List<float>> m)
         {
             CRFTagTransWeights = new Matrix<double>(L2, L2);
@@ -297,9 +301,21 @@ namespace RNNSharp
                 sum += val;
                 layer.cellOutput[c] = val;
             }
-            for (int c = 0; c < L2; c++)
+            int i = 0;
+            Vector<double> vecSum = new Vector<double>(sum);
+            while (i < L2 - Vector<double>.Count)
             {
-                layer.cellOutput[c] /= sum;
+                Vector<double> v = new Vector<double>(layer.cellOutput, i);
+                v /= vecSum;
+                v.CopyTo(layer.cellOutput, i);
+
+                i += Vector<double>.Count;
+            }
+
+            while (i < L2)
+            {
+                layer.cellOutput[i] /= sum;
+                i++;
             }
         }
 
@@ -373,11 +389,32 @@ namespace RNNSharp
 
             for (int timeat = 1; timeat < numStates; timeat++)
             {
+                double[] CRFSeqOutput_timeat = CRFSeqOutput[timeat];
+                double[] CRFSeqOutput_pre_timeat = CRFSeqOutput[timeat - 1];
                 for (int i = 0; i < L2; i++)
                 {
-                    for (int j = 0; j < L2; j++)
+                    double CRFSeqOutput_timeat_i = CRFSeqOutput_timeat[i];
+                    double[] CRFTagTransWeights_i = CRFTagTransWeights[i];
+                    double[] m_DeltaBigramLM_i = m_DeltaBigramLM[i];
+                    int j = 0;
+
+                    Vector<double> vecCRFSeqOutput_timeat_i = new Vector<double>(CRFSeqOutput_timeat_i);
+                    while (j < L2 - Vector<double>.Count)
                     {
-                        m_DeltaBigramLM[i][j] -= (CRFTagTransWeights[i][j] * CRFSeqOutput[timeat][i] * CRFSeqOutput[timeat - 1][j]);
+                        Vector<double> v1 = new Vector<double>(CRFTagTransWeights_i, j);
+                        Vector<double> v2 = new Vector<double>(CRFSeqOutput_pre_timeat, j);
+                        Vector<double> v = new Vector<double>(m_DeltaBigramLM_i, j);
+
+                        v -= (v1 * vecCRFSeqOutput_timeat_i * v2);
+                        v.CopyTo(m_DeltaBigramLM_i, j);
+
+                        j += Vector<double>.Count;
+                    }
+
+                    while (j < L2)
+                    {
+                        m_DeltaBigramLM_i[j] -= (CRFTagTransWeights_i[j] * CRFSeqOutput_timeat_i * CRFSeqOutput_pre_timeat[j]);
+                        j++;
                     }
                 }
 

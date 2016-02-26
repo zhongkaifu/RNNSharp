@@ -36,10 +36,6 @@ namespace RNNSharp
         protected Matrix<double> Input2HiddenWeightsLearningRate { get; set; }
         protected Matrix<double> Feature2HiddenWeightsLearningRate { get; set; }
 
-        protected Vector<double> vecMaxGrad;
-        protected Vector<double> vecMinGrad;
-        protected Vector<double> vecNormalLearningRate;
-
         public SimpleRNN()
         {
             ModelType = MODELTYPE.SIMPLE;
