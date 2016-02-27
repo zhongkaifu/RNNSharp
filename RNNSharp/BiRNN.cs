@@ -436,22 +436,19 @@ namespace RNNSharp
                         while (k < Hidden2OutputWeight.Width - Vector<double>.Count)
                         {
                             Vector<double> vecDelta = new Vector<double>(vector_hidden, k);
-                            Vector<double> vecLearningRate = new Vector<double>(vector_lr, k);
+                            Vector<double> vecLearningRateWeights = new Vector<double>(vector_lr, k);
                             Vector<double> vecB = new Vector<double>(vector_i, k);
 
                             //Get delta
                             vecDelta *= er;
 
                             //Normalize weight
-                            vecDelta = Vector.Min<double>(vecDelta, vecMaxGrad);
-                            vecDelta = Vector.Max<double>(vecDelta, vecMinGrad);
+                            vecDelta = NormalizeGradient(vecDelta);
 
-                            //Calculating new learning rate
-                            vecLearningRate += (vecDelta * vecDelta);
-                            //Save new learning rate
-                            vecLearningRate.CopyTo(vector_lr, k);
-                            //Dynmatic learning rate
-                            vecLearningRate = vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRate));
+                            //Computing new learning rate and update its weights
+                            Vector<double> vecLearningRate = ComputeLearningRate(vecDelta, ref vecLearningRateWeights);
+                            vecLearningRateWeights.CopyTo(vector_lr, k);
+
                             //Update weights
                             vecB += (vecLearningRate * vecDelta);
                             vecB.CopyTo(vector_i, k);
@@ -483,7 +480,6 @@ namespace RNNSharp
                     State state = pSequence.States[curState];
 
                     forwardRNN.SetInputLayer(state, curState, numStates, null);
-
                     forwardRNN.computeHiddenLayer(state, true);
 
                     //Copy output result to forward net work's output
@@ -500,12 +496,9 @@ namespace RNNSharp
                 for (int curState = 0; curState < numStates; curState++)
                 {
                     int curState2 = numStates - 1 - curState;
-
-                    // error propogation
                     State state2 = pSequence.States[curState2];
 
                     backwardRNN.SetInputLayer(state2, curState2, numStates, null, false);
-
                     backwardRNN.computeHiddenLayer(state2, true);
 
                     //Copy output result to forward net work's output

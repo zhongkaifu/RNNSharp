@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -88,6 +89,22 @@ namespace RNNSharp
                     CRFTagTransWeights[i][j] = m[i][j];
                 }
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Vector<double> NormalizeGradient(Vector<double> v)
+        {
+            v = Vector.Min<double>(v, vecMaxGrad);
+            v = Vector.Max<double>(v, vecMinGrad);
+
+            return v;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Vector<double> ComputeLearningRate(Vector<double> vecDelta, ref Vector<double> vecLearningRateWeights)
+        {
+            vecLearningRateWeights += (vecDelta * vecDelta);
+            return vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRateWeights));
         }
 
         public double UpdateLearningRate(Matrix<double> m, int i, int j, double delta)
@@ -428,9 +445,27 @@ namespace RNNSharp
             {
                 double[] vector_b = CRFTagTransWeights[b];
                 double[] vector_delta_b = m_DeltaBigramLM[b];
-                for (int a = 0; a < L2; a++)
+                int a = 0;
+
+                while (a < L2 - Vector<double>.Count)
+                {
+                    Vector<double> v1 = new Vector<double>(vector_delta_b, a);
+                    Vector<double> v = new Vector<double>(vector_b, a);
+
+                    //Normalize delta
+                    v1 = NormalizeGradient(v1);
+
+                    //Update weights
+                    v += vecNormalLearningRate * v1;
+                    v.CopyTo(vector_b, a);
+
+                    a += Vector<double>.Count;
+                }
+
+                while (a < L2)
                 {
                     vector_b[a] += LearningRate * NormalizeGradient(vector_delta_b[a]);
+                    a++;
                 }
             }
         }
@@ -851,17 +886,20 @@ namespace RNNSharp
                 for (int j = 0; j < L2; j++)
                 {
                     vPath[t, j] = 0;
-                    vAlpha[j] = double.MinValue;
-
+                    double[] CRFTagTransWeights_j = CRFTagTransWeights[j];
+                    double[] ys_t = ys[t];
+                    double maxScore = double.MinValue;
                     for (int i = 0; i < L2; i++)
                     {
-                        double score = vPreAlpha[i] + CRFTagTransWeights[j][i] + ys[t][j];
-                        if (score > vAlpha[j])
+                        double score = vPreAlpha[i] + CRFTagTransWeights_j[i] + ys_t[j];
+                        if (score > maxScore)
                         {
-                            vAlpha[j] = score;
+                            maxScore = score;
                             vPath[t, j] = i;
                         }
                     }
+
+                    vAlpha[j] = maxScore;
                 }
                 vPreAlpha = vAlpha;
                 vAlpha = new double[L2];

@@ -347,18 +347,21 @@ namespace RNNSharp
                 while (i < L1 - Vector<double>.Count)
                 {
                     Vector<double> vecDelta = new Vector<double>(vector_bf, i);
-                    Vector<double> vecLearningRate = new Vector<double>(vector_lr, i);
+                    Vector<double> vecLearningRateWeights = new Vector<double>(vector_lr, i);
                     Vector<double> vecB = new Vector<double>(vector_b, i);
-                    vecDelta = Vector.Min<double>(vecDelta, vecMaxGrad);
-                    vecDelta = Vector.Max<double>(vecDelta, vecMinGrad);
 
-                    vecLearningRate += (vecDelta * vecDelta);
-                    vecLearningRate.CopyTo(vector_lr, i);
-                    vecLearningRate = vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRate));
+                    //Normalize delta
+                    vecDelta = NormalizeGradient(vecDelta);
 
-                    vecB += (vecLearningRate * vecDelta);
+                    //Computing learning rate and update its weights
+                    Vector<double> vecLearningRate = ComputeLearningRate(vecDelta, ref vecLearningRateWeights);
+                    vecLearningRateWeights.CopyTo(vector_lr, i);
+
+                    //Update weights
+                    vecB += vecLearningRate * vecDelta;
                     vecB.CopyTo(vector_b, i);
 
+                    //Clean weights
                     Vector<double>.Zero.CopyTo(vector_bf, i);
 
                     i += Vector<double>.Count;
@@ -387,18 +390,21 @@ namespace RNNSharp
                     while (i < DenseFeatureSize - Vector<double>.Count)
                     {
                         Vector<double> vecDelta = new Vector<double>(vector_bf, i);
-                        Vector<double> vecLearningRate = new Vector<double>(vector_lr, i);
+                        Vector<double> vecLearningRateWeights = new Vector<double>(vector_lr, i);
                         Vector<double> vecB = new Vector<double>(vector_b, i);
-                        vecDelta = Vector.Min<double>(vecDelta, vecMaxGrad);
-                        vecDelta = Vector.Max<double>(vecDelta, vecMinGrad);
 
-                        vecLearningRate += (vecDelta * vecDelta);
-                        vecLearningRate.CopyTo(vector_lr, i);
-                        vecLearningRate = vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRate));
+                        //Normalize delta
+                        vecDelta = NormalizeGradient(vecDelta);
 
-                        vecB += (vecLearningRate * vecDelta);
+                        //Computing learning rate and update its weights
+                        Vector<double> vecLearningRate = ComputeLearningRate(vecDelta, ref vecLearningRateWeights);
+                        vecLearningRateWeights.CopyTo(vector_lr, i);
+
+                        //Update weights
+                        vecB += vecLearningRate * vecDelta;
                         vecB.CopyTo(vector_b, i);
 
+                        //Clean weights
                         vecDelta = Vector<double>.Zero;
                         vecDelta.CopyTo(vector_bf, i);
 

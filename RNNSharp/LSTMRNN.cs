@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.IO;
 using AdvUtils;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -59,9 +60,11 @@ namespace RNNSharp
         protected Vector3[][] input2hiddenDeri;
         protected Vector3[][] feature2hiddenDeri;
 
-        private Vector4 vecLearningRate;
-        private Vector3 vecLearningRate3;
+        private new Vector4 vecNormalLearningRate;
+        private Vector3 vecNormalLearningRate3;
 
+        private new Vector4 vecMaxGrad;
+        private new Vector4 vecMinGrad;
 
         public LSTMRNN()
         {
@@ -495,8 +498,10 @@ namespace RNNSharp
             });
 
             Hidden2OutputWeightLearningRate = new Matrix<double>(L2, L1);
-            vecLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
-            vecLearningRate3 = new Vector3(LearningRate, LearningRate, LearningRate);
+            vecNormalLearningRate = new Vector4(LearningRate, LearningRate, LearningRate, LearningRate);
+            vecNormalLearningRate3 = new Vector3(LearningRate, LearningRate, LearningRate);
+            vecMaxGrad = new Vector4((float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff);
+            vecMinGrad = new Vector4((float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff));
         }
 
         public override void InitMem()
@@ -593,6 +598,13 @@ namespace RNNSharp
             });
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Vector4 ComputeLearningRate(Vector4 vecDelta, ref Vector4 vecWeightLearningRate)
+        {
+            vecWeightLearningRate += vecDelta * vecDelta;
+            return vecNormalLearningRate / (Vector4.SquareRoot(vecWeightLearningRate) + Vector4.One);
+        }
+
         public override void LearnNet(State state, int numStates, int curState)
         {
             //Get sparse feature and apply it into hidden layer
@@ -605,16 +617,13 @@ namespace RNNSharp
                 LSTMCell c = neuHidden[i];
 
                 //using the error find the gradient of the output gate
-                var gradientOutputGate = (float)NormalizeGradient(SigmoidDerivative(c.netOut) * c.cellState * c.er);
+                var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * c.cellState * c.er);
 
                 //internal cell state error
-                var cellStateError = (float)NormalizeGradient(c.yOut * c.er);
+                var cellStateError = (float)(c.yOut * c.er);
 
                 Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
-
-                Vector4[] w_i = input2hidden[i];
-                Vector3[] wd_i = input2hiddenDeri[i];
-                Vector4[] wlr_i = Input2HiddenLearningRate[i];
+                vecErr = Vector4.Clamp(vecErr, vecMinGrad, vecMaxGrad);
 
                 var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = TanHDerivative(c.netCellState) * c.yIn;
                 var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = TanH(c.netCellState) * SigmoidDerivative(c.netIn);
@@ -626,30 +635,27 @@ namespace RNNSharp
                         (float)Sigmoid2Derivative_ci_netCellState_mul_ci_yIn);
                 float c_yForget = (float)c.yForget;
 
+
+                Vector4[] w_i = input2hidden[i];
+                Vector3[] wd_i = input2hiddenDeri[i];
+                Vector4[] wlr_i = Input2HiddenLearningRate[i];
                 for (int k = 0; k < sparseFeatureSize; k++)
                 {
                     var entry = sparse.GetEntry(k);
-                    Vector4 wlr = wlr_i[entry.Key];
+
                     Vector3 wd = vecDerivate * entry.Value;
                     if (curState > 0)
                     {
+                        //Adding historical information
                         wd += wd_i[entry.Key] * c_yForget;
                     }
                     wd_i[entry.Key] = wd;
 
-                    //Get new learning rate according weight delta
                     Vector4 vecDelta = new Vector4(wd, entry.Value);
                     vecDelta = vecErr * vecDelta;
 
-                    Vector4 vecAlpha = vecDelta * vecDelta;
-                    vecAlpha = wlr + vecAlpha;
-                    wlr_i[entry.Key] = vecAlpha;
-
-                    vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
-                    vecDelta = vecAlpha * vecDelta;
-
-                    w_i[entry.Key] += vecDelta;
-                    wd_i[entry.Key] = wd;
+                    Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[entry.Key]);
+                    w_i[entry.Key] += vecLearningRate * vecDelta;
                 }
 
                 if (DenseFeatureSize > 0)
@@ -659,29 +665,21 @@ namespace RNNSharp
                     wlr_i = Feature2HiddenLearningRate[i];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
-                        Vector4 wlr = wlr_i[j];
                         float feature = neuFeatures[j];
 
                         Vector3 wd = vecDerivate * feature;
                         if (curState > 0)
                         {
+                            //Adding historical information
                             wd += wd_i[j] * c_yForget;
                         }
                         wd_i[j] = wd;
 
-                        //Get new learning rate according weight delta
                         Vector4 vecDelta = new Vector4(wd, feature);
                         vecDelta = vecErr * vecDelta;
 
-                        Vector4 vecAlpha = vecDelta * vecDelta;
-                        vecAlpha = wlr + vecAlpha;
-                        wlr_i[j] = vecAlpha;
-
-                        vecAlpha = vecLearningRate / (Vector4.SquareRoot(vecAlpha) + Vector4.One);
-                        vecDelta = vecAlpha * vecDelta;
-
-                        w_i[j] += vecDelta;
-                        wd_i[j] = wd;
+                        Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[j]);
+                        w_i[j] += vecLearningRate * vecDelta;
                     }
                 }
 
@@ -701,7 +699,7 @@ namespace RNNSharp
                 CellLearningRate[i] = vecCellLearningRate;
 
                 //LearningRate / (1.0 + Math.Sqrt(dg));
-                vecCellLearningRate = vecLearningRate3 / (Vector3.One + Vector3.SquareRoot(vecCellLearningRate));
+                vecCellLearningRate = vecNormalLearningRate3 / (Vector3.One + Vector3.SquareRoot(vecCellLearningRate));
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
                 c.wCellIn += vecCellDelta.X;
