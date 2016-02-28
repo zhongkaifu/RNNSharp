@@ -30,6 +30,7 @@ namespace RNNSharpConsole
         static int nBest = 1;
         static int iDir = 0;
         static int iVQ = 0;
+        static float gradientCutoff = 15.0f;
 
         static void UsageTitle()
         {
@@ -94,8 +95,11 @@ namespace RNNSharpConsole
             Console.WriteLine(" -vq <int>");
             Console.WriteLine("\tModel vector quantization, 0 is disable, 1 is enable. default is 0");
 
+            Console.WriteLine(" -grad <float>");
+            Console.WriteLine("\tGradient cut-off. Default is 15.0f");
+
             Console.WriteLine();
-            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0 -vq 0");
+            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0 -vq 0 -grad 15.0");
 
         }
 
@@ -147,6 +151,7 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
             if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
             if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1]);
+            if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1]);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
             {
@@ -433,6 +438,7 @@ namespace RNNSharpConsole
             RNNConfig.LearningRate = alpha;
             RNNConfig.Dropout = dropout;
             RNNConfig.Bptt = bptt;
+            RNNConfig.GradientCutoff = gradientCutoff;
 
             //Dump RNN setting on console
             RNNConfig.DumpSetting();

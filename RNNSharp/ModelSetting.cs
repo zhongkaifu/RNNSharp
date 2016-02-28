@@ -19,6 +19,7 @@ namespace RNNSharp
         public int ModelType { get; set; }
         public int ModelDirection { get; set; }
         public int VQ { get; set; }
+        public float GradientCutoff { get; set; }
 
         public void DumpSetting()
         {
@@ -49,6 +50,7 @@ namespace RNNSharp
             Logger.WriteLine("RNN-CRF: {0}", IsCRFTraining);
             Logger.WriteLine("SIMD: {0}, Size: {1}bits", System.Numerics.Vector.IsHardwareAccelerated, 
                 Vector<double>.Count * sizeof(double) * 8);
+            Logger.WriteLine("Gradient cut-off: {0}", GradientCutoff);
             if (SaveStep > 0)
             {
                 Logger.WriteLine("Save temporary model after every {0} sentences", SaveStep);
@@ -60,6 +62,7 @@ namespace RNNSharp
             MaxIteration = 20;
             Bptt = 4;
             LearningRate = 0.1f;
+            GradientCutoff = 15.0f;
             NumHidden = 200;
             IsCRFTraining = true;
         }

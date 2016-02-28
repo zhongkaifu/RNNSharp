@@ -17,9 +17,9 @@ namespace RNNSharp
         protected double[][] bptt_fea;
         protected SparseVector[] bptt_inputs = new SparseVector[MAX_RNN_HIST];
 
-        protected Matrix<double> mat_bptt_syn0_w;
-        protected Matrix<double> mat_bptt_syn0_ph;
-        protected Matrix<double> mat_bptt_synf;
+        protected Matrix<double> Input2HiddenWeightsDelta;
+        protected Matrix<double> HiddenBpttWeightsDelta;
+        protected Matrix<double> Feature2HiddenWeightsDelta;
 
         //Last hidden layer status
         protected SimpleLayer neuLastHidden;
@@ -263,7 +263,7 @@ namespace RNNSharp
                     int i = 0;
                     if (DenseFeatureSize > 0)
                     {
-                        vector_a = mat_bptt_synf[a];
+                        vector_a = Feature2HiddenWeightsDelta[a];
                         i = 0;
                         while (i < DenseFeatureSize - Vector<double>.Count)
                         {
@@ -283,7 +283,7 @@ namespace RNNSharp
                     }
 
                     //sparse weight update hidden->input
-                    vector_a = mat_bptt_syn0_w[a];
+                    vector_a = Input2HiddenWeightsDelta[a];
                     for (i = 0; i < sparse.Count; i++)
                     {
                         var entry = sparse.GetEntry(i);
@@ -291,7 +291,7 @@ namespace RNNSharp
                     }
 
                     //bptt weight update
-                    vector_a = mat_bptt_syn0_ph[a];
+                    vector_a = HiddenBpttWeightsDelta[a];
                     i = 0;
                     while (i < L1 - Vector<double>.Count)
                     {
@@ -340,7 +340,7 @@ namespace RNNSharp
 
                 //Update bptt feature weights
                 vector_b = HiddenBpttWeights[b];
-                vector_bf = mat_bptt_syn0_ph[b];
+                vector_bf = HiddenBpttWeightsDelta[b];
                 vector_lr = HiddenBpttWeightsLearningRate[b];
 
                 int i = 0;
@@ -383,7 +383,7 @@ namespace RNNSharp
                 if (DenseFeatureSize > 0)
                 {
                     vector_b = Feature2HiddenWeights[b];
-                    vector_bf = mat_bptt_synf[b];
+                    vector_bf = Feature2HiddenWeightsDelta[b];
                     vector_lr = Feature2HiddenWeightsLearningRate[b];
 
                     i = 0;
@@ -426,7 +426,7 @@ namespace RNNSharp
 
                 //Update sparse feature weights
                 vector_b = Input2HiddenWeights[b];
-                vector_bf = mat_bptt_syn0_w[b];
+                vector_bf = Input2HiddenWeightsDelta[b];
                 for (int step = 0; step < bptt + bptt_block - 2; step++)
                 {
                     var sparse = bptt_inputs[step];
@@ -466,9 +466,9 @@ namespace RNNSharp
                 bptt_fea[i] = new double[DenseFeatureSize];
             }
 
-            mat_bptt_syn0_w = new Matrix<double>(L1, L0);
-            mat_bptt_syn0_ph = new Matrix<double>(L1, L1);
-            mat_bptt_synf = new Matrix<double>(L1, DenseFeatureSize);
+            Input2HiddenWeightsDelta = new Matrix<double>(L1, L0);
+            HiddenBpttWeightsDelta = new Matrix<double>(L1, L1);
+            Feature2HiddenWeightsDelta = new Matrix<double>(L1, DenseFeatureSize);
         }
 
         public override void CleanStatus()
@@ -641,7 +641,7 @@ namespace RNNSharp
 
         private void CreateCells()
         {
-            neuFeatures = new SingleVector(DenseFeatureSize);
+            neuFeatures = null;
             OutputLayer = new SimpleLayer(L2);
             neuHidden = new SimpleLayer(L1);
         }

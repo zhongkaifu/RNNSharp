@@ -66,6 +66,9 @@ namespace RNNSharp
         private new Vector4 vecMaxGrad;
         private new Vector4 vecMinGrad;
 
+        private new Vector3 vecMaxGrad3;
+        private new Vector3 vecMinGrad3;
+
         public LSTMRNN()
         {
             ModelType = MODELTYPE.LSTM;
@@ -502,6 +505,10 @@ namespace RNNSharp
             vecNormalLearningRate3 = new Vector3(LearningRate, LearningRate, LearningRate);
             vecMaxGrad = new Vector4((float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff);
             vecMinGrad = new Vector4((float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff));
+
+            vecMaxGrad3 = new Vector3((float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff);
+            vecMinGrad3 = new Vector3((float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff));
+
         }
 
         public override void InitMem()
@@ -530,7 +537,7 @@ namespace RNNSharp
 
         private void CreateCell(BinaryReader br)
         {
-            neuFeatures = new SingleVector(DenseFeatureSize);
+            neuFeatures = null;
             OutputLayer = new SimpleLayer(L2);
 
             neuHidden = new LSTMCell[L1];
@@ -599,6 +606,13 @@ namespace RNNSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Vector3 ComputeLearningRate(Vector3 vecDelta, ref Vector3 vecWeightLearningRate)
+        {
+            vecWeightLearningRate += vecDelta * vecDelta;
+            return vecNormalLearningRate3 / (Vector3.SquareRoot(vecWeightLearningRate) + Vector3.One);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Vector4 ComputeLearningRate(Vector4 vecDelta, ref Vector4 vecWeightLearningRate)
         {
             vecWeightLearningRate += vecDelta * vecDelta;
@@ -651,9 +665,11 @@ namespace RNNSharp
                     }
                     wd_i[entry.Key] = wd;
 
+                    //Computing final err delta
                     Vector4 vecDelta = new Vector4(wd, entry.Value);
                     vecDelta = vecErr * vecDelta;
 
+                   //Computing actual learning rate
                     Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[entry.Key]);
                     w_i[entry.Key] += vecLearningRate * vecDelta;
                 }
@@ -678,6 +694,7 @@ namespace RNNSharp
                         Vector4 vecDelta = new Vector4(wd, feature);
                         vecDelta = vecErr * vecDelta;
 
+                        //Computing actual learning rate
                         Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[j]);
                         w_i[j] += vecLearningRate * vecDelta;
                     }
@@ -692,14 +709,15 @@ namespace RNNSharp
                 //update internal weights
                 Vector3 vecCellDelta = new Vector3((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.cellState);
                 Vector3 vecCellErr = new Vector3(cellStateError, cellStateError, gradientOutputGate);
-                Vector3 vecCellLearningRate = CellLearningRate[i];
+
+                //Normalize err by gradient cut-off
+                vecCellErr = Vector3.Clamp(vecCellErr, vecMinGrad3, vecMaxGrad3);
 
                 vecCellDelta = vecCellErr * vecCellDelta;
-                vecCellLearningRate += (vecCellDelta * vecCellDelta);
-                CellLearningRate[i] = vecCellLearningRate;
 
-                //LearningRate / (1.0 + Math.Sqrt(dg));
-                vecCellLearningRate = vecNormalLearningRate3 / (Vector3.One + Vector3.SquareRoot(vecCellLearningRate));
+                //Computing actual learning rate
+                Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref CellLearningRate[i]);
+
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
                 c.wCellIn += vecCellDelta.X;

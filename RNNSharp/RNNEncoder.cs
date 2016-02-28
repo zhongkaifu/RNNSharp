@@ -64,7 +64,7 @@ namespace RNNSharp
             rnn.MaxIter = m_modelSetting.MaxIteration;
             rnn.IsCRFTraining = m_modelSetting.IsCRFTraining;
             rnn.LearningRate = m_modelSetting.LearningRate;
-            rnn.GradientCutoff = 15.0;
+            rnn.GradientCutoff = m_modelSetting.GradientCutoff;
             rnn.Dropout = m_modelSetting.Dropout;
             rnn.L1 = m_modelSetting.NumHidden;
 
@@ -116,17 +116,31 @@ namespace RNNSharp
                     betterValidateNet = rnn.ValidateNet(ValidationSet, iter);
                 }
 
-                if ((ValidationSet != null && betterValidateNet == false) ||
-                    (ValidationSet == null && ppl >= lastPPL))
+                if (ppl >= lastPPL)
                 {
+                    //We cannot get a better result on training corpus, so reduce learning rate
                     rnn.LearningRate = rnn.LearningRate / 2.0f;
                 }
-                else
+
+                if (betterValidateNet == true)
                 {
-                    //If current model is better than before, save it into file
+                    //We got better result on validated corpus, save this model
                     Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
                     rnn.SaveModel(m_modelSetting.ModelFile);
                 }
+
+
+                //if ((ValidationSet != null && betterValidateNet == false) ||
+                //    (ValidationSet == null && ppl >= lastPPL))
+                //{
+                //    rnn.LearningRate = rnn.LearningRate / 2.0f;
+                //}
+                //else
+                //{
+                //    //If current model is better than before, save it into file
+                //    Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
+                //    rnn.SaveModel(m_modelSetting.ModelFile);
+                //}
 
                 lastPPL = ppl;
 
