@@ -243,7 +243,7 @@ namespace RNNSharp
                 {
                     State state = pSequence.States[curState];
                     forwardRNN.SetInputLayer(state, curState, numStates, null);
-                    forwardRNN.computeHiddenLayer(state);      //compute probability distribution
+                    forwardRNN.computeHiddenLayer(state);
 
                     mForward[curState] = forwardRNN.GetHiddenLayer();
                 }

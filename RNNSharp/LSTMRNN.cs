@@ -25,6 +25,7 @@ namespace RNNSharp
         public double netCellState;
         public double previousCellState;
         public double cellState;
+        public double yCellState;
 
         //internal weights and deltas
         public double wCellIn;
@@ -66,8 +67,8 @@ namespace RNNSharp
         private new Vector4 vecMaxGrad;
         private new Vector4 vecMinGrad;
 
-        private new Vector3 vecMaxGrad3;
-        private new Vector3 vecMinGrad3;
+        private Vector3 vecMaxGrad3;
+        private Vector3 vecMinGrad3;
 
         public LSTMRNN()
         {
@@ -453,31 +454,24 @@ namespace RNNSharp
             }
         }
 
-        public void LSTMCellInit(LSTMCell c)
+        public void LSTMCellInit(LSTMCell c, bool bBias = false)
         {
-            //input gate
-            c.netIn = 0;
-            c.yIn = 0;
-
-            //forget gate
-            c.netForget = 0;
-            c.yForget = 0;
-
-            //cell state
-            c.netCellState = 0;
-            c.previousCellState = 0; //this is important
+            c.previousCellState = 0;
             c.cellState = 0;
 
             //partial derivatives
             c.dSWCellIn = 0;
             c.dSWCellForget = 0;
 
-            //output gate
-            c.netOut = 0;
-            c.yOut = 0;
-
-            //cell output
-            c.cellOutput = 0;
+            if (bBias == false)
+            {
+                //cell output
+                c.cellOutput = 0;
+            }
+            else
+            {
+                c.cellOutput = 1.0;
+            }
         }
 
         public override void CleanStatus()
@@ -544,7 +538,7 @@ namespace RNNSharp
             for (int i = 0; i < L1; i++)
             {
                 neuHidden[i] = new LSTMCell();
-                LSTMCellInit(neuHidden[i]);
+                LSTMCellInit(neuHidden[i], i == L1 - 1);
             }
 
             if (br != null)
@@ -626,27 +620,26 @@ namespace RNNSharp
             int sparseFeatureSize = sparse.Count;
 
             //put variables for derivaties in weight class and cell class
-            Parallel.For(0, L1, parallelOption, i =>
+            Parallel.For(0, L1 - 1, parallelOption, i =>
             {
                 LSTMCell c = neuHidden[i];
 
                 //using the error find the gradient of the output gate
-                var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * c.cellState * c.er);
+                var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * c.er);
 
                 //internal cell state error
-                var cellStateError = (float)(c.yOut * c.er);
+                var cellStateError = (float)(c.er);
 
                 Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
-                vecErr = Vector4.Clamp(vecErr, vecMinGrad, vecMaxGrad);
 
                 var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = TanHDerivative(c.netCellState) * c.yIn;
                 var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = TanH(c.netCellState) * SigmoidDerivative(c.netIn);
                 var ci_previousCellState_mul_SigmoidDerivative_ci_netForget = c.previousCellState * SigmoidDerivative(c.netForget);
 
                 Vector3 vecDerivate = new Vector3(
-                        (float)Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn,
-                        (float)ci_previousCellState_mul_SigmoidDerivative_ci_netForget,
-                        (float)Sigmoid2Derivative_ci_netCellState_mul_ci_yIn);
+                        (float)(Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.yOut),
+                        (float)(ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.yOut),
+                        (float)(Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.yOut));
                 float c_yForget = (float)c.yForget;
 
 
@@ -668,8 +661,9 @@ namespace RNNSharp
                     //Computing final err delta
                     Vector4 vecDelta = new Vector4(wd, entry.Value);
                     vecDelta = vecErr * vecDelta;
+                    vecDelta = Vector4.Clamp(vecDelta, vecMinGrad, vecMaxGrad);
 
-                   //Computing actual learning rate
+                    //Computing actual learning rate
                     Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[entry.Key]);
                     w_i[entry.Key] += vecLearningRate * vecDelta;
                 }
@@ -693,6 +687,7 @@ namespace RNNSharp
 
                         Vector4 vecDelta = new Vector4(wd, feature);
                         vecDelta = vecErr * vecDelta;
+                        vecDelta = Vector4.Clamp(vecDelta, vecMinGrad, vecMaxGrad);
 
                         //Computing actual learning rate
                         Vector4 vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[j]);
@@ -709,11 +704,10 @@ namespace RNNSharp
                 //update internal weights
                 Vector3 vecCellDelta = new Vector3((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.cellState);
                 Vector3 vecCellErr = new Vector3(cellStateError, cellStateError, gradientOutputGate);
+                vecCellDelta = vecCellErr * vecCellDelta;
 
                 //Normalize err by gradient cut-off
-                vecCellErr = Vector3.Clamp(vecCellErr, vecMinGrad3, vecMaxGrad3);
-
-                vecCellDelta = vecCellErr * vecCellDelta;
+                vecCellDelta = Vector3.Clamp(vecCellDelta, vecMinGrad3, vecMaxGrad3);
 
                 //Computing actual learning rate
                 Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref CellLearningRate[i]);
@@ -737,7 +731,7 @@ namespace RNNSharp
             var sparse = state.SparseData;
             int sparseFeatureSize = sparse.Count;
 
-            Parallel.For(0, L1, parallelOption, j =>
+            Parallel.For(0, L1 - 1, parallelOption, j =>
             {
                 LSTMCell cell_j = neuHidden[j];
 
@@ -780,6 +774,7 @@ namespace RNNSharp
                 cell_j.netForget += cell_j.previousCellState * cell_j.wCellForget;
                 cell_j.yForget = Sigmoid(cell_j.netForget);
 
+                cell_j.yCellState = TanH(cell_j.netCellState);
                 if (cell_j.mask == true)
                 {
                     cell_j.cellState = 0;
@@ -787,7 +782,7 @@ namespace RNNSharp
                 else
                 {
                     //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
-                    cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * TanH(cell_j.netCellState);
+                    cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * cell_j.yCellState;
                 }
 
                 if (isTrain == false)
@@ -801,7 +796,7 @@ namespace RNNSharp
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);
 
-                cell_j.cellOutput = cell_j.cellState * cell_j.yOut;
+                cell_j.cellOutput = TanH(cell_j.cellState) * cell_j.yOut;
 
                 neuHidden[j] = cell_j;
             });
@@ -825,7 +820,7 @@ namespace RNNSharp
             for (int i = 0; i < L1; i++)
             {
                 neuHidden[i].mask = false;
-                LSTMCellInit(neuHidden[i]);
+                LSTMCellInit(neuHidden[i], i == L1 - 1);
             }
 
             if (Dropout > 0 && updateNet == true)

@@ -109,11 +109,15 @@ namespace RNNSharp
                 lastAlpha = rnn.LearningRate;
 
                 //Validate the model by validated corpus
-                bool betterValidateNet = false;
                 if (ValidationSet != null)
                 {
                     Logger.WriteLine("Verify model on validated corpus.");
-                    betterValidateNet = rnn.ValidateNet(ValidationSet, iter);
+                    if (rnn.ValidateNet(ValidationSet, iter) == true)
+                    {
+                        //We got better result on validated corpus, save this model
+                        Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
+                        rnn.SaveModel(m_modelSetting.ModelFile);
+                    }
                 }
 
                 if (ppl >= lastPPL)
@@ -121,26 +125,6 @@ namespace RNNSharp
                     //We cannot get a better result on training corpus, so reduce learning rate
                     rnn.LearningRate = rnn.LearningRate / 2.0f;
                 }
-
-                if (betterValidateNet == true)
-                {
-                    //We got better result on validated corpus, save this model
-                    Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
-                    rnn.SaveModel(m_modelSetting.ModelFile);
-                }
-
-
-                //if ((ValidationSet != null && betterValidateNet == false) ||
-                //    (ValidationSet == null && ppl >= lastPPL))
-                //{
-                //    rnn.LearningRate = rnn.LearningRate / 2.0f;
-                //}
-                //else
-                //{
-                //    //If current model is better than before, save it into file
-                //    Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
-                //    rnn.SaveModel(m_modelSetting.ModelFile);
-                //}
 
                 lastPPL = ppl;
 
