@@ -28,18 +28,28 @@ namespace RNNSharp
         public double yCellState;
 
         //internal weights and deltas
-        public double wCellIn;
-        public double wCellForget;
-        public double wCellOut;
+        public double wPeepholeIn;
+        public double wPeepholeForget;
+        public double wPeepholeOut;
 
         //partial derivatives
+        public double dSWPeepholeIn;
+        public double dSWPeepholeForget;
+
+        public double wCellIn;
+        public double wCellForget;
+        public double wCellState;
+        public double wCellOut;
+
         public double dSWCellIn;
         public double dSWCellForget;
-        //double dSWCellState;
+        public double dSWCellState;
 
         //output gate
         public double netOut;
         public double yOut;
+
+        public double previousCellOutput;
     }
 
     public class LSTMRNN : RNN
@@ -56,7 +66,8 @@ namespace RNNSharp
 
         protected Vector4[][] Input2HiddenLearningRate;
         protected Vector4[][] Feature2HiddenLearningRate;
-        protected Vector3[] CellLearningRate;
+        protected Vector3[] PeepholeLearningRate;
+        protected Vector4[] CellLearningRate;
 
         protected Vector3[][] input2hiddenDeri;
         protected Vector3[][] feature2hiddenDeri;
@@ -322,8 +333,14 @@ namespace RNNSharp
         {
             for (int i = 0; i < L1; i++)
             {
+                fo.Write(neuHidden[i].wPeepholeIn);
+                fo.Write(neuHidden[i].wPeepholeForget);
+          //      fo.Write(neuHidden[i].wCellState);
+                fo.Write(neuHidden[i].wPeepholeOut);
+
                 fo.Write(neuHidden[i].wCellIn);
                 fo.Write(neuHidden[i].wCellForget);
+                fo.Write(neuHidden[i].wCellState);
                 fo.Write(neuHidden[i].wCellOut);
             }
         }
@@ -460,8 +477,13 @@ namespace RNNSharp
             c.cellState = 0;
 
             //partial derivatives
+            c.dSWPeepholeIn = 0;
+            c.dSWPeepholeForget = 0;
+            //  c.dSWCellState = 0;
+
             c.dSWCellIn = 0;
             c.dSWCellForget = 0;
+            c.dSWCellState = 0;
 
             if (bBias == false)
             {
@@ -482,7 +504,8 @@ namespace RNNSharp
                 Feature2HiddenLearningRate = new Vector4[L1][];
             }
 
-            CellLearningRate = new Vector3[L1];
+            PeepholeLearningRate = new Vector3[L1];
+            CellLearningRate = new Vector4[L1];
             Parallel.For(0, L1, parallelOption, i =>
             {
                 Input2HiddenLearningRate[i] = new Vector4[L0];
@@ -502,7 +525,6 @@ namespace RNNSharp
 
             vecMaxGrad3 = new Vector3((float)GradientCutoff, (float)GradientCutoff, (float)GradientCutoff);
             vecMinGrad3 = new Vector3((float)(-GradientCutoff), (float)(-GradientCutoff), (float)(-GradientCutoff));
-
         }
 
         public override void InitMem()
@@ -546,8 +568,13 @@ namespace RNNSharp
                 //Load weight from input file
                 for (int i = 0; i < L1; i++)
                 {
+                    neuHidden[i].wPeepholeIn = br.ReadDouble();
+                    neuHidden[i].wPeepholeForget = br.ReadDouble();
+                    neuHidden[i].wPeepholeOut = br.ReadDouble();
+
                     neuHidden[i].wCellIn = br.ReadDouble();
                     neuHidden[i].wCellForget = br.ReadDouble();
+                    neuHidden[i].wCellState = br.ReadDouble();
                     neuHidden[i].wCellOut = br.ReadDouble();
                 }
             }
@@ -557,8 +584,13 @@ namespace RNNSharp
                 for (int i = 0; i < L1; i++)
                 {
                     //internal weights, also important
+                    neuHidden[i].wPeepholeIn = RandInitWeight();
+                    neuHidden[i].wPeepholeForget = RandInitWeight();
+                    neuHidden[i].wPeepholeOut = RandInitWeight();
+
                     neuHidden[i].wCellIn = RandInitWeight();
                     neuHidden[i].wCellForget = RandInitWeight();
+                    neuHidden[i].wCellState = RandInitWeight();
                     neuHidden[i].wCellOut = RandInitWeight();
                 }
             }
@@ -628,18 +660,18 @@ namespace RNNSharp
                 var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * c.er);
 
                 //internal cell state error
-                var cellStateError = (float)(c.er);
+                var cellStateError = (float)(c.yOut * c.er * TanHDerivative(c.cellState));
 
                 Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
 
-                var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = TanHDerivative(c.netCellState) * c.yIn;
                 var Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn = TanH(c.netCellState) * SigmoidDerivative(c.netIn);
                 var ci_previousCellState_mul_SigmoidDerivative_ci_netForget = c.previousCellState * SigmoidDerivative(c.netForget);
+                var Sigmoid2Derivative_ci_netCellState_mul_ci_yIn = TanHDerivative(c.netCellState) * c.yIn;
 
                 Vector3 vecDerivate = new Vector3(
-                        (float)(Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.yOut),
-                        (float)(ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.yOut),
-                        (float)(Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.yOut));
+                        (float)(Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn),
+                        (float)(ci_previousCellState_mul_SigmoidDerivative_ci_netForget),
+                        (float)(Sigmoid2Derivative_ci_netCellState_mul_ci_yIn));
                 float c_yForget = (float)c.yForget;
 
 
@@ -695,28 +727,59 @@ namespace RNNSharp
                     }
                 }
 
+                //Update peephols weights
+
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.cellState;
+                c.dSWPeepholeIn = c.dSWPeepholeIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState;
+                c.dSWPeepholeForget = c.dSWPeepholeForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState;
 
                 //update internal weights
-                Vector3 vecCellDelta = new Vector3((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.cellState);
-                Vector3 vecCellErr = new Vector3(cellStateError, cellStateError, gradientOutputGate);
-                vecCellDelta = vecCellErr * vecCellDelta;
+                Vector3 vecCellDelta = new Vector3((float)c.dSWPeepholeIn, (float)c.dSWPeepholeForget, (float)c.cellState);
+                Vector3 vecErr3 = new Vector3(cellStateError, cellStateError, gradientOutputGate);
+
+                vecCellDelta = vecErr3 * vecCellDelta;
 
                 //Normalize err by gradient cut-off
                 vecCellDelta = Vector3.Clamp(vecCellDelta, vecMinGrad3, vecMaxGrad3);
 
                 //Computing actual learning rate
-                Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref CellLearningRate[i]);
+                Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref PeepholeLearningRate[i]);
 
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
-                c.wCellIn += vecCellDelta.X;
-                c.wCellForget += vecCellDelta.Y;
-                c.wCellOut += vecCellDelta.Z;
+                c.wPeepholeIn += vecCellDelta.X;
+                c.wPeepholeForget += vecCellDelta.Y;
+                c.wPeepholeOut += vecCellDelta.Z;
+
+
+
+                //Update cells weights
+                //partial derivatives for internal connections
+                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellOutput;
+
+                //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
+                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellOutput;
+
+                c.dSWCellState = c.dSWCellState * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.previousCellOutput;
+
+                Vector4 vecCellDelta4 = new Vector4((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.dSWCellState, (float)c.previousCellOutput);
+                vecCellDelta4 = vecErr * vecCellDelta4;
+
+                //Normalize err by gradient cut-off
+                vecCellDelta4 = Vector4.Clamp(vecCellDelta4, vecMinGrad, vecMaxGrad);
+
+                //Computing actual learning rate
+                Vector4 vecCellLearningRate4 = ComputeLearningRate(vecCellDelta4, ref CellLearningRate[i]);
+
+                vecCellDelta4 = vecCellLearningRate4 * vecCellDelta4;
+
+                c.wCellIn += vecCellDelta4.X;
+                c.wCellForget += vecCellDelta4.Y;
+                c.wCellState += vecCellDelta4.Z;
+                c.wCellOut += vecCellDelta4.W;
+
 
                 neuHidden[i] = c;
             });
@@ -737,6 +800,7 @@ namespace RNNSharp
 
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
+                cell_j.previousCellOutput = cell_j.cellOutput;
 
                 Vector4 vecCell_j = Vector4.Zero;
                 //Apply sparse weights
@@ -766,15 +830,17 @@ namespace RNNSharp
                 cell_j.netOut = vecCell_j.W;
 
                 //include internal connection multiplied by the previous cell state
-                cell_j.netIn += cell_j.previousCellState * cell_j.wCellIn;
+                cell_j.netIn += cell_j.previousCellState * cell_j.wPeepholeIn + cell_j.previousCellOutput * cell_j.wCellIn;
                 //squash input
                 cell_j.yIn = Sigmoid(cell_j.netIn);
 
                 //include internal connection multiplied by the previous cell state
-                cell_j.netForget += cell_j.previousCellState * cell_j.wCellForget;
+                cell_j.netForget += cell_j.previousCellState * cell_j.wPeepholeForget + cell_j.previousCellOutput * cell_j.wCellForget;
                 cell_j.yForget = Sigmoid(cell_j.netForget);
 
+                cell_j.netCellState += cell_j.previousCellOutput * cell_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
+
                 if (cell_j.mask == true)
                 {
                     cell_j.cellState = 0;
@@ -791,7 +857,7 @@ namespace RNNSharp
                 }
 
                 ////include the internal connection multiplied by the CURRENT cell state
-                cell_j.netOut += cell_j.cellState * cell_j.wCellOut;
+                cell_j.netOut += cell_j.cellState * cell_j.wPeepholeOut + cell_j.previousCellOutput * cell_j.wCellOut;
 
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);

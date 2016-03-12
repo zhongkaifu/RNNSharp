@@ -119,7 +119,14 @@ namespace RNNSharp
                         rnn.SaveModel(m_modelSetting.ModelFile);
                     }
                 }
-
+                else if (ppl < lastPPL)
+                {
+                    //We don't have validate corpus, but we get a better result on training corpus
+                    //We got better result on validated corpus, save this model
+                    Logger.WriteLine("Saving better model into file {0}...", m_modelSetting.ModelFile);
+                    rnn.SaveModel(m_modelSetting.ModelFile);
+                }
+                
                 if (ppl >= lastPPL)
                 {
                     //We cannot get a better result on training corpus, so reduce learning rate

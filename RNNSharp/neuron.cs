@@ -8,6 +8,7 @@ namespace RNNSharp
     {
         //cell output
         public double cellOutput;
+
         public double er;
         public bool mask;
     }
