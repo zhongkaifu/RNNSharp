@@ -11,7 +11,17 @@ using System.Runtime.CompilerServices;
 /// </summary>
 namespace RNNSharp
 {
-    public class LSTMCell : SimpleCell
+    public class LSTMLayer : SimpleLayer
+    {
+        public LSTMCell[] cell;
+        public LSTMLayer(int m) : base(m)
+        {
+            cell = new LSTMCell[m];
+        }
+    }
+
+
+    public class LSTMCell
     {
         //input gate
         public double netIn;
@@ -54,7 +64,7 @@ namespace RNNSharp
 
     public class LSTMRNN : RNN
     {
-        public LSTMCell[] neuHidden;
+        public LSTMLayer neuHidden;
 
 
         //X - wInputInputGate
@@ -91,9 +101,9 @@ namespace RNNSharp
             SimpleLayer m = new SimpleLayer(L1);
             for (int i = 0; i < L1; i++)
             {
-                m.cellOutput[i] = neuHidden[i].cellOutput;
-                m.er[i] = neuHidden[i].er;
-                m.mask[i] = neuHidden[i].mask;
+                m.cellOutput[i] = neuHidden.cellOutput[i];
+                m.er[i] = neuHidden.er[i];
+                m.mask[i] = neuHidden.mask[i];
             }
 
             return m;
@@ -333,15 +343,15 @@ namespace RNNSharp
         {
             for (int i = 0; i < L1; i++)
             {
-                fo.Write(neuHidden[i].wPeepholeIn);
-                fo.Write(neuHidden[i].wPeepholeForget);
+                fo.Write(neuHidden.cell[i].wPeepholeIn);
+                fo.Write(neuHidden.cell[i].wPeepholeForget);
           //      fo.Write(neuHidden[i].wCellState);
-                fo.Write(neuHidden[i].wPeepholeOut);
+                fo.Write(neuHidden.cell[i].wPeepholeOut);
 
-                fo.Write(neuHidden[i].wCellIn);
-                fo.Write(neuHidden[i].wCellForget);
-                fo.Write(neuHidden[i].wCellState);
-                fo.Write(neuHidden[i].wCellOut);
+                fo.Write(neuHidden.cell[i].wCellIn);
+                fo.Write(neuHidden.cell[i].wCellForget);
+                fo.Write(neuHidden.cell[i].wCellState);
+                fo.Write(neuHidden.cell[i].wCellOut);
             }
         }
 
@@ -471,7 +481,7 @@ namespace RNNSharp
             }
         }
 
-        public void LSTMCellInit(LSTMCell c, bool bBias = false)
+        public void LSTMCellInit(LSTMCell c)
         {
             c.previousCellState = 0;
             c.cellState = 0;
@@ -484,16 +494,6 @@ namespace RNNSharp
             c.dSWCellIn = 0;
             c.dSWCellForget = 0;
             c.dSWCellState = 0;
-
-            if (bBias == false)
-            {
-                //cell output
-                c.cellOutput = 0;
-            }
-            else
-            {
-                c.cellOutput = 1.0;
-            }
         }
 
         public override void CleanStatus()
@@ -555,27 +555,21 @@ namespace RNNSharp
         {
             neuFeatures = null;
             OutputLayer = new SimpleLayer(L2);
-
-            neuHidden = new LSTMCell[L1];
-            for (int i = 0; i < L1; i++)
-            {
-                neuHidden[i] = new LSTMCell();
-                LSTMCellInit(neuHidden[i], i == L1 - 1);
-            }
+            neuHidden = new LSTMLayer(L1);
 
             if (br != null)
             {
                 //Load weight from input file
                 for (int i = 0; i < L1; i++)
                 {
-                    neuHidden[i].wPeepholeIn = br.ReadDouble();
-                    neuHidden[i].wPeepholeForget = br.ReadDouble();
-                    neuHidden[i].wPeepholeOut = br.ReadDouble();
+                    neuHidden.cell[i].wPeepholeIn = br.ReadDouble();
+                    neuHidden.cell[i].wPeepholeForget = br.ReadDouble();
+                    neuHidden.cell[i].wPeepholeOut = br.ReadDouble();
 
-                    neuHidden[i].wCellIn = br.ReadDouble();
-                    neuHidden[i].wCellForget = br.ReadDouble();
-                    neuHidden[i].wCellState = br.ReadDouble();
-                    neuHidden[i].wCellOut = br.ReadDouble();
+                    neuHidden.cell[i].wCellIn = br.ReadDouble();
+                    neuHidden.cell[i].wCellForget = br.ReadDouble();
+                    neuHidden.cell[i].wCellState = br.ReadDouble();
+                    neuHidden.cell[i].wCellOut = br.ReadDouble();
                 }
             }
             else
@@ -584,14 +578,14 @@ namespace RNNSharp
                 for (int i = 0; i < L1; i++)
                 {
                     //internal weights, also important
-                    neuHidden[i].wPeepholeIn = RandInitWeight();
-                    neuHidden[i].wPeepholeForget = RandInitWeight();
-                    neuHidden[i].wPeepholeOut = RandInitWeight();
+                    neuHidden.cell[i].wPeepholeIn = RandInitWeight();
+                    neuHidden.cell[i].wPeepholeForget = RandInitWeight();
+                    neuHidden.cell[i].wPeepholeOut = RandInitWeight();
 
-                    neuHidden[i].wCellIn = RandInitWeight();
-                    neuHidden[i].wCellForget = RandInitWeight();
-                    neuHidden[i].wCellState = RandInitWeight();
-                    neuHidden[i].wCellOut = RandInitWeight();
+                    neuHidden.cell[i].wCellIn = RandInitWeight();
+                    neuHidden.cell[i].wCellForget = RandInitWeight();
+                    neuHidden.cell[i].wCellState = RandInitWeight();
+                    neuHidden.cell[i].wCellOut = RandInitWeight();
                 }
             }
         }
@@ -601,15 +595,13 @@ namespace RNNSharp
             Parallel.For(0, L1, parallelOption, i =>
             {
                 //find the error by find the product of the output errors and their weight connection.
-                SimpleCell cell = neuHidden[i];
+                neuHidden.er[i] = 0.0;
 
-                cell.er = 0.0;
-
-                if (cell.mask == false)
+                if (neuHidden.mask[i] == false)
                 {
                     for (int k = 0; k < L2; k++)
                     {
-                        cell.er += OutputLayer.er[k] * Hidden2OutputWeight[k][i];
+                        neuHidden.er[i] += OutputLayer.er[k] * Hidden2OutputWeight[k][i];
                     }
                 }
             });
@@ -620,7 +612,7 @@ namespace RNNSharp
             //update weights for hidden to output layer
             Parallel.For(0, L1, parallelOption, i =>
             {
-                double cellOutput = neuHidden[i].cellOutput;
+                double cellOutput = neuHidden.cellOutput[i];
                 for (int k = 0; k < L2; k++)
                 {
                     double delta = NormalizeGradient(cellOutput * OutputLayer.er[k]);
@@ -652,15 +644,15 @@ namespace RNNSharp
             int sparseFeatureSize = sparse.Count;
 
             //put variables for derivaties in weight class and cell class
-            Parallel.For(0, L1 - 1, parallelOption, i =>
+            Parallel.For(0, L1, parallelOption, i =>
             {
-                LSTMCell c = neuHidden[i];
+                LSTMCell c = neuHidden.cell[i];
 
                 //using the error find the gradient of the output gate
-                var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * c.er);
+                var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * neuHidden.er[i]);
 
                 //internal cell state error
-                var cellStateError = (float)(c.yOut * c.er * TanHDerivative(c.cellState));
+                var cellStateError = (float)(c.yOut * neuHidden.er[i] * TanHDerivative(c.cellState) + gradientOutputGate * c.wPeepholeOut);
 
                 Vector4 vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
 
@@ -781,7 +773,7 @@ namespace RNNSharp
                 c.wCellOut += vecCellDelta4.W;
 
 
-                neuHidden[i] = c;
+                neuHidden.cell[i] = c;
             });
         }
 
@@ -794,13 +786,13 @@ namespace RNNSharp
             var sparse = state.SparseData;
             int sparseFeatureSize = sparse.Count;
 
-            Parallel.For(0, L1 - 1, parallelOption, j =>
+            Parallel.For(0, L1, parallelOption, j =>
             {
-                LSTMCell cell_j = neuHidden[j];
+                LSTMCell cell_j = neuHidden.cell[j];
 
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
-                cell_j.previousCellOutput = cell_j.cellOutput;
+                cell_j.previousCellOutput = neuHidden.cellOutput[j];
 
                 Vector4 vecCell_j = Vector4.Zero;
                 //Apply sparse weights
@@ -841,7 +833,7 @@ namespace RNNSharp
                 cell_j.netCellState += cell_j.previousCellOutput * cell_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
 
-                if (cell_j.mask == true)
+                if (neuHidden.mask[j] == true)
                 {
                     cell_j.cellState = 0;
                 }
@@ -862,9 +854,9 @@ namespace RNNSharp
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);
 
-                cell_j.cellOutput = TanH(cell_j.cellState) * cell_j.yOut;
+                neuHidden.cellOutput[j] = TanH(cell_j.cellState) * cell_j.yOut;
 
-                neuHidden[j] = cell_j;
+                neuHidden.cell[j] = cell_j;
             });
         }
 
@@ -885,8 +877,9 @@ namespace RNNSharp
         {
             for (int i = 0; i < L1; i++)
             {
-                neuHidden[i].mask = false;
-                LSTMCellInit(neuHidden[i], i == L1 - 1);
+                neuHidden.mask[i] = false;
+                neuHidden.cellOutput[i] = 0;
+                LSTMCellInit(neuHidden.cell[i]);
             }
 
             if (Dropout > 0 && updateNet == true)
@@ -896,7 +889,7 @@ namespace RNNSharp
                 {
                     if (rand.NextDouble() < Dropout)
                     {
-                        neuHidden[a].mask = true;
+                        neuHidden.mask[a] = true;
                     }
                 }
             }

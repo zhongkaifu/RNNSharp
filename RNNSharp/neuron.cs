@@ -4,15 +4,6 @@
 /// </summary>
 namespace RNNSharp
 {
-    public class SimpleCell
-    {
-        //cell output
-        public double cellOutput;
-
-        public double er;
-        public bool mask;
-    }
-
     public class SimpleLayer
     {
         public double[] cellOutput;

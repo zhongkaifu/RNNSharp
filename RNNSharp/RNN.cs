@@ -674,39 +674,6 @@ namespace RNNSharp
             return err;
         }
 
-        public void matrixXvectorADD(SimpleLayer dest, SimpleCell[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
-        {
-            if (type == 0)
-            {
-                //ac mod
-                Parallel.For(0, DestSize, parallelOption, i =>
-                {
-                    double[] vector_i = srcmatrix[i];
-                    double cellOutput = 0;
-                    for (int j = 0; j < SrcSize; j++)
-                    {
-                        cellOutput += srcvec[j].cellOutput * vector_i[j];
-                    }
-
-                    dest.cellOutput[i] = cellOutput;
-                });
-
-            }
-            else
-            {
-                Parallel.For(0, DestSize, parallelOption, i =>
-                {
-                    double er = 0;
-                    for (int j = 0; j < SrcSize; j++)
-                    {
-                        er += srcvec[j].er * srcmatrix[j][i];
-                    }
-
-                    dest.er[i] = NormalizeGradient(er);
-                });
-            }
-        }
-
         public void matrixXvectorADD(SimpleLayer dest, SimpleLayer srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
         {
             if (type == 0)
