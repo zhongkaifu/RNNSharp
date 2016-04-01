@@ -150,7 +150,7 @@ namespace RNNSharp
 
             //hidden(t-1) -> hidden(t)
             neuHidden = new SimpleLayer(L1);
-            matrixXvectorADD(neuHidden, neuLastHidden, HiddenBpttWeights, L1, L1, 0);
+            matrixXvectorADD(neuHidden.cellOutput, neuLastHidden.cellOutput, HiddenBpttWeights, L1, L1);
 
             //Apply feature values on hidden layer
             var sparse = state.SparseData;
@@ -191,7 +191,7 @@ namespace RNNSharp
         public override void computeOutput(double[] doutput)
         {
             //Calculate output layer
-            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, L2, L1, 0);
+            matrixXvectorADD(OutputLayer.cellOutput, neuHidden.cellOutput, Hidden2OutputWeight, L2, L1);
             if (doutput != null)
             {
                 for (int i = 0; i < L2; i++)
@@ -207,7 +207,7 @@ namespace RNNSharp
         public override void ComputeHiddenLayerErr()
         {
             //error output->hidden for words from specific class    	
-            matrixXvectorADD(neuHidden, OutputLayer, Hidden2OutputWeight, L1, L2, 1);
+            matrixXvectorADDErr(neuHidden.er, OutputLayer.er, Hidden2OutputWeight, L1, L2);
 
             if (Dropout > 0)
             {
@@ -312,7 +312,7 @@ namespace RNNSharp
                 });
 
                 //propagates errors hidden->input to the recurrent part
-                matrixXvectorADD(neuLastHidden, neuHidden, HiddenBpttWeights, L1, L1, 1);
+                matrixXvectorADDErr(neuLastHidden.er, neuHidden.er, HiddenBpttWeights, L1, L1);
 
                 for (int a = 0; a < L1; a++)
                 {

@@ -674,49 +674,47 @@ namespace RNNSharp
             return err;
         }
 
-        public void matrixXvectorADD(SimpleLayer dest, SimpleLayer srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, int type)
+        public void matrixXvectorADD(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize)
         {
-            if (type == 0)
+            //ac mod
+            Parallel.For(0, DestSize, parallelOption, i =>
             {
-                //ac mod
-                Parallel.For(0, DestSize, parallelOption, i =>
+                double[] vector_i = srcmatrix[i];
+                double cellOutput = 0;
+                int j = 0;
+
+                while (j < SrcSize - Vector<double>.Count)
                 {
-                    double[] vector_i = srcmatrix[i];
-                    double cellOutput = 0;
-                    int j = 0;
+                    Vector<double> v1 = new Vector<double>(srcvec, j);
+                    Vector<double> v2 = new Vector<double>(vector_i, j);
+                    cellOutput += Vector.Dot<double>(v1, v2);
 
-                    while (j < SrcSize - Vector<double>.Count)
-                    {
-                        Vector<double> v1 = new Vector<double>(srcvec.cellOutput, j);
-                        Vector<double> v2 = new Vector<double>(vector_i, j);
-                        cellOutput += Vector.Dot<double>(v1, v2);
+                    j += Vector<double>.Count;
+                }
 
-                        j += Vector<double>.Count;
-                    }
+                while (j < SrcSize)
+                {
+                    cellOutput += srcvec[j] * vector_i[j];
+                    j++;
+                }
 
-                    while (j < SrcSize)
-                    {
-                        cellOutput += srcvec.cellOutput[j] * vector_i[j];
-                        j++;
-                    }
+                dest[i] = cellOutput;
+            });
+        }
 
-                    dest.cellOutput[i] = cellOutput;
-                });
 
-            }
-            else
+        public void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize)
+        {
+            Parallel.For(0, DestSize, parallelOption, i =>
             {
-                Parallel.For(0, DestSize, parallelOption, i =>
+                double er = 0;
+                for (int j = 0; j < SrcSize; j++)
                 {
-                    double er = 0;
-                    for (int j = 0; j < SrcSize; j++)
-                    {
-                        er += srcvec.er[j] * srcmatrix[j][i];
-                    }
+                    er += srcvec[j] * srcmatrix[j][i];
+                }
 
-                    dest.er[i] = NormalizeGradient(er);
-                });
-            }
+                dest[i] = NormalizeGradient(er);
+            });
         }
 
         public int[] GetBestResult(Matrix<double> ys)

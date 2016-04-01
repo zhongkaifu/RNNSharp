@@ -862,7 +862,7 @@ namespace RNNSharp
 
         public override void computeOutput(double[] doutput)
         {
-            matrixXvectorADD(OutputLayer, neuHidden, Hidden2OutputWeight, L2, L1, 0);
+            matrixXvectorADD(OutputLayer.cellOutput, neuHidden.cellOutput, Hidden2OutputWeight, L2, L1);
             if (doutput != null)
             {
                 OutputLayer.cellOutput.CopyTo(doutput, 0);

@@ -299,7 +299,7 @@ namespace RNNSharp
                 seqOutput[curState] = new SimpleLayer(L2);
                 SimpleLayer outputCells = seqOutput[curState];
 
-                matrixXvectorADD(outputCells, mergedHiddenLayer[curState], Hidden2OutputWeight, L2, L1, 0);
+                matrixXvectorADD(outputCells.cellOutput, mergedHiddenLayer[curState].cellOutput, Hidden2OutputWeight, L2, L1);
 
                 double[] tmp_vector = tmp_rawOutputLayer[curState];
                 outputCells.cellOutput.CopyTo(tmp_vector, 0);
