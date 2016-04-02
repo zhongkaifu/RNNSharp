@@ -21,8 +21,6 @@ namespace RNNSharp
         protected Matrix<double> HiddenBpttWeightsDelta;
         protected Matrix<double> Feature2HiddenWeightsDelta;
 
-        //Last hidden layer status
-        protected SimpleLayer neuLastHidden;
         //Current hidden layer status
         protected SimpleLayer neuHidden;
 
@@ -36,7 +34,7 @@ namespace RNNSharp
         protected Matrix<double> Input2HiddenWeightsLearningRate { get; set; }
         protected Matrix<double> Feature2HiddenWeightsLearningRate { get; set; }
 
-        public SimpleRNN()
+        public SimpleRNN(SimpleLayer hiddenLayer)
         {
             ModelType = MODELTYPE.SIMPLE;
             GradientCutoff = 15.0;
@@ -49,11 +47,8 @@ namespace RNNSharp
             bptt_fea = null;
 
             DenseFeatureSize = 0;
-
-            neuLastHidden = null;
-            neuFeatures = null;
-            neuHidden = null;
-            OutputLayer = null;
+            neuHidden = hiddenLayer;
+            HiddenLayer = hiddenLayer;
         }
 
         public void setBPTT(int newval) { bptt = newval; }
@@ -146,11 +141,10 @@ namespace RNNSharp
         public override void computeHiddenLayer(State state, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
-            neuLastHidden = neuHidden;
+            neuHidden.cellOutput.CopyTo(neuHidden.previousCellOutput, 0);
 
             //hidden(t-1) -> hidden(t)
-            neuHidden = new SimpleLayer(L1);
-            matrixXvectorADD(neuHidden.cellOutput, neuLastHidden.cellOutput, HiddenBpttWeights, L1, L1);
+            matrixXvectorADD(neuHidden.cellOutput, neuHidden.previousCellOutput, HiddenBpttWeights, L1, L1);
 
             //Apply feature values on hidden layer
             var sparse = state.SparseData;
@@ -188,56 +182,7 @@ namespace RNNSharp
             computeHiddenActivity(isTrain);
         }
 
-        public override void computeOutput(double[] doutput)
-        {
-            //Calculate output layer
-            matrixXvectorADD(OutputLayer.cellOutput, neuHidden.cellOutput, Hidden2OutputWeight, L2, L1);
-            if (doutput != null)
-            {
-                for (int i = 0; i < L2; i++)
-                {
-                    doutput[i] = OutputLayer.cellOutput[i];
-                }
-            }
-
-            //activation 2   --softmax on words
-            SoftmaxLayer(OutputLayer);
-        }
-
-        public override void ComputeHiddenLayerErr()
-        {
-            //error output->hidden for words from specific class    	
-            matrixXvectorADDErr(neuHidden.er, OutputLayer.er, Hidden2OutputWeight, L1, L2);
-
-            if (Dropout > 0)
-            {
-                //Apply drop out on error in hidden layer
-                for (int i = 0; i < L1; i++)
-                {
-                    if (neuHidden.mask[i] == true)
-                    {
-                        neuHidden.er[i] = 0;
-                    }
-                }
-            }
-        }
-
-        public override void LearnOutputWeight()
-        {
-            //Update hidden-output weights
-            Parallel.For(0, L2, parallelOption, c =>
-            {
-                double er = OutputLayer.er[c];
-                double[] vector_c = Hidden2OutputWeight[c];
-                for (int a = 0; a < L1; a++)
-                {
-                    double delta = NormalizeGradient(er * neuHidden.cellOutput[a]);
-                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, c, a, delta);
-
-                    vector_c[a] += newLearningRate * delta;
-                }
-            });
-        }
+       
 
         private void learnBptt(State state)
         {
@@ -295,7 +240,7 @@ namespace RNNSharp
                     i = 0;
                     while (i < L1 - Vector<double>.Count)
                     {
-                        Vector<double> v1 = new Vector<double>(neuLastHidden.cellOutput, i);
+                        Vector<double> v1 = new Vector<double>(neuHidden.previousCellOutput, i);
                         Vector<double> v2 = new Vector<double>(vector_a, i);
                         v2 += vecErr * v1;
                         v2.CopyTo(vector_a, i);
@@ -305,26 +250,27 @@ namespace RNNSharp
 					
                     while(i < L1)
                     {
-                        vector_a[i] += er * neuLastHidden.cellOutput[i];
+                        vector_a[i] += er * neuHidden.previousCellOutput[i];
                         i++;
                     }
 
                 });
 
                 //propagates errors hidden->input to the recurrent part
-                matrixXvectorADDErr(neuLastHidden.er, neuHidden.er, HiddenBpttWeights, L1, L1);
+                double[] previousHiddenErr = new double[L1];
+                matrixXvectorADDErr(previousHiddenErr, neuHidden.er, HiddenBpttWeights, L1, L1);
 
                 for (int a = 0; a < L1; a++)
                 {
                     //propagate error from time T-n to T-n-1
-                    neuHidden.er[a] = neuLastHidden.er[a] + last_bptt_hidden.er[a];
+                    neuHidden.er[a] = previousHiddenErr[a] + last_bptt_hidden.er[a];
                 }
                 if (step < bptt + bptt_block - 3)
                 {
                     for (int a = 0; a < L1; a++)
                     {
                         neuHidden.cellOutput[a] = last_bptt_hidden.cellOutput[a];
-                        neuLastHidden.cellOutput[a] = last_last_bptt_hidden.cellOutput[a];
+                        neuHidden.previousCellOutput[a] = last_last_bptt_hidden.cellOutput[a];
                     }
                 }
             }
@@ -641,9 +587,7 @@ namespace RNNSharp
 
         private void CreateCells()
         {
-            neuFeatures = null;
             OutputLayer = new SimpleLayer(L2);
-            neuHidden = new SimpleLayer(L1);
         }
 
         // save model as binary format

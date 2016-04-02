@@ -61,7 +61,7 @@ namespace RNNSharp
 
         public MODELTYPE ModelType { get; set; }
         public Matrix<double> CRFTagTransWeights { get; set; }
-        public SimpleLayer OutputLayer { get; set; }
+
         public Matrix<double> Hidden2OutputWeight;
         public Matrix<double> Hidden2OutputWeightLearningRate;
       
@@ -78,6 +78,9 @@ namespace RNNSharp
         protected Vector<double> vecMaxGrad;
         protected Vector<double> vecMinGrad;
         protected Vector<double> vecNormalLearningRate;
+
+        public SimpleLayer HiddenLayer { get; set; }
+        public SimpleLayer OutputLayer { get; set; }
 
         public virtual void setTagBigramTransition(List<List<float>> m)
         {
@@ -248,9 +251,6 @@ namespace RNNSharp
 
         public abstract void netReset(bool updateNet = false);
         public abstract void computeHiddenLayer(State state, bool isTrain = true);
-
-        public abstract void computeOutput(double[] doutput);
-
 
         public virtual Matrix<double> PredictSentence(Sequence pSequence, RunningMode runningMode)
         {
@@ -569,9 +569,53 @@ namespace RNNSharp
 
         public abstract void LearnNet(State state, int numStates, int curState);
 
-        public abstract void ComputeHiddenLayerErr();
+        public void computeOutput(double[] doutput)
+        {
+            //Calculate output layer
+            matrixXvectorADD(OutputLayer.cellOutput, HiddenLayer.cellOutput, Hidden2OutputWeight, L2, L1);
+            if (doutput != null)
+            {
+                OutputLayer.cellOutput.CopyTo(doutput, 0);
+            }
 
-        public abstract void LearnOutputWeight();
+            //activation 2   --softmax on words
+            SoftmaxLayer(OutputLayer);
+        }
+
+        public void ComputeHiddenLayerErr()
+        {
+            //error output->hidden for words from specific class    	
+            matrixXvectorADDErr(HiddenLayer.er, OutputLayer.er, Hidden2OutputWeight, L1, L2);
+
+            if (Dropout > 0)
+            {
+                //Apply drop out on error in hidden layer
+                for (int i = 0; i < L1; i++)
+                {
+                    if (HiddenLayer.mask[i] == true)
+                    {
+                        HiddenLayer.er[i] = 0;
+                    }
+                }
+            }
+        }
+
+        public void LearnOutputWeight()
+        {
+            //Update hidden-output weights
+            Parallel.For(0, L2, parallelOption, c =>
+            {
+                double er = OutputLayer.er[c];
+                double[] vector_c = Hidden2OutputWeight[c];
+                for (int a = 0; a < L1; a++)
+                {
+                    double delta = NormalizeGradient(er * HiddenLayer.cellOutput[a]);
+                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, c, a, delta);
+
+                    vector_c[a] += newLearningRate * delta;
+                }
+            });
+        }
 
         public virtual double TrainNet(DataSet trainingSet, int iter)
         {
@@ -648,13 +692,20 @@ namespace RNNSharp
 
         public abstract SimpleLayer GetHiddenLayer();
 
-        public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir)
+        public static void CheckModelFileType(string filename, out MODELTYPE modelType, out MODELDIRECTION modelDir, out int L1)
         {
             using (StreamReader sr = new StreamReader(filename))
             {
                 BinaryReader br = new BinaryReader(sr.BaseStream);
                 modelType = (MODELTYPE)br.ReadInt32();
                 modelDir = (MODELDIRECTION)br.ReadInt32();
+
+                int iflag = br.ReadInt32();
+
+                //Load basic parameters
+                int L0 = br.ReadInt32();
+                L1 = br.ReadInt32();
+                int L2 = br.ReadInt32();
             }
 
             Logger.WriteLine("Get model type {0} and direction {1}", modelType, modelDir);

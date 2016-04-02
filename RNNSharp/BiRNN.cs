@@ -511,16 +511,6 @@ namespace RNNSharp
             });
         }
 
-        public override void ComputeHiddenLayerErr()
-        {
-            throw new NotImplementedException("ComputeHiddenLayerErr is not implemented in BiRNN");
-        }
-
-        public override void LearnOutputWeight()
-        {
-            throw new NotImplementedException("LearnOutputWeight is not implemented in BiRNN");
-        }
-
         public override void LearnNet(State state, int numStates, int curState)
         {
             throw new NotImplementedException("learnNet is not implemented in BiRNN");
@@ -529,11 +519,6 @@ namespace RNNSharp
         public override void computeHiddenLayer(State state, bool isTrain = true)
         {
             throw new NotImplementedException("computeHiddenLayer is not implemented in BiRNN");
-        }
-
-        public override void computeOutput(double[] doutput)
-        {
-            throw new NotImplementedException("computeOutput is not implemented in BiRNN");
         }
 
         public override void netReset(bool updateNet = false)

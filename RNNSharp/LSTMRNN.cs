@@ -17,6 +17,10 @@ namespace RNNSharp
         public LSTMLayer(int m) : base(m)
         {
             cell = new LSTMCell[m];
+            for (int i = 0; i < m; i++)
+            {
+                cell[i] = new LSTMCell();
+            }
         }
     }
 
@@ -58,14 +62,11 @@ namespace RNNSharp
         //output gate
         public double netOut;
         public double yOut;
-
-        public double previousCellOutput;
     }
 
     public class LSTMRNN : RNN
     {
         public LSTMLayer neuHidden;
-
 
         //X - wInputInputGate
         //Y - wInputForgetGate
@@ -91,8 +92,10 @@ namespace RNNSharp
         private Vector3 vecMaxGrad3;
         private Vector3 vecMinGrad3;
 
-        public LSTMRNN()
+        public LSTMRNN(SimpleLayer hiddenLayer)
         {
+            neuHidden = hiddenLayer as LSTMLayer;
+            HiddenLayer = hiddenLayer;
             ModelType = MODELTYPE.LSTM;
         }
 
@@ -553,9 +556,7 @@ namespace RNNSharp
 
         private void CreateCell(BinaryReader br)
         {
-            neuFeatures = null;
             OutputLayer = new SimpleLayer(L2);
-            neuHidden = new LSTMLayer(L1);
 
             if (br != null)
             {
@@ -588,39 +589,6 @@ namespace RNNSharp
                     neuHidden.cell[i].wCellOut = RandInitWeight();
                 }
             }
-        }
-
-        public override void ComputeHiddenLayerErr()
-        {
-            Parallel.For(0, L1, parallelOption, i =>
-            {
-                //find the error by find the product of the output errors and their weight connection.
-                neuHidden.er[i] = 0.0;
-
-                if (neuHidden.mask[i] == false)
-                {
-                    for (int k = 0; k < L2; k++)
-                    {
-                        neuHidden.er[i] += OutputLayer.er[k] * Hidden2OutputWeight[k][i];
-                    }
-                }
-            });
-        }
-
-        public override void LearnOutputWeight()
-        {
-            //update weights for hidden to output layer
-            Parallel.For(0, L1, parallelOption, i =>
-            {
-                double cellOutput = neuHidden.cellOutput[i];
-                for (int k = 0; k < L2; k++)
-                {
-                    double delta = NormalizeGradient(cellOutput * OutputLayer.er[k]);
-                    double newLearningRate = UpdateLearningRate(Hidden2OutputWeightLearningRate, k, i, delta);
-
-                    Hidden2OutputWeight[k][i] += newLearningRate * delta;
-                }
-            });
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -748,15 +716,16 @@ namespace RNNSharp
 
 
                 //Update cells weights
+                double c_previousCellOutput = neuHidden.previousCellOutput[i];
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellOutput;
+                c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c_previousCellOutput;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellOutput;
+                c.dSWCellForget = c.dSWCellForget * c.yForget + ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c_previousCellOutput;
 
-                c.dSWCellState = c.dSWCellState * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.previousCellOutput;
+                c.dSWCellState = c.dSWCellState * c.yForget + Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c_previousCellOutput;
 
-                Vector4 vecCellDelta4 = new Vector4((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.dSWCellState, (float)c.previousCellOutput);
+                Vector4 vecCellDelta4 = new Vector4((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.dSWCellState, (float)c_previousCellOutput);
                 vecCellDelta4 = vecErr * vecCellDelta4;
 
                 //Normalize err by gradient cut-off
@@ -792,7 +761,7 @@ namespace RNNSharp
 
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
-                cell_j.previousCellOutput = neuHidden.cellOutput[j];
+                neuHidden.previousCellOutput[j] = neuHidden.cellOutput[j];
 
                 Vector4 vecCell_j = Vector4.Zero;
                 //Apply sparse weights
@@ -821,16 +790,18 @@ namespace RNNSharp
                 //reset each netOut to zero
                 cell_j.netOut = vecCell_j.W;
 
+                double cell_j_previousCellOutput = neuHidden.previousCellOutput[j];
+
                 //include internal connection multiplied by the previous cell state
-                cell_j.netIn += cell_j.previousCellState * cell_j.wPeepholeIn + cell_j.previousCellOutput * cell_j.wCellIn;
+                cell_j.netIn += cell_j.previousCellState * cell_j.wPeepholeIn + cell_j_previousCellOutput * cell_j.wCellIn;
                 //squash input
                 cell_j.yIn = Sigmoid(cell_j.netIn);
 
                 //include internal connection multiplied by the previous cell state
-                cell_j.netForget += cell_j.previousCellState * cell_j.wPeepholeForget + cell_j.previousCellOutput * cell_j.wCellForget;
+                cell_j.netForget += cell_j.previousCellState * cell_j.wPeepholeForget + cell_j_previousCellOutput * cell_j.wCellForget;
                 cell_j.yForget = Sigmoid(cell_j.netForget);
 
-                cell_j.netCellState += cell_j.previousCellOutput * cell_j.wCellState;
+                cell_j.netCellState += cell_j_previousCellOutput * cell_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
 
                 if (neuHidden.mask[j] == true)
@@ -849,7 +820,7 @@ namespace RNNSharp
                 }
 
                 ////include the internal connection multiplied by the CURRENT cell state
-                cell_j.netOut += cell_j.cellState * cell_j.wPeepholeOut + cell_j.previousCellOutput * cell_j.wCellOut;
+                cell_j.netOut += cell_j.cellState * cell_j.wPeepholeOut + cell_j_previousCellOutput * cell_j.wCellOut;
 
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);
@@ -858,19 +829,6 @@ namespace RNNSharp
 
                 neuHidden.cell[j] = cell_j;
             });
-        }
-
-        public override void computeOutput(double[] doutput)
-        {
-            matrixXvectorADD(OutputLayer.cellOutput, neuHidden.cellOutput, Hidden2OutputWeight, L2, L1);
-            if (doutput != null)
-            {
-                OutputLayer.cellOutput.CopyTo(doutput, 0);
-            }
-
-            //activation 2   --softmax on words
-            SoftmaxLayer(OutputLayer);
-
         }
 
         public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history

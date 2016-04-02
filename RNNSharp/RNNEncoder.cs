@@ -24,7 +24,7 @@ namespace RNNSharp
             {
                 if (m_modelSetting.ModelType == 0)
                 {
-                    SimpleRNN sRNN = new SimpleRNN();
+                    SimpleRNN sRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
 
                     sRNN.setBPTT(m_modelSetting.Bptt + 1);
                     sRNN.setBPTTBlock(10);
@@ -33,15 +33,15 @@ namespace RNNSharp
                 }
                 else
                 {
-                    rnn = new LSTMRNN();
+                    rnn = new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden));
                 }
             }
             else
             {
                 if (m_modelSetting.ModelType == 0)
                 {
-                    SimpleRNN sForwardRNN = new SimpleRNN();
-                    SimpleRNN sBackwardRNN = new SimpleRNN();
+                    SimpleRNN sForwardRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
+                    SimpleRNN sBackwardRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
 
                     sForwardRNN.setBPTT(m_modelSetting.Bptt + 1);
                     sForwardRNN.setBPTTBlock(10);
@@ -53,7 +53,7 @@ namespace RNNSharp
                 }
                 else
                 {
-                    rnn = new BiRNN(new LSTMRNN(), new LSTMRNN());
+                    rnn = new BiRNN(new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden)), new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden)));
                 }
             }
 

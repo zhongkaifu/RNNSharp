@@ -15,19 +15,20 @@ namespace RNNSharp
         {
             MODELTYPE modelType = MODELTYPE.SIMPLE;
             MODELDIRECTION modelDir = MODELDIRECTION.FORWARD;
+            int HiddenLayerSize;
 
-            RNN.CheckModelFileType(strModelFileName, out modelType, out modelDir);
+            RNN.CheckModelFileType(strModelFileName, out modelType, out modelDir, out HiddenLayerSize);
 
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
                 Logger.WriteLine("Model Structure: Bi-directional RNN");
                 if (modelType == MODELTYPE.SIMPLE)
                 {
-                    m_Rnn = new BiRNN(new SimpleRNN(), new SimpleRNN());
+                    m_Rnn = new BiRNN(new SimpleRNN(new SimpleLayer(HiddenLayerSize)), new SimpleRNN(new SimpleLayer(HiddenLayerSize)));
                 }
                 else
                 {
-                    m_Rnn = new BiRNN(new LSTMRNN(), new LSTMRNN());
+                    m_Rnn = new BiRNN(new LSTMRNN(new LSTMLayer(HiddenLayerSize)), new LSTMRNN(new LSTMLayer(HiddenLayerSize)));
                 }
             }
             else
@@ -35,12 +36,12 @@ namespace RNNSharp
                 if (modelType == MODELTYPE.SIMPLE)
                 {
                     Logger.WriteLine("Model Structure: Simple RNN");
-                    m_Rnn = new SimpleRNN();
+                    m_Rnn = new SimpleRNN(new SimpleLayer(HiddenLayerSize));
                 }
                 else
                 {
                     Logger.WriteLine("Model Structure: LSTM-RNN");
-                    m_Rnn = new LSTMRNN();
+                    m_Rnn = new LSTMRNN(new LSTMLayer(HiddenLayerSize));
                 }
             }
 
