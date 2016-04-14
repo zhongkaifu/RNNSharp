@@ -148,7 +148,6 @@ namespace RNNSharp
             daSearch.Load(strFileName);
         }
 
-
         public void BuildIndexedFeatureIntoFile(string strFileName, List<string> features)
         {
             //Assign id for each feature
@@ -178,10 +177,7 @@ namespace RNNSharp
                 swTemplate.WriteLine(strTemplate);
             }
 
-
             swTemplate.Close();
-
         }
-
     }
 }
