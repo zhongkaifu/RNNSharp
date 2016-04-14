@@ -1,5 +1,5 @@
 # RNNSharp
-RNNSharp is a toolkit of recurrent neural network which is widely used for many different kinds of tasks, such as sequence labeling. It's written by C# language and based on .NET framework 4.6 or above version.
+RNNSharp is a toolkit of deep recurrent neural network which is widely used for many different kinds of tasks, such as sequence labeling. It's written by C# language and based on .NET framework 4.6 or above version.
 
 This page will introduces you about what is RNNSharp, how it works and how to use it. To get the demo package, please access release page and download the package.
 
@@ -14,8 +14,11 @@ For RNN-CRF, based on native RNN outputs and their transition, we compute CRF ou
 
 For bi-directional RNN, the output result combines the result of both forward RNN and backward RNN. It usually has better performance than single-directional RNN.
 
-Here is overview picture of RNNSharp:
+Here is an example of deep bi-directional RNN-CRF network. It contains 3 hidden layers, 1 native RNN output layer and 1 CRF output layer.  
 ![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpOverview.jpg)
+
+Here is the inner structure of one bi-directional hidden layer.  
+![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpLayer.jpg)
 
 ## Supported Feature Types
 RNNSharp supports four types of feature set. They are template features, context template features, run time feature and word embedding features. These features are controlled by configuration file, the following paragraph will introduce what these features are and how to use them in configuration file.
