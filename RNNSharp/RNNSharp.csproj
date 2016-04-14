@@ -52,20 +52,22 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BiRNN.cs" />
-    <Compile Include="LSTMRNN.cs" />
-    <Compile Include="ModelSetting.cs" />
     <Compile Include="RNN.cs" />
-    <Compile Include="SimpleRNN.cs" />
+    <Compile Include="LSTMLayer.cs" />
+    <Compile Include="ModelSetting.cs" />
+    <Compile Include="FowardRNN.cs" />
+    <Compile Include="RNNHelper.cs" />
+    <Compile Include="BPTTLayer.cs" />
     <Compile Include="DataSet.cs" />
     <Compile Include="RNNDecoder.cs" />
     <Compile Include="Featurizer.cs" />
     <Compile Include="MathUtil.cs" />
     <Compile Include="Matrix.cs" />
-    <Compile Include="neuron.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RNNEncoder.cs" />
     <Compile Include="Sentence.cs" />
     <Compile Include="Sequence.cs" />
+    <Compile Include="SimpleLayer.cs" />
     <Compile Include="TagSet.cs" />
     <Compile Include="SparseVector.cs" />
     <Compile Include="State.cs" />

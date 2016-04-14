@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using System.Collections.Generic;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -22,39 +23,101 @@ namespace RNNSharp
 
             if (m_modelSetting.ModelDirection == 0)
             {
-                if (m_modelSetting.ModelType == 0)
+                List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
+                for (int i = 0; i < m_modelSetting.NumHidden.Count; i++)
                 {
-                    SimpleRNN sRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
+                    SimpleLayer layer = null;
+                    if (m_modelSetting.ModelType == 0)
+                    {
+                        BPTTLayer bpttLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
+                        bpttLayer.bptt = m_modelSetting.Bptt + 1;
+                        bpttLayer.bptt_block = 10;
+                        bpttLayer.Dropout = m_modelSetting.Dropout;
+                        layer = bpttLayer;
+                    }
+                    else
+                    {
+                        LSTMLayer lstmLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
+                        lstmLayer.Dropout = m_modelSetting.Dropout;
+                        layer = lstmLayer;
+                    }
 
-                    sRNN.setBPTT(m_modelSetting.Bptt + 1);
-                    sRNN.setBPTTBlock(10);
+                    if (i == 0)
+                    {
+                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
+                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
 
-                    rnn = sRNN;
+                        layer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+                    }
+                    else
+                    {
+                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
+                            i, m_modelSetting.NumHidden[i], 0, hiddenLayers[i - 1].LayerSize);
+
+                        layer.InitializeWeights(0, hiddenLayers[i - 1].LayerSize);
+                    }
+                    hiddenLayers.Add(layer);
                 }
-                else
-                {
-                    rnn = new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden));
-                }
+
+                rnn = new ForwardRNN(hiddenLayers, TrainingSet.TagSize);
             }
             else
             {
-                if (m_modelSetting.ModelType == 0)
+                List<SimpleLayer> forwardHiddenLayers = new List<SimpleLayer>();
+                List<SimpleLayer> backwardHiddenLayers = new List<SimpleLayer>();
+                for (int i = 0; i < m_modelSetting.NumHidden.Count; i++)
                 {
-                    SimpleRNN sForwardRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
-                    SimpleRNN sBackwardRNN = new SimpleRNN(new SimpleLayer(m_modelSetting.NumHidden));
+                    SimpleLayer forwardLayer = null;
+                    SimpleLayer backwardLayer = null;
+                    if (m_modelSetting.ModelType == 0)
+                    {
+                        //For BPTT layer
+                        BPTTLayer forwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
+                        forwardBPTTLayer.bptt = m_modelSetting.Bptt + 1;
+                        forwardBPTTLayer.bptt_block = 10;
+                        forwardBPTTLayer.Dropout = m_modelSetting.Dropout;
+                        forwardLayer = forwardBPTTLayer;
 
-                    sForwardRNN.setBPTT(m_modelSetting.Bptt + 1);
-                    sForwardRNN.setBPTTBlock(10);
+                        BPTTLayer backwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
+                        backwardBPTTLayer.bptt = m_modelSetting.Bptt + 1;
+                        backwardBPTTLayer.bptt_block = 10;
+                        backwardBPTTLayer.Dropout = m_modelSetting.Dropout;
+                        backwardLayer = backwardBPTTLayer;
+                    }
+                    else
+                    {
+                        //For LSTM layer
+                        LSTMLayer forwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
+                        forwardLSTMLayer.Dropout = m_modelSetting.Dropout;
+                        forwardLayer = forwardLSTMLayer;
 
-                    sBackwardRNN.setBPTT(m_modelSetting.Bptt + 1);
-                    sBackwardRNN.setBPTTBlock(10);
+                        LSTMLayer backwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
+                        backwardLSTMLayer.Dropout = m_modelSetting.Dropout;
+                        backwardLayer = backwardLSTMLayer;
+                    }
 
-                    rnn = new BiRNN(sForwardRNN, sBackwardRNN);
+                    if (i == 0)
+                    {
+                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
+                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+
+                        forwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+                        backwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+                    }
+                    else
+                    {
+                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
+                            i, m_modelSetting.NumHidden[i], 0, forwardHiddenLayers[i - 1].LayerSize);
+
+                        forwardLayer.InitializeWeights(0, forwardHiddenLayers[i - 1].LayerSize);
+                        backwardLayer.InitializeWeights(0, backwardHiddenLayers[i - 1].LayerSize);
+                    }
+
+                    forwardHiddenLayers.Add(forwardLayer);
+                    backwardHiddenLayers.Add(backwardLayer);
                 }
-                else
-                {
-                    rnn = new BiRNN(new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden)), new LSTMRNN(new LSTMLayer(m_modelSetting.NumHidden)));
-                }
+
+                rnn = new BiRNN(forwardHiddenLayers, backwardHiddenLayers, TrainingSet.TagSize);
             }
 
             rnn.ModelDirection = (MODELDIRECTION)m_modelSetting.ModelDirection;
@@ -63,16 +126,8 @@ namespace RNNSharp
             rnn.SaveStep = m_modelSetting.SaveStep;
             rnn.MaxIter = m_modelSetting.MaxIteration;
             rnn.IsCRFTraining = m_modelSetting.IsCRFTraining;
-            rnn.LearningRate = m_modelSetting.LearningRate;
-            rnn.GradientCutoff = m_modelSetting.GradientCutoff;
-            rnn.Dropout = m_modelSetting.Dropout;
-            rnn.L1 = m_modelSetting.NumHidden;
-
-            rnn.DenseFeatureSize = TrainingSet.DenseFeatureSize();
-            rnn.L0 = TrainingSet.GetSparseDimension();
-            rnn.L2 = TrainingSet.TagSize;
-
-            rnn.InitMem();
+            RNNHelper.LearningRate = m_modelSetting.LearningRate;
+            RNNHelper.GradientCutoff = m_modelSetting.GradientCutoff;
             
             //Create tag-bigram transition probability matrix only for sequence RNN mode
             if (m_modelSetting.IsCRFTraining)
@@ -84,7 +139,7 @@ namespace RNNSharp
 
             Logger.WriteLine("Iterative training begins ...");
             double lastPPL = double.MaxValue;
-            double lastAlpha = rnn.LearningRate;
+            double lastAlpha = RNNHelper.LearningRate;
             int iter = 0;
             while (true)
             {
@@ -99,14 +154,14 @@ namespace RNNSharp
 
                 //Start to train model
                 double ppl = rnn.TrainNet(TrainingSet, iter);
-                if (ppl >= lastPPL && lastAlpha != rnn.LearningRate)
+                if (ppl >= lastPPL && lastAlpha != RNNHelper.LearningRate)
                 {
                     //Although we reduce alpha value, we still cannot get better result.
                     Logger.WriteLine("Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl, lastPPL);
-                    Logger.WriteLine("Current alpha: {0}, the previous alpha: {1}", rnn.LearningRate, lastAlpha);
+                    Logger.WriteLine("Current alpha: {0}, the previous alpha: {1}", RNNHelper.LearningRate, lastAlpha);
                     break;
                 }
-                lastAlpha = rnn.LearningRate;
+                lastAlpha = RNNHelper.LearningRate;
 
                 //Validate the model by validated corpus
                 if (ValidationSet != null)
@@ -130,7 +185,7 @@ namespace RNNSharp
                 if (ppl >= lastPPL)
                 {
                     //We cannot get a better result on training corpus, so reduce learning rate
-                    rnn.LearningRate = rnn.LearningRate / 2.0f;
+                    RNNHelper.LearningRate = RNNHelper.LearningRate / 2.0f;
                 }
 
                 lastPPL = ppl;

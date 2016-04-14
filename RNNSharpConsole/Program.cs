@@ -20,7 +20,7 @@ namespace RNNSharpConsole
         static string strTrainFile = "";
         static string strValidFile = "";
         static int maxIter = 20;
-        static int layersize = 200;
+        static List<int> layersize = null;
         static int iCRF = 0;
         static long savestep = 0;
         static float alpha = 0.1f;
@@ -34,7 +34,7 @@ namespace RNNSharpConsole
 
         static void UsageTitle()
         {
-            Console.WriteLine("Recurrent Neural Network Toolkit v1.2 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.0 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         static void Usage()
@@ -48,7 +48,7 @@ namespace RNNSharpConsole
         {
             UsageTitle();
             Console.WriteLine("RNNSharpConsole.exe -mode train <parameters>");
-            Console.WriteLine("Parameters for RNN training");
+            Console.WriteLine("Parameters for Deep-RNN training");
 
             Console.WriteLine(" -trainfile <string>");
             Console.WriteLine("\tTraining corpus file");
@@ -99,7 +99,9 @@ namespace RNNSharpConsole
             Console.WriteLine("\tGradient cut-off. Default is 15.0f");
 
             Console.WriteLine();
-            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 0 -vq 0 -grad 15.0");
+            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0");
+            Console.WriteLine();
+            Console.WriteLine("Above example will train a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one output layer. The first hidden layer size is 200 and the second hidden layer size is 100");
 
         }
 
@@ -141,7 +143,20 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-tagfile", args)) >= 0) strTagFile = args[i + 1];
             if ((i = ArgPos("-ftrfile", args)) >= 0) strFeatureConfigFile = args[i + 1];
 
-            if ((i = ArgPos("-layersize", args)) >= 0) layersize = int.Parse(args[i + 1]);
+            layersize = new List<int>();
+            if ((i = ArgPos("-layersize", args)) >= 0)
+            {
+                string[] layers = args[i + 1].Split(',');
+                foreach (string layer in layers)
+                {
+                    layersize.Add(int.Parse(layer));
+                }
+            }
+            else
+            {
+                layersize.Add(200);
+            }
+
             if ((i = ArgPos("-modeltype", args)) >= 0) modelType = int.Parse(args[i + 1]);
             if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1]);
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1]);

@@ -13,7 +13,7 @@ namespace RNNSharp
             return 0;
         }
 
-        public virtual float this[int i]
+        public virtual double this[int i]
         {
             get
             {
@@ -23,6 +23,11 @@ namespace RNNSharp
             {
                 value = 0;
             }
+        }
+
+        public virtual double[] CopyTo()
+        {
+            return null;
         }
     }
 
@@ -58,7 +63,7 @@ namespace RNNSharp
         }
 
 
-        public override float this[int i]
+        public override double this[int i]
         {
             get
             {
@@ -69,12 +74,26 @@ namespace RNNSharp
                 m_innerData[i / m_nLenPerBlock][i % m_nLenPerBlock] = value;
             }
         }
+
+        public override double[] CopyTo()
+        {
+            double[] val = new double[m_nLen];
+            for (int i = 0; i < m_innerData.Count; i++)
+            {
+                for (int j = 0; j < m_innerData[i].GetDimension(); j++)
+                {
+                    val[i * m_nLenPerBlock + j] = m_innerData[i][j];
+                }
+            }
+
+            return val;
+        }
     }
 
 
     public class SingleVector : VectorBase
     {
-        private float[] m_innerData;
+        private double[] m_innerData;
         int m_nLen;
         public override int GetDimension() { return m_nLen; }
 
@@ -86,21 +105,31 @@ namespace RNNSharp
         public SingleVector(int nLen, float[] val)
         {
             m_nLen = nLen;
-            m_innerData = new float[m_nLen];
+            m_innerData = new double[m_nLen];
             for (int i = 0; i < m_nLen; i++)
             {
                 m_innerData[i] = val[i];
             }
         }
 
+        public SingleVector(int nLen, double[] val)
+        {
+            m_nLen = nLen;
+            m_innerData = new double[m_nLen];
+            for (int i = 0; i < m_nLen; i++)
+            {
+                m_innerData[i] = (float)val[i];
+            }
+        }
+
         public SingleVector(int nLen)
         {
-            m_innerData = new float[nLen];
+            m_innerData = new double[nLen];
             m_nLen = nLen;
         }
 
 
-        public override float this[int i]
+        public override double this[int i]
         {
             get
             {
@@ -110,6 +139,11 @@ namespace RNNSharp
             {
                 m_innerData[i] = value;
             }
+        }
+
+        public override double[] CopyTo()
+        {
+            return m_innerData;
         }
     }
 }

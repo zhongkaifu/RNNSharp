@@ -1,5 +1,6 @@
 ﻿using System;
 using AdvUtils;
+using System.Collections.Generic;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -13,36 +14,18 @@ namespace RNNSharp
 
         public RNNDecoder(string strModelFileName, Featurizer featurizer)
         {
-            MODELTYPE modelType = MODELTYPE.SIMPLE;
             MODELDIRECTION modelDir = MODELDIRECTION.FORWARD;
-            int HiddenLayerSize;
 
-            RNN.CheckModelFileType(strModelFileName, out modelType, out modelDir, out HiddenLayerSize);
-
+            RNNHelper.CheckModelFileType(strModelFileName, out modelDir);
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
                 Logger.WriteLine("Model Structure: Bi-directional RNN");
-                if (modelType == MODELTYPE.SIMPLE)
-                {
-                    m_Rnn = new BiRNN(new SimpleRNN(new SimpleLayer(HiddenLayerSize)), new SimpleRNN(new SimpleLayer(HiddenLayerSize)));
-                }
-                else
-                {
-                    m_Rnn = new BiRNN(new LSTMRNN(new LSTMLayer(HiddenLayerSize)), new LSTMRNN(new LSTMLayer(HiddenLayerSize)));
-                }
+                m_Rnn = new BiRNN();
             }
             else
             {
-                if (modelType == MODELTYPE.SIMPLE)
-                {
-                    Logger.WriteLine("Model Structure: Simple RNN");
-                    m_Rnn = new SimpleRNN(new SimpleLayer(HiddenLayerSize));
-                }
-                else
-                {
-                    Logger.WriteLine("Model Structure: LSTM-RNN");
-                    m_Rnn = new LSTMRNN(new LSTMLayer(HiddenLayerSize));
-                }
+                Logger.WriteLine("Model Structure: Simple RNN");
+                m_Rnn = new ForwardRNN();
             }
 
             m_Rnn.LoadModel(strModelFileName);

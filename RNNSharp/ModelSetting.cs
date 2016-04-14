@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using System.Collections.Generic;
 using System.Numerics;
 
 /// <summary>
@@ -9,7 +10,7 @@ namespace RNNSharp
     public class ModelSetting
     {
         public string ModelFile { get; set; }
-        public int NumHidden { get; set; }
+        public List<int> NumHidden { get; set; }
         public float LearningRate { get; set; }
         public float Dropout { get; set; }
         public int Bptt { get; set; }
@@ -46,7 +47,7 @@ namespace RNNSharp
             Logger.WriteLine("Learning rate: {0}", LearningRate);
             Logger.WriteLine("Dropout: {0}", Dropout);
             Logger.WriteLine("Max Iteration: {0}", MaxIteration);
-            Logger.WriteLine("Hidden layer size： {0}", NumHidden);
+            Logger.WriteLine("Hidden layers: {0}", NumHidden.Count);
             Logger.WriteLine("RNN-CRF: {0}", IsCRFTraining);
             Logger.WriteLine("SIMD: {0}, Size: {1}bits", System.Numerics.Vector.IsHardwareAccelerated, 
                 Vector<double>.Count * sizeof(double) * 8);
@@ -63,7 +64,7 @@ namespace RNNSharp
             Bptt = 4;
             LearningRate = 0.1f;
             GradientCutoff = 15.0f;
-            NumHidden = 200;
+            NumHidden = null;
             IsCRFTraining = true;
         }
     }
