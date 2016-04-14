@@ -4,15 +4,13 @@ RNNSharp is a toolkit of recurrent neural network which is widely used for many 
 This page will introduces you about what is RNNSharp, how it works and how to use it. To get the demo package, please access release page and download the package.
 
 ## Overview
-RNNSharp supports many different types of recurrent neural network (aka RNN) structures.In the aspect of historical memory, it supports BPTT and LSTM structures. And in respect of output layer structure, RNNSharp supports native output layer and recurrent CRFs[1]. In additional, RNNSharp also support forward RNN and bi-directional RNN structures.
+RNNSharp supports many different types of deep recurrent neural network (aka DeepRNN) structures.In the aspect of historical memory, it supports BPTT(BackPropagation Through Time) and LSTM(Long Short-Term Memory) structures. And in respect of output layer structure, RNNSharp supports native output layer and recurrent CRFs[1]. In additional, RNNSharp also support forward RNN and bi-directional RNN structures.
 
-For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. It's not good at preserving long time historical memory, but its decoding is lower than LSTM.
+For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. It's not good at preserving long time historical memory. LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure which helps it to save very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences.
 
-LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure which helps it to save very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences.
+For native RNN output, many widely experiments and applications have proved that it has better results than tranditional algorithms, such as MMEM, for online sequence labeling tasks, such as speech recognition, auto suggestion and so on.
 
-For native RNN output, many widely experiments and applications have proved that it's an excellent algorithm for online sequence labeling tasks, such as speech recognition, auto suggestion and so on. It has better performance than MMEM and other traditionals algorithms.
-
-For recurrent CRFs (recurrent conditional random fields), it's a new type of CRF based on RNN. Compared with the above one, Recurrent-CRF can be used for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF, since the representation of its feature is richer than before.
+For RNN-CRF, based on native RNN outputs and their transition, we compute CRF output for entire sequence. Compred with native RNN, RNN-CRF has better performance for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF.
 
 For bi-directional RNN, the output result combines the result of both forward RNN and backward RNN. It usually has better performance than single-directional RNN.
 
@@ -213,14 +211,16 @@ RNNSharpConsole.exe -mode train <parameters>
 -alpha <float>: learning rate, default is 0.1  
 -dropout <float>: hidden layer node drop out ratio, default is 0  
 -bptt <int>: the step for back-propagation through time, default is 4  
--layersize <int>: hidden layer size for training, default is 200  
+-layersize <int>: the size of each hidden layer, default is 200 for a single layer. If you want to have more than one layer, each layer size is split by character ',' For example: "-layersize = 200,100" means the neural network has two hidden layers, the first hidden layer size is 200, and the second hidden layer size is 100  
 -crf <0/1>: training model by standard RNN(0) or RNN-CRF(1), default is 0  
 -maxiter <int>: maximum iteration for training. 0 is no limition, default is 20  
 -savestep <int>: save temporary model after every <int> sentence, default is 0  
 -dir <int> : RNN directional: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0  
 -vq <int> : Model vector quantization, 0 is disable, 1 is enable. default is 0  
 
-Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -tagfile tags.txt -layersize 200 -modeltype 0 -alpha 0.1 -bptt 4 -crf 0 -maxiter 20 -savestep 200K -dir 0  
+Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -tagfile tags.txt -layersize 200,100 -modeltype 0 -alpha 0.1 -bptt 4 -crf 1 -maxiter 20 -savestep 200K -dir 1  
+  
+Above command line will train a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one output layer. The first hidden layer size is 200 and the second hidden layer size is 100  
 
 ### Decode Model
 
