@@ -300,6 +300,16 @@ Example: TFeatureBin.exe -mode index -template template.txt -inputfile features.
 
 In above example, according templates, the raw text feature set, features.txt, will be indexed as features.bin file in binary format.  
 
+## Performance
+Here is peformance results on Chinese named entity recognizer task. You could get corpus, configuration and parameter files from RNNSharp demo package file in [release section](https://github.com/zhongkaifu/RNNSharp/releases). The result is based on bi-directional BPTT-RNN model. The first hidden layer size is 200, and the second hidden layer size is 100. The result in below is from test corpus.
+
+Parameter               | Token Error  | Sentence Error
+------------------------|--------------|----
+1-hidden layer          | 5.53%        | 15.46%
+1-hidden layer-CRF      | 5.51%        | 13.60%
+2-hidden layers         | 5.47%        | 14.23%
+2-hidden layers-CRF     | 5.40%        | 12.93%
+
 ## Run on Linux/Mac
 
 With Mono-project which is the third party .NET framework on Linux/Mac, RNNSharp is able to run on some non-Windows platforms without re-compile or modify, such as Linux, Mac and others.  
