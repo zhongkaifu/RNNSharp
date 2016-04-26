@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using System.IO;
 using RNNSharp;
 using AdvUtils;
 
-/// <summary>
-/// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
-/// </summary>
 namespace RNNSharpConsole
 {
+    /// <summary>
+    /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
+    /// </summary>
     class Program
     {
         static string strModelFile = "";
@@ -149,7 +150,7 @@ namespace RNNSharpConsole
                 string[] layers = args[i + 1].Split(',');
                 foreach (string layer in layers)
                 {
-                    layersize.Add(int.Parse(layer));
+                    layersize.Add(int.Parse(layer, CultureInfo.InvariantCulture));
                 }
             }
             else
@@ -157,35 +158,35 @@ namespace RNNSharpConsole
                 layersize.Add(200);
             }
 
-            if ((i = ArgPos("-modeltype", args)) >= 0) modelType = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1]);
-            if ((i = ArgPos("-dropout", args)) >= 0) dropout = float.Parse(args[i + 1]);
-            if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1]);
-            if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1]);
+            if ((i = ArgPos("-modeltype", args)) >= 0) modelType = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-dropout", args)) >= 0) dropout = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
             {
                 string str = args[i + 1].ToLower();
                 if (str.EndsWith("k") == true)
                 {
-                    savestep = long.Parse(str.Substring(0, str.Length - 1)) * 1024;
+                    savestep = long.Parse(str.Substring(0, str.Length - 1), CultureInfo.InvariantCulture) * 1024;
                 }
                 else if (str.EndsWith("m") == true)
                 {
-                    savestep = long.Parse(str.Substring(0, str.Length - 1)) * 1024 * 1024;
+                    savestep = long.Parse(str.Substring(0, str.Length - 1), CultureInfo.InvariantCulture) * 1024 * 1024;
                 }
                 else if (str.EndsWith("g") == true)
                 {
-                    savestep = long.Parse(str.Substring(0, str.Length - 1)) * 1024 * 1024 * 1024;
+                    savestep = long.Parse(str.Substring(0, str.Length - 1), CultureInfo.InvariantCulture) * 1024 * 1024 * 1024;
                 }
                 else
                 {
-                    savestep = long.Parse(str);
+                    savestep = long.Parse(str, CultureInfo.InvariantCulture);
                 }
             }
 
