@@ -30,6 +30,7 @@ namespace RNNSharp
         static string WORDEMBEDDING_CONTEXT = "WORDEMBEDDING_CONTEXT";
         static string TFEATURE_FILENAME = "TFEATURE_FILENAME";
         static string WORDEMBEDDING_FILENAME = "WORDEMBEDDING_FILENAME";
+        static string WORDEMBEDDING_RAW_FILENAME = "WORDEMBEDDING_RAW_FILENAME";
         static string RT_FEATURE_CONTEXT = "RTFEATURE_CONTEXT";
         static string WORDEMBEDDING_COLUMN = "WORDEMBEDDING_COLUMN";
         static string TFEATURE_WEIGHT_TYPE = "TFEATURE_WEIGHT_TYPE";
@@ -41,7 +42,6 @@ namespace RNNSharp
             string strLine = null;
 
             m_FeatureConfiguration = new Dictionary<string, List<int>>();
-
             while ((strLine = sr.ReadLine()) != null)
             {
                 strLine = strLine.Trim();
@@ -62,8 +62,22 @@ namespace RNNSharp
                 string strValue = kv[1].Trim().ToLower();
                 if (strKey == WORDEMBEDDING_FILENAME)
                 {
-                    Logger.WriteLine("Loading word embedding feature set...");
+                    if (m_WordEmbedding != null)
+                    {
+                        throw new ArgumentException("Embedding model has already been loaded. Please check if settings is duplicated in configuration file.");
+                    }
+                    Logger.WriteLine("Loading embedding feature set from model {0}", strValue);
                     m_WordEmbedding = new WordEMWrapFeaturizer(strValue);
+                    continue;
+                }
+                else if (strKey == WORDEMBEDDING_RAW_FILENAME)
+                {
+                    if (m_WordEmbedding != null)
+                    {
+                        throw new ArgumentException("Embedding model has already been loaded. Please check if settings is duplicated in configuration file.");
+                    }
+                    Logger.WriteLine("Loading embedding feature set from model {0} in text format", strValue);
+                    m_WordEmbedding = new WordEMWrapFeaturizer(strValue, true);
                     continue;
                 }
                 else if (strKey == TFEATURE_FILENAME)

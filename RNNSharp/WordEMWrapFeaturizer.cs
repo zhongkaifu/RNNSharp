@@ -11,10 +11,10 @@ namespace RNNSharp
         public Dictionary<string, SingleVector> m_WordEmbedding;
         public SingleVector m_UnkEmbedding;
 
-        public WordEMWrapFeaturizer(string filename)
+        public WordEMWrapFeaturizer(string filename, bool textFormat = false)
         {
             Txt2Vec.Model model = new Txt2Vec.Model();
-            model.LoadBinaryModel(filename);
+            model.LoadModel(filename, textFormat);
 
             string[] terms = model.GetAllTerms();
             vectorSize = model.VectorSize;
