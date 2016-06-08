@@ -56,35 +56,6 @@ namespace RNNSharp
             }
         }
 
-        public void Softmax(SimpleLayer outputLayer)
-        {
-            double sum = 0;
-            for (int c = 0; c < outputLayer.LayerSize; c++)
-            {
-                double cellOutput = outputLayer.cellOutput[c];
-                if (cellOutput > 50) cellOutput = 50;
-                if (cellOutput < -50) cellOutput = -50;
-                double val = Math.Exp(cellOutput);
-                sum += val;
-                outputLayer.cellOutput[c] = val;
-            }
-            int i = 0;
-            Vector<double> vecSum = new Vector<double>(sum);
-            while (i < outputLayer.LayerSize - Vector<double>.Count)
-            {
-                Vector<double> v = new Vector<double>(outputLayer.cellOutput, i);
-                v /= vecSum;
-                v.CopyTo(outputLayer.cellOutput, i);
-                i += Vector<double>.Count;
-            }
-
-            while (i < outputLayer.LayerSize)
-            {
-                outputLayer.cellOutput[i] /= sum;
-                i++;
-            }
-        }
-
         public void ForwardBackward(int numStates, Matrix<double> m_RawOutput)
         {
             //forward

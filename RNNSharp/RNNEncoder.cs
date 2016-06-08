@@ -52,14 +52,17 @@ namespace RNNSharp
                     else
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], 0, hiddenLayers[i - 1].LayerSize);
+                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), hiddenLayers[i - 1].LayerSize);
 
-                        layer.InitializeWeights(0, hiddenLayers[i - 1].LayerSize);
+                        layer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[i - 1].LayerSize);
                     }
                     hiddenLayers.Add(layer);
                 }
 
-                rnn = new ForwardRNN(hiddenLayers, TrainingSet.TagSize);
+                SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[hiddenLayers.Count - 1].LayerSize);
+
+                rnn = new ForwardRNN(hiddenLayers, outputLayer);
             }
             else
             {
@@ -107,17 +110,20 @@ namespace RNNSharp
                     else
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], 0, forwardHiddenLayers[i - 1].LayerSize);
+                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), forwardHiddenLayers[i - 1].LayerSize);
 
-                        forwardLayer.InitializeWeights(0, forwardHiddenLayers[i - 1].LayerSize);
-                        backwardLayer.InitializeWeights(0, backwardHiddenLayers[i - 1].LayerSize);
+                        forwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[i - 1].LayerSize);
+                        backwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), backwardHiddenLayers[i - 1].LayerSize);
                     }
 
                     forwardHiddenLayers.Add(forwardLayer);
                     backwardHiddenLayers.Add(backwardLayer);
                 }
 
-                rnn = new BiRNN(forwardHiddenLayers, backwardHiddenLayers, TrainingSet.TagSize);
+                SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+
+                rnn = new BiRNN(forwardHiddenLayers, backwardHiddenLayers, outputLayer);
             }
 
             rnn.ModelDirection = (MODELDIRECTION)m_modelSetting.ModelDirection;

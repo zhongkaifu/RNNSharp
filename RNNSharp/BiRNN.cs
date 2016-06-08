@@ -17,14 +17,13 @@ namespace RNNSharp
         List<SimpleLayer> forwardHiddenLayers = new List<SimpleLayer>();
         List<SimpleLayer> backwardHiddenLayers = new List<SimpleLayer>();
 
-        public BiRNN(List<SimpleLayer> s_forwardRNN, List<SimpleLayer> s_backwardRNN, int outputLayerSize)
+        public BiRNN(List<SimpleLayer> s_forwardRNN, List<SimpleLayer> s_backwardRNN, SimpleLayer outputLayer)
         {
             forwardHiddenLayers = s_forwardRNN;
             backwardHiddenLayers = s_backwardRNN;
 
             //Initialize output layer
-            OutputLayer = new SimpleLayer(outputLayerSize);
-            OutputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+            OutputLayer = outputLayer;
         }
 
         public BiRNN()
@@ -51,7 +50,7 @@ namespace RNNSharp
             RNNHelper.vecNormalLearningRate = new Vector<double>(RNNHelper.LearningRate);
         }
 
-        private SimpleLayer[] ComputeMiddleLayers(SimpleLayer[] lastLayers, SimpleLayer forwardLayer, SimpleLayer backwardLayer)
+        private SimpleLayer[] ComputeMiddleLayers(Sequence pSequence, SimpleLayer[] lastLayers, SimpleLayer forwardLayer, SimpleLayer backwardLayer)
         {
             int numStates = lastLayers.Length;
 
@@ -64,7 +63,8 @@ namespace RNNSharp
                 mForward = new SimpleLayer[lastLayers.Length];
                 for (int curState = 0; curState < lastLayers.Length; curState++)
                 {
-                    forwardLayer.computeLayer(null, lastLayers[curState].cellOutput);
+                    State state = pSequence.States[curState];
+                    forwardLayer.computeLayer(state.SparseData, lastLayers[curState].cellOutput);
                     mForward[curState] = forwardLayer.GetHiddenLayer();
                 }
             },
@@ -75,7 +75,8 @@ namespace RNNSharp
                  mBackward = new SimpleLayer[lastLayers.Length];
                  for (int curState = lastLayers.Length - 1; curState >= 0; curState--)
                  {
-                     backwardLayer.computeLayer(null, lastLayers[curState].cellOutput);
+                     State state = pSequence.States[curState];
+                     backwardLayer.computeLayer(state.SparseData, lastLayers[curState].cellOutput);
                      mBackward[curState] = backwardLayer.GetHiddenLayer();
                  }
              });
@@ -84,8 +85,9 @@ namespace RNNSharp
             SimpleLayer[] mergedLayer = new SimpleLayer[numStates];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
+                State state = pSequence.States[curState];
                 mergedLayer[curState] = new SimpleLayer(forwardLayer.LayerSize);
-                mergedLayer[curState].SparseFeature = null;
+                mergedLayer[curState].SparseFeature = state.SparseData;
                 mergedLayer[curState].DenseFeature = lastLayers[curState].cellOutput;
 
                 SimpleLayer forwardCells = mForward[curState];
@@ -157,7 +159,6 @@ namespace RNNSharp
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 State state = pSequence.States[curState];
-
                 mergedLayer[curState] = new SimpleLayer(forwardLayer.LayerSize);
                 mergedLayer[curState].SparseFeature = state.SparseData;
                 mergedLayer[curState].DenseFeature = state.DenseData.CopyTo();
@@ -187,7 +188,7 @@ namespace RNNSharp
             return mergedLayer;
         }
 
-        private SimpleLayer[] ComputeTopLayer(SimpleLayer[] lastLayer, out Matrix<double> rawOutputLayer, bool isTrain)
+        private SimpleLayer[] ComputeTopLayer(Sequence pSequence, SimpleLayer[] lastLayer, out Matrix<double> rawOutputLayer, bool isTrain)
         {
             int numStates = lastLayer.Length;
 
@@ -196,15 +197,16 @@ namespace RNNSharp
             SimpleLayer[] seqFinalOutput = new SimpleLayer[numStates];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
+                State state = pSequence.States[curState];
                 seqFinalOutput[curState] = new SimpleLayer(OutputLayer.LayerSize);
                 SimpleLayer outputCells = seqFinalOutput[curState];
 
                 outputCells.DenseWeights = OutputLayer.DenseWeights;
                 outputCells.DenseWeightsLearningRate = OutputLayer.DenseWeightsLearningRate;
                 outputCells.DenseFeatureSize = OutputLayer.DenseFeatureSize;
-                outputCells.computeLayer(null, lastLayer[curState].cellOutput, isTrain);
+                outputCells.computeLayer(state.SparseData, lastLayer[curState].cellOutput, isTrain);
                 outputCells.cellOutput.CopyTo(tmp_rawOutputLayer[curState], 0);
-                Softmax(outputCells);
+                outputCells.Softmax();
 
             });
 
@@ -234,14 +236,14 @@ namespace RNNSharp
 
             for (int i = 1; i < forwardHiddenLayers.Count; i++)
             {
-                layer = ComputeMiddleLayers(layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
+                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
                 if (isTrain == true)
                 {
                     layerList.Add(layer);
                 }
             }
 
-            SimpleLayer[] seqFinalOutput = ComputeTopLayer(layer, out rawOutputLayer, isTrain);
+            SimpleLayer[] seqFinalOutput = ComputeTopLayer(pSequence, layer, out rawOutputLayer, isTrain);
             return seqFinalOutput;
         }
 

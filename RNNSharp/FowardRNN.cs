@@ -40,12 +40,10 @@ namespace RNNSharp
     {        
         public List<SimpleLayer> HiddenLayerList { get; set; }
         
-        public ForwardRNN(List<SimpleLayer> hiddenLayerList, int outputLayerSize)
+        public ForwardRNN(List<SimpleLayer> hiddenLayerList, SimpleLayer outputLayer)
         {
             HiddenLayerList = hiddenLayerList;
-
-            OutputLayer = new SimpleLayer(outputLayerSize);
-            OutputLayer.InitializeWeights(0, HiddenLayerList[HiddenLayerList.Count - 1].LayerSize);
+            OutputLayer = outputLayer;
         }
 
         public ForwardRNN()
@@ -86,13 +84,13 @@ namespace RNNSharp
                 for (int i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].computeLayer(null, HiddenLayerList[i - 1].cellOutput, isTraining);
+                    HiddenLayerList[i].computeLayer(state.SparseData, HiddenLayerList[i - 1].cellOutput, isTraining);
                 }
 
-                //Compue output layer
-                OutputLayer.computeLayer(null, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
+                //Compute output layer
+                OutputLayer.computeLayer(state.SparseData, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
                 OutputLayer.cellOutput.CopyTo(m[curState], 0);
-                Softmax(OutputLayer);
+                OutputLayer.Softmax();
 
                 predicted[curState] = GetBestOutputIndex();
 
@@ -189,7 +187,7 @@ namespace RNNSharp
 
                     for (int i = 1; i < numLayers; i++)
                     {
-                        HiddenLayerList[i].computeLayer(null, HiddenLayerList[i - 1].cellOutput);
+                        HiddenLayerList[i].computeLayer(state.SparseData, HiddenLayerList[i - 1].cellOutput);
                     }
 
                     ComputeOutputLayerErr(OutputLayer, state, curState);
