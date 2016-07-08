@@ -51,11 +51,20 @@ namespace RNNSharp
 
         }
 
-        public override Matrix<double> ProcessSequence(Sequence pSequence, RunningMode runningMode)
+        public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> m)
         {
             int numStates = pSequence.States.Length;
             int numLayers = HiddenLayerList.Count;
-            Matrix<double> m = new Matrix<double>(numStates, OutputLayer.LayerSize);
+
+            if (outputRawScore == true)
+            {
+                m = new Matrix<double>(numStates, OutputLayer.LayerSize);
+            }
+            else
+            {
+                m = null;
+            }
+
             int[] predicted = new int[numStates];
             bool isTraining = true;
             if (runningMode == RunningMode.Train)
@@ -88,9 +97,15 @@ namespace RNNSharp
                 }
 
                 //Compute output layer
+                OutputLayer.CurrentLabelId = state.Label;
                 OutputLayer.computeLayer(state.SparseData, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
-                OutputLayer.cellOutput.CopyTo(m[curState], 0);
-                OutputLayer.Softmax();
+
+                if (m != null)
+                {
+                    OutputLayer.cellOutput.CopyTo(m[curState], 0);
+                }
+
+                OutputLayer.Softmax(isTraining);
 
                 predicted[curState] = GetBestOutputIndex();
 
@@ -102,7 +117,7 @@ namespace RNNSharp
                 if (runningMode == RunningMode.Train)
                 {
                     // error propogation
-                    ComputeOutputLayerErr(OutputLayer, state, curState);
+                    OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
 
                     //propogate errors to each layer from output layer to input layer
                     HiddenLayerList[numLayers - 1].ComputeLayerErr(OutputLayer);
@@ -126,7 +141,7 @@ namespace RNNSharp
                 }
             }
 
-            return m;
+            return predicted;
         }
 
         public int GetBestOutputIndex()
@@ -150,7 +165,8 @@ namespace RNNSharp
             int numLayers = HiddenLayerList.Count;
 
             //Get network output without CRF
-            Matrix<double> nnOutput = ProcessSequence(pSequence, RunningMode.Test);
+            Matrix<double> nnOutput;
+            ProcessSequence(pSequence, RunningMode.Test, true, out nnOutput);
 
             //Compute CRF result
             ForwardBackward(numStates, nnOutput);
@@ -190,7 +206,7 @@ namespace RNNSharp
                         HiddenLayerList[i].computeLayer(state.SparseData, HiddenLayerList[i - 1].cellOutput);
                     }
 
-                    ComputeOutputLayerErr(OutputLayer, state, curState);
+                    OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
 
                     HiddenLayerList[numLayers - 1].ComputeLayerErr(OutputLayer);
                     for (int i = numLayers - 2; i >= 0; i--)
@@ -296,6 +312,7 @@ namespace RNNSharp
                 HiddenLayerList.Add(layer);
             }
 
+          //  OutputLayer = new LargeSimpleLayer();
             OutputLayer = new SimpleLayer();
             OutputLayer.Load(br);
 
@@ -317,31 +334,6 @@ namespace RNNSharp
             }
 
             OutputLayer.CleanLearningRate();
-        }
-
-        public void ComputeOutputLayerErr(SimpleLayer outputLayer, State state, int timeat)
-        {
-            if (IsCRFTraining == true)
-            {
-                //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
-                for (int c = 0; c < outputLayer.LayerSize; c++)
-                {
-                    outputLayer.er[c] = -CRFSeqOutput[timeat][c];
-                }
-                outputLayer.er[state.Label] = 1 - CRFSeqOutput[timeat][state.Label];
-            }
-            else
-            {
-                //For standard RNN
-                for (int c = 0; c < outputLayer.LayerSize; c++)
-                {
-                    outputLayer.er[c] = -outputLayer.cellOutput[c];
-                }
-                outputLayer.er[state.Label] = 1 - outputLayer.cellOutput[state.Label];
-            }
-
-        }
-
-            
+        }    
     }
 }

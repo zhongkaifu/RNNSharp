@@ -198,15 +198,21 @@ namespace RNNSharp
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 State state = pSequence.States[curState];
+
                 seqFinalOutput[curState] = new SimpleLayer(OutputLayer.LayerSize);
                 SimpleLayer outputCells = seqFinalOutput[curState];
 
                 outputCells.DenseWeights = OutputLayer.DenseWeights;
                 outputCells.DenseWeightsLearningRate = OutputLayer.DenseWeightsLearningRate;
                 outputCells.DenseFeatureSize = OutputLayer.DenseFeatureSize;
+
+                outputCells.SparseWeights = OutputLayer.SparseWeights;
+                outputCells.SparseWeightsLearningRate = OutputLayer.SparseWeightsLearningRate;
+                outputCells.SparseFeatureSize = OutputLayer.SparseFeatureSize;
+
                 outputCells.computeLayer(state.SparseData, lastLayer[curState].cellOutput, isTrain);
                 outputCells.cellOutput.CopyTo(tmp_rawOutputLayer[curState], 0);
-                outputCells.Softmax();
+                outputCells.Softmax(isTrain);
 
             });
 
@@ -252,9 +258,8 @@ namespace RNNSharp
         /// </summary>
         /// <param name="pSequence"></param>
         /// <param name="seqFinalOutput"></param>
-        /// <param name="isCRF"></param>
         /// <returns></returns>
-        private void ComputeDeepErr(Sequence pSequence, SimpleLayer[] seqFinalOutput, out List<double[][]> fErrLayers, out List<double[][]> bErrLayers, bool isCRF = false)
+        private void ComputeDeepErr(Sequence pSequence, SimpleLayer[] seqFinalOutput, out List<double[][]> fErrLayers, out List<double[][]> bErrLayers)
         {
             int numStates = pSequence.States.Length;
             int numLayers = forwardHiddenLayers.Count;
@@ -264,24 +269,7 @@ namespace RNNSharp
             {
                 int label = pSequence.States[curState].Label;
                 SimpleLayer layer = seqFinalOutput[curState];
-
-                if (isCRF == false)
-                {
-                    for (int c = 0; c < layer.LayerSize; c++)
-                    {
-                        layer.er[c] = -layer.cellOutput[c];
-                    }
-                    layer.er[label] = 1.0 - layer.cellOutput[label];
-                }
-                else
-                {
-                    double[] CRFOutputLayer = CRFSeqOutput[curState];
-                    for (int c = 0; c < layer.LayerSize; c++)
-                    {
-                        layer.er[c] = -CRFOutputLayer[c];
-                    }
-                    layer.er[label] = 1 - CRFOutputLayer[label];
-                }
+                layer.ComputeLayerErr(CRFSeqOutput, pSequence.States[curState], curState);
             }
 
             //Now we already have err in output layer, let's pass them back to other layers
@@ -391,10 +379,9 @@ namespace RNNSharp
         /// <param name="pSequence"></param>
         /// <param name="runningMode"></param>
         /// <returns></returns>
-        public override Matrix<double> ProcessSequence(Sequence pSequence, RunningMode runningMode)
+        public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> rawOutputLayer)
         {
             List<SimpleLayer[]> layerList;
-            Matrix<double> rawOutputLayer;
 
             //Forward process from bottom layer to top layer
             SimpleLayer[] seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Train, out layerList, out rawOutputLayer);
@@ -416,7 +403,7 @@ namespace RNNSharp
                 DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList);
             }
 
-            return rawOutputLayer;
+            return GetBestResult(rawOutputLayer);
         }
 
         /// <summary>
@@ -453,7 +440,7 @@ namespace RNNSharp
 
                 List<double[][]> fErrLayers;
                 List<double[][]> bErrLayers;
-                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers, true);
+                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers);
                 DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList);
             }
 

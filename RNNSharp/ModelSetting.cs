@@ -9,6 +9,9 @@ namespace RNNSharp
 {
     public class ModelSetting
     {
+        public string TagFile { get; set; }
+        public TagSet Tags { get; set; }
+        public DataSet TrainDataSet { get; set; }
         public string ModelFile { get; set; }
         public List<int> NumHidden { get; set; }
         public float LearningRate { get; set; }

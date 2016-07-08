@@ -29,16 +29,12 @@ namespace RNNSharp
                     SimpleLayer layer = null;
                     if (m_modelSetting.ModelType == 0)
                     {
-                        BPTTLayer bpttLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
-                        bpttLayer.bptt = m_modelSetting.Bptt + 1;
-                        bpttLayer.bptt_block = 10;
-                        bpttLayer.Dropout = m_modelSetting.Dropout;
+                        BPTTLayer bpttLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         layer = bpttLayer;
                     }
                     else
                     {
-                        LSTMLayer lstmLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
-                        lstmLayer.Dropout = m_modelSetting.Dropout;
+                        LSTMLayer lstmLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         layer = lstmLayer;
                     }
 
@@ -59,6 +55,16 @@ namespace RNNSharp
                     hiddenLayers.Add(layer);
                 }
 
+
+                if (m_modelSetting.Dropout > 0)
+                {
+                    Logger.WriteLine("Adding dropout layer");
+                    DropoutLayer dropoutLayer = new DropoutLayer(hiddenLayers[hiddenLayers.Count - 1].LayerSize, m_modelSetting);
+                    dropoutLayer.InitializeWeights(0, hiddenLayers[hiddenLayers.Count - 1].LayerSize);
+                    hiddenLayers.Add(dropoutLayer);
+                }
+
+                Logger.WriteLine("Create output layer.");
                 SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
                 outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[hiddenLayers.Count - 1].LayerSize);
 
@@ -75,27 +81,19 @@ namespace RNNSharp
                     if (m_modelSetting.ModelType == 0)
                     {
                         //For BPTT layer
-                        BPTTLayer forwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
-                        forwardBPTTLayer.bptt = m_modelSetting.Bptt + 1;
-                        forwardBPTTLayer.bptt_block = 10;
-                        forwardBPTTLayer.Dropout = m_modelSetting.Dropout;
+                        BPTTLayer forwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         forwardLayer = forwardBPTTLayer;
 
-                        BPTTLayer backwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i]);
-                        backwardBPTTLayer.bptt = m_modelSetting.Bptt + 1;
-                        backwardBPTTLayer.bptt_block = 10;
-                        backwardBPTTLayer.Dropout = m_modelSetting.Dropout;
+                        BPTTLayer backwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         backwardLayer = backwardBPTTLayer;
                     }
                     else
                     {
                         //For LSTM layer
-                        LSTMLayer forwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
-                        forwardLSTMLayer.Dropout = m_modelSetting.Dropout;
+                        LSTMLayer forwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         forwardLayer = forwardLSTMLayer;
 
-                        LSTMLayer backwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i]);
-                        backwardLSTMLayer.Dropout = m_modelSetting.Dropout;
+                        LSTMLayer backwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
                         backwardLayer = backwardLSTMLayer;
                     }
 
@@ -120,6 +118,20 @@ namespace RNNSharp
                     backwardHiddenLayers.Add(backwardLayer);
                 }
 
+                if (m_modelSetting.Dropout > 0)
+                {
+                    Logger.WriteLine("Adding dropout layers");
+                    DropoutLayer forwardDropoutLayer = new DropoutLayer(forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize, m_modelSetting);
+                    DropoutLayer backwardDropoutLayer = new DropoutLayer(backwardHiddenLayers[backwardHiddenLayers.Count - 1].LayerSize, m_modelSetting);
+
+                    forwardDropoutLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+                    backwardDropoutLayer.InitializeWeights(0, backwardHiddenLayers[backwardHiddenLayers.Count - 1].LayerSize);
+
+                    forwardHiddenLayers.Add(forwardDropoutLayer);
+                    backwardHiddenLayers.Add(backwardDropoutLayer);
+                }
+
+                Logger.WriteLine("Create output layer.");
                 SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
                 outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
 

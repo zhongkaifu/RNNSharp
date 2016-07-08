@@ -52,6 +52,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BiRNN.cs" />
+    <Compile Include="DropoutLayer.cs" />
     <Compile Include="RNN.cs" />
     <Compile Include="LSTMLayer.cs" />
     <Compile Include="ModelSetting.cs" />

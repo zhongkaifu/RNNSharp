@@ -37,9 +37,9 @@ namespace RNNSharp
         protected Vector3[] PeepholeLearningRate;
         protected Vector4[] CellLearningRate;
 
-        public LSTMLayer(int m) : base(m)
+        public LSTMLayer(int layersize, ModelSetting modelsetting) : base(layersize)
         {
-            LayerSize = m;
+            LayerSize = layersize;
             AllocateMemoryForLSTMCells();
         }
 
@@ -87,7 +87,8 @@ namespace RNNSharp
                 }
             }
 
-            Logger.WriteLine("Initializing weights, random value is {0}", RNNHelper.rand.NextDouble());// yy debug
+            Logger.WriteLine("Initializing weights, sparse feature size: {0}, dense feature size: {1}, random value is {2}",
+                SparseFeatureSize, DenseFeatureSize, RNNHelper.rand.NextDouble());
             initWeights();
         }
 
@@ -529,20 +530,8 @@ namespace RNNSharp
                 cell_j.netCellState += cell_j_previousCellOutput * cell_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
 
-                if (mask[j] == true)
-                {
-                    cell_j.cellState = 0;
-                }
-                else
-                {
-                    //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
-                    cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * cell_j.yCellState;
-                }
-
-                if (isTrain == false)
-                {
-                    cell_j.cellState = cell_j.cellState * (1.0 - Dropout);
-                }
+                //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
+                cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * cell_j.yCellState;
 
                 ////include the internal connection multiplied by the CURRENT cell state
                 cell_j.netOut += cell_j.cellState * cell_j.wPeepholeOut + cell_j_previousCellOutput * cell_j.wCellOut;
@@ -709,12 +698,9 @@ namespace RNNSharp
                 Parallel.For(0, LayerSize, parallelOption, i =>
                 {
                     destErrLayer[i] = 0.0;
-                    if (mask[i] == false)
+                    for (int k = 0; k < nextLayer.LayerSize; k++)
                     {
-                        for (int k = 0; k < nextLayer.LayerSize; k++)
-                        {
-                            destErrLayer[i] += srcErrLayer[k] * layer.feature2hidden[k][i].W;
-                        }
+                        destErrLayer[i] += srcErrLayer[k] * layer.feature2hidden[k][i].W;
                     }
                 });
             }
@@ -733,12 +719,9 @@ namespace RNNSharp
                 Parallel.For(0, LayerSize, parallelOption, i =>
                 {
                     er[i] = 0.0;
-                    if (mask[i] == false)
+                    for (int k = 0; k < nextLayer.LayerSize; k++)
                     {
-                        for (int k = 0; k < nextLayer.LayerSize; k++)
-                        {
-                            er[i] += layer.er[k] * layer.feature2hidden[k][i].W;
-                        }
+                        er[i] += layer.er[k] * layer.feature2hidden[k][i].W;
                     }
                 });
             }
@@ -752,21 +735,8 @@ namespace RNNSharp
         {
             for (int i = 0; i < LayerSize; i++)
             {
-                mask[i] = false;
                 cellOutput[i] = 0;
                 LSTMCellInit(cell[i]);
-            }
-
-            if (Dropout > 0 && updateNet == true)
-            {
-                //Train mode
-                for (int a = 0; a < LayerSize; a++)
-                {
-                    if (RNNHelper.rand.NextDouble() < Dropout)
-                    {
-                        mask[a] = true;
-                    }
-                }
             }
         }
 

@@ -25,9 +25,10 @@ namespace RNNSharp
         protected Matrix<double> BpttWeightsDelta { get; set; }
         protected Matrix<double> BpttWeightsLearningRate { get; set; }
 
-        public BPTTLayer(int hiddenLayerSize) : base(hiddenLayerSize)
+        public BPTTLayer(int hiddenLayerSize, ModelSetting modelsetting) : base(hiddenLayerSize)
         {
-            
+            bptt = modelsetting.Bptt + 1;
+            bptt_block = 10;
         }
 
         public BPTTLayer()
@@ -55,7 +56,8 @@ namespace RNNSharp
             BpttWeights = new Matrix<double>(LayerSize, LayerSize);
             BpttWeightsDelta = new Matrix<double>(LayerSize, LayerSize);
 
-            Logger.WriteLine("Initializing weights, random value is {0}", RNNHelper.rand.NextDouble());
+            Logger.WriteLine("Initializing weights, sparse feature size: {0}, dense feature size: {1}, random value is {2}", 
+                SparseFeatureSize, DenseFeatureSize, RNNHelper.rand.NextDouble());
             initWeights();
 
             //Initialize BPTT
@@ -206,36 +208,24 @@ namespace RNNSharp
             }
 
             //activate layer
-            activityLayer(isTrain);
+            activityLayer();
         }
 
-        private void activityLayer(bool isTrain)
+        private void activityLayer()
         {
             Parallel.For(0, LayerSize, parallelOption, a =>
             {
                 double score = cellOutput[a];
-                if (mask[a] == true)
+                if (score > 50)
                 {
-                    score = 0;
+                    score = 50;  //for numerical stability
                 }
-                else
+                else if (score < -50)
                 {
-                    if (isTrain == false)
-                    {
-                        score = score * (1.0 - Dropout);
-                    }
-
-                    if (score > 50)
-                    {
-                        score = 50;  //for numerical stability
-                    }
-                    else if (score < -50)
-                    {
-                        score = -50;  //for numerical stability
-                    }
-
-                    score = 1.0 / (1.0 + Math.Exp(-score));
+                    score = -50;  //for numerical stability
                 }
+
+                score = 1.0 / (1.0 + Math.Exp(-score));
                 cellOutput[a] = score;
             });
         }
@@ -268,7 +258,6 @@ namespace RNNSharp
             {
                 last_bptt_hidden.cellOutput[i] = cellOutput[i];
                 last_bptt_hidden.er[i] = er[i];
-                last_bptt_hidden.mask[i] = mask[i];
             }
 
             for (int i = 0; i < DenseFeatureSize; i++)
@@ -505,32 +494,16 @@ namespace RNNSharp
             for (int a = 0; a < LayerSize; a++)
             {
                 cellOutput[a] = 0.1;
-                mask[a] = false;
             }
 
             if (updateNet == true)
             {
                 //Train mode
                 SimpleLayer last_bptt_hidden = bptt_hidden[0];
-                if (Dropout > 0)
+                for (int a = 0; a < LayerSize; a++)
                 {
-                    for (int a = 0; a < LayerSize; a++)
-                    {
-                        if (RNNHelper.rand.NextDouble() < Dropout)
-                        {
-                            mask[a] = true;
-                        }
-                        last_bptt_hidden.cellOutput[a] = cellOutput[a];
-                        last_bptt_hidden.er[a] = 0;
-                    }
-                }
-                else
-                {
-                    for (int a = 0; a < LayerSize; a++)
-                    {
-                        last_bptt_hidden.cellOutput[a] = cellOutput[a];
-                        last_bptt_hidden.er[a] = 0;
-                    }
+                    last_bptt_hidden.cellOutput[a] = cellOutput[a];
+                    last_bptt_hidden.er[a] = 0;
                 }
 
                 Array.Clear(bptt_inputs, 0, MAX_RNN_HIST);

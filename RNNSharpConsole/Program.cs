@@ -443,6 +443,8 @@ namespace RNNSharpConsole
 
             //Create configuration instance and set parameters
             ModelSetting RNNConfig = new ModelSetting();
+            RNNConfig.TagFile = strTagFile;
+            RNNConfig.Tags = tagSet;
             RNNConfig.ModelFile = strModelFile;
             RNNConfig.NumHidden = layersize;
             RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
@@ -489,6 +491,7 @@ namespace RNNSharpConsole
             //LoadFeatureConfig training corpus and extract feature set
             encoder.TrainingSet = new DataSet(tagSet.GetSize());
             LoadDataset(strTrainFile, featurizer, encoder.TrainingSet);
+            RNNConfig.TrainDataSet = encoder.TrainingSet;
 
             if (String.IsNullOrEmpty(strValidFile) == false)
             {

@@ -25,7 +25,7 @@ namespace RNNSharp
         public SimpleLayer OutputLayer { get; set; }
 
         public abstract int[] ProcessSequenceCRF(Sequence pSequence, RunningMode runningMode);
-        public abstract Matrix<double> ProcessSequence(Sequence pSequence, RunningMode runningMode);
+        public abstract int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> m);
         public abstract void CleanStatus();
         public abstract void SaveModel(string filename);
         public abstract void LoadModel(string filename);
@@ -280,14 +280,29 @@ namespace RNNSharp
             }
         }
 
+        //public int[] GetBestResult(Matrix<double> ys)
+        //{
+        //    int[] output = new int[ys.Height];
+
+        //    for (int i = 0; i < ys.Height; i++)
+        //    {
+        //        output[i] = MathUtil.GetMaxProbIndex(ys[i]);
+        //    }
+
+        //    return output;
+        //}
+
+
+
         public int[] GetBestResult(Matrix<double> ys)
         {
             int[] output = new int[ys.Height];
 
-            for (int i = 0; i < ys.Height; i++)
+            Parallel.For(0, ys.Height, parallelOption, i =>
+            //            for (int i = 0; i < ys.Height; i++)
             {
                 output[i] = MathUtil.GetMaxProbIndex(ys[i]);
-            }
+            });
 
             return output;
         }
@@ -321,8 +336,7 @@ namespace RNNSharp
                 else
                 {
                     Matrix<double> m;
-                    m = ProcessSequence(pSequence, RunningMode.Train);
-                    predicted = GetBestResult(m);
+                    predicted = ProcessSequence(pSequence, RunningMode.Train, false, out m);
                 }
 
                 int newTknErrCnt = GetErrorTokenNum(pSequence, predicted);
@@ -385,8 +399,7 @@ namespace RNNSharp
                 else
                 {
                     Matrix<double> m;
-                    m = ProcessSequence(pSequence, RunningMode.Validate);
-                    predicted = GetBestResult(m);
+                    predicted = ProcessSequence(pSequence, RunningMode.Validate, false, out m);
                 }
 
                 int newTknErrCnt = GetErrorTokenNum(pSequence, predicted);
@@ -436,7 +449,8 @@ namespace RNNSharp
         public int[][] DecodeNBestCRF(Sequence seq, int N)
         {
             //ys contains the output of RNN for each word
-            Matrix<double> ys = ProcessSequence(seq, RunningMode.Test);
+            Matrix<double> ys;
+            ProcessSequence(seq, RunningMode.Test, true, out ys);
 
             int n = seq.States.Length;
             int K = OutputLayer.LayerSize;
@@ -527,14 +541,15 @@ namespace RNNSharp
 
         public int[] DecodeNN(Sequence seq)
         {
-            Matrix<double> ys = ProcessSequence(seq, RunningMode.Test);
-            return GetBestResult(ys);
+            Matrix<double> ys; 
+            return ProcessSequence(seq, RunningMode.Test, false, out ys);
         }
 
         public int[] DecodeCRF(Sequence seq)
         {
             //ys contains the output of RNN for each word
-            Matrix<double> ys = ProcessSequence(seq, RunningMode.Test);
+            Matrix<double> ys;
+            ProcessSequence(seq, RunningMode.Test, true, out ys);
             return Viterbi(ys, seq.States.Length);
         }
     }

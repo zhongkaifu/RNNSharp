@@ -14,17 +14,16 @@ namespace RNNSharp
         public double[] cellOutput;
         public double[] previousCellOutput;
         public double[] er;
-        public bool[] mask;
         public int LayerSize;
 
-        protected Matrix<double> SparseWeights { get; set; }
+        public Matrix<double> SparseWeights { get; set; }
         protected Matrix<double> SparseWeightsDelta { get; set; }
-        protected Matrix<double> SparseWeightsLearningRate { get; set; }
+        public Matrix<double> SparseWeightsLearningRate { get; set; }
 
         public Matrix<double> DenseWeights { get; set; }
         protected Matrix<double> DenseWeightsDelta { get; set; }
         public Matrix<double> DenseWeightsLearningRate { get; set; }
-        public virtual float Dropout { get; set; }
+
         protected ParallelOptions parallelOption = new ParallelOptions();
         
         //Sparse feature set
@@ -34,6 +33,8 @@ namespace RNNSharp
         //Dense feature set
         public double[] DenseFeature;
         public virtual int DenseFeatureSize { get; set; }
+
+        public int CurrentLabelId;
 
         public SimpleLayer(int hiddenLayerSize)
         {
@@ -51,7 +52,6 @@ namespace RNNSharp
             cellOutput = new double[LayerSize];
             previousCellOutput = new double[LayerSize];
             er = new double[LayerSize];
-            mask = new bool[LayerSize];
         }
 
         public SimpleLayer GetHiddenLayer()
@@ -61,7 +61,6 @@ namespace RNNSharp
             {
                 m.cellOutput[i] = cellOutput[i];
                 m.er[i] = er[i];
-                m.mask[i] = mask[i];
             }
 
             return m;
@@ -71,6 +70,7 @@ namespace RNNSharp
         {
             if (denseFeatureSize > 0)
             {
+                Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);
                 DenseFeatureSize = denseFeatureSize;
                 DenseWeights = new Matrix<double>(LayerSize, denseFeatureSize);
                 for (int i = 0; i < DenseWeights.Height; i++)
@@ -84,6 +84,7 @@ namespace RNNSharp
 
             if (sparseFeatureSize > 0)
             {
+                Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize, sparseFeatureSize);
                 SparseFeatureSize = sparseFeatureSize;
                 SparseWeights = new Matrix<double>(LayerSize, SparseFeatureSize);
                 for (int i = 0; i < SparseWeights.Height; i++)
@@ -153,14 +154,11 @@ namespace RNNSharp
                 Parallel.For(0, LayerSize, parallelOption, b =>
                 {
                     double score = 0;
-                    if (SparseFeatureSize > 0)
+                    double[] vector_b = SparseWeights[b];
+                    for (int i = 0; i < SparseFeature.Count; i++)
                     {
-                        double[] vector_b = SparseWeights[b];
-                        for (int i = 0; i < SparseFeature.Count; i++)
-                        {
-                            var entry = SparseFeature.GetEntry(i);
-                            score += entry.Value * vector_b[entry.Key];
-                        }
+                        var entry = SparseFeature.GetEntry(i);
+                        score += entry.Value * vector_b[entry.Key];
                     }
                     cellOutput[b] += score;
                 });
@@ -199,10 +197,11 @@ namespace RNNSharp
                 {
                     double er2 = er[c];
                     double[] vector_c = SparseWeights[c];
-                    for (int a = 0; a < SparseFeatureSize; a++)
+                    for (int a = 0; a < SparseFeature.Count; a++)
                     {
                         int pos = SparseFeature.GetEntry(a).Key;
-                        double delta = RNNHelper.NormalizeGradient(er2 * SparseFeature[pos]);
+                        double val = SparseFeature.GetEntry(a).Value;
+                        double delta = RNNHelper.NormalizeGradient(er2 * val);
                         double newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
                         vector_c[pos] += newLearningRate * delta;
                     }
@@ -217,40 +216,38 @@ namespace RNNSharp
         {
             //error output->hidden for words from specific class    	
             RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
-
-            if (Dropout > 0)
-            {
-                //Apply drop out on error in hidden layer
-                for (int i = 0; i < LayerSize; i++)
-                {
-                    if (mask[i] == true)
-                    {
-                        destErrLayer[i] = 0;
-                    }
-                }
-            }
         }
 
         public virtual void ComputeLayerErr(SimpleLayer nextLayer)
         {
             //error output->hidden for words from specific class    	
             RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
-
-            if (Dropout > 0)
-            {
-                //Apply drop out on error in hidden layer
-                for (int i = 0; i < LayerSize; i++)
-                {
-                    if (mask[i] == true)
-                    {
-                        er[i] = 0;
-                    }
-                }
-            }
         }
 
+        public virtual void ComputeLayerErr(Matrix<double> CRFSeqOutput, State state, int timeat)
+        {
+            if (CRFSeqOutput != null)
+            {
+                //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
+                for (int c = 0; c < LayerSize; c++)
+                {
+                    er[c] = -CRFSeqOutput[timeat][c];
+                }
+                er[state.Label] = 1.0 - CRFSeqOutput[timeat][state.Label];
+            }
+            else
+            {
+                //For standard RNN
+                for (int c = 0; c < LayerSize; c++)
+                {
+                    er[c] = -cellOutput[c];
+                }
+                er[state.Label] = 1.0 - cellOutput[state.Label];
+            }
 
-        public virtual void Softmax()
+        }
+
+        public virtual void Softmax(bool isTrain)
         {
             double sum = 0;
             for (int c = 0; c < LayerSize; c++)
