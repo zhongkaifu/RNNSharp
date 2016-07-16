@@ -208,7 +208,9 @@ RNNSharpConsole.exe -mode train <parameters>
 -trainfile <string>: training corpus file  
 -validfile <string>: validated corpus for training  
 -modelfile <string>: encoded model file  
--modeltype <int>: model structure: simple RNN is 0, LSTM-RNN is 1, default is 0  
+-hiddenlayertype <string>: hidden layer type. BPTT and LSTM are supported, default is BPTT  
+-outputlayertype <string>: output layer type. Softmax and NCESoftmax are supported, default is Softmax  
+-ncesamplesize <int>: noise contrastive estimation(NCE) sample size, default is 15  
 -ftrfile <string>: feature configuration file  
 -tagfile <string>: supported output tagid-name list file  
 -alpha <float>: learning rate, default is 0.1  
@@ -221,9 +223,9 @@ RNNSharpConsole.exe -mode train <parameters>
 -dir <int> : RNN directional: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0  
 -vq <int> : Model vector quantization, 0 is disable, 1 is enable. default is 0  
 
-Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -tagfile tags.txt -layersize 200,100 -modeltype 0 -alpha 0.1 -bptt 4 -crf 1 -maxiter 20 -savestep 200K -dir 1  
+Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0  
   
-Above command line will train a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one output layer. The first hidden layer size is 200 and the second hidden layer size is 100  
+This command trains a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one softmax output layer. The first hidden layer size is 200 and the second hidden layer size is 100  
 
 ### Decode Model
 

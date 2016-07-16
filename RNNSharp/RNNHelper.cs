@@ -234,5 +234,67 @@ namespace RNNSharp
 
             return m;
         }
+
+        public static void matrixXvectorADD(double[] dest, double[] srcvec, Matrix<double> srcmatrix, HashSet<int> setSkipSampling, int SrcSize, bool cleanDest = true)
+        {
+            Parallel.ForEach(setSkipSampling, i =>
+            {
+                double cellOutput = 0;
+                double[] vector_i = srcmatrix[i];
+                int j = 0;
+                while (j < SrcSize - Vector<double>.Count)
+                {
+                    Vector<double> v1 = new Vector<double>(srcvec, j);
+                    Vector<double> v2 = new Vector<double>(vector_i, j);
+                    cellOutput += Vector.Dot<double>(v1, v2);
+
+                    j += Vector<double>.Count;
+                }
+
+                while (j < SrcSize)
+                {
+                    cellOutput += srcvec[j] * vector_i[j];
+                    j++;
+                }
+
+                if (cleanDest)
+                {
+                    dest[i] = cellOutput;
+                }
+                else
+                {
+                    dest[i] += cellOutput;
+                }
+            });
+
+        }
+
+        public static void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, HashSet<int> setSkipSampling, int SrcSize)
+        {
+            Parallel.ForEach(setSkipSampling, i =>
+            {
+                double er = 0;
+                for (int j = 0; j < SrcSize; j++)
+                {
+                    er += srcvec[j] * srcmatrix[j][i];
+                }
+
+                dest[i] = RNNHelper.NormalizeGradient(er);
+            });
+        }
+
+        public static void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, HashSet<int> setSkipSampling)
+        {
+            Parallel.For(0, DestSize, i =>
+            {
+                double er = 0;
+                foreach (int j in setSkipSampling)
+                {
+                    er += srcvec[j] * srcmatrix[j][i];
+                }
+
+                dest[i] = RNNHelper.NormalizeGradient(er);
+            });
+        }
     }
 }

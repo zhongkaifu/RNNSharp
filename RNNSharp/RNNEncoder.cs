@@ -24,31 +24,35 @@ namespace RNNSharp
             if (m_modelSetting.ModelDirection == 0)
             {
                 List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
-                for (int i = 0; i < m_modelSetting.NumHidden.Count; i++)
+                for (int i = 0; i < m_modelSetting.HiddenLayerSizeList.Count; i++)
                 {
                     SimpleLayer layer = null;
-                    if (m_modelSetting.ModelType == 0)
+                    if (m_modelSetting.ModelType == LayerType.BPTT)
                     {
-                        BPTTLayer bpttLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
+                        BPTTLayer bpttLayer = new BPTTLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
                         layer = bpttLayer;
+                    }
+                    else if (m_modelSetting.ModelType == LayerType.LSTM)
+                    {
+                        LSTMLayer lstmLayer = new LSTMLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
+                        layer = lstmLayer;
                     }
                     else
                     {
-                        LSTMLayer lstmLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
-                        layer = lstmLayer;
+                        throw new System.Exception(string.Format("Invalidate hidden layer type: {0}", m_modelSetting.ModelType.ToString()));
                     }
 
                     if (i == 0)
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+                            i, m_modelSetting.HiddenLayerSizeList[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
 
                         layer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
                     }
                     else
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), hiddenLayers[i - 1].LayerSize);
+                            i, m_modelSetting.HiddenLayerSizeList[i], TrainingSet.GetSparseDimension(), hiddenLayers[i - 1].LayerSize);
 
                         layer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[i - 1].LayerSize);
                     }
@@ -64,9 +68,24 @@ namespace RNNSharp
                     hiddenLayers.Add(dropoutLayer);
                 }
 
-                Logger.WriteLine("Create output layer.");
-                SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
-                outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[hiddenLayers.Count - 1].LayerSize);
+                SimpleLayer outputLayer;
+                if (m_modelSetting.OutputLayerType == LayerType.NCESoftmax)
+                {
+                    Logger.WriteLine("Create NCESoftmax layer as output layer.");
+                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(TrainingSet.TagSize, m_modelSetting);
+                    nceOutputLayer.InitializeWeights(0, hiddenLayers[hiddenLayers.Count - 1].LayerSize);
+                    outputLayer = nceOutputLayer;
+                }
+                else if (m_modelSetting.OutputLayerType == LayerType.Softmax)
+                {
+                    Logger.WriteLine("Create Softmax layer as output layer.");
+                    outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                    outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), hiddenLayers[hiddenLayers.Count - 1].LayerSize);
+                }
+                else
+                {
+                    throw new System.Exception(string.Format("Invalidate output layer type: {0}", m_modelSetting.OutputLayerType.ToString()));
+                }
 
                 rnn = new ForwardRNN(hiddenLayers, outputLayer);
             }
@@ -74,33 +93,37 @@ namespace RNNSharp
             {
                 List<SimpleLayer> forwardHiddenLayers = new List<SimpleLayer>();
                 List<SimpleLayer> backwardHiddenLayers = new List<SimpleLayer>();
-                for (int i = 0; i < m_modelSetting.NumHidden.Count; i++)
+                for (int i = 0; i < m_modelSetting.HiddenLayerSizeList.Count; i++)
                 {
                     SimpleLayer forwardLayer = null;
                     SimpleLayer backwardLayer = null;
-                    if (m_modelSetting.ModelType == 0)
+                    if (m_modelSetting.ModelType == LayerType.BPTT)
                     {
                         //For BPTT layer
-                        BPTTLayer forwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
+                        BPTTLayer forwardBPTTLayer = new BPTTLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
                         forwardLayer = forwardBPTTLayer;
 
-                        BPTTLayer backwardBPTTLayer = new BPTTLayer(m_modelSetting.NumHidden[i], m_modelSetting);
+                        BPTTLayer backwardBPTTLayer = new BPTTLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
                         backwardLayer = backwardBPTTLayer;
+                    }
+                    else if (m_modelSetting.ModelType == LayerType.LSTM)
+                    {
+                        //For LSTM layer
+                        LSTMLayer forwardLSTMLayer = new LSTMLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
+                        forwardLayer = forwardLSTMLayer;
+
+                        LSTMLayer backwardLSTMLayer = new LSTMLayer(m_modelSetting.HiddenLayerSizeList[i], m_modelSetting);
+                        backwardLayer = backwardLSTMLayer;
                     }
                     else
                     {
-                        //For LSTM layer
-                        LSTMLayer forwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
-                        forwardLayer = forwardLSTMLayer;
-
-                        LSTMLayer backwardLSTMLayer = new LSTMLayer(m_modelSetting.NumHidden[i], m_modelSetting);
-                        backwardLayer = backwardLSTMLayer;
+                        throw new System.Exception(string.Format("Invalidate hidden layer type: {0}", m_modelSetting.ModelType.ToString()));
                     }
 
                     if (i == 0)
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
+                            i, m_modelSetting.HiddenLayerSizeList[i], TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
 
                         forwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
                         backwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), TrainingSet.DenseFeatureSize());
@@ -108,7 +131,7 @@ namespace RNNSharp
                     else
                     {
                         Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, m_modelSetting.NumHidden[i], TrainingSet.GetSparseDimension(), forwardHiddenLayers[i - 1].LayerSize);
+                            i, m_modelSetting.HiddenLayerSizeList[i], TrainingSet.GetSparseDimension(), forwardHiddenLayers[i - 1].LayerSize);
 
                         forwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[i - 1].LayerSize);
                         backwardLayer.InitializeWeights(TrainingSet.GetSparseDimension(), backwardHiddenLayers[i - 1].LayerSize);
@@ -131,9 +154,24 @@ namespace RNNSharp
                     backwardHiddenLayers.Add(backwardDropoutLayer);
                 }
 
-                Logger.WriteLine("Create output layer.");
-                SimpleLayer outputLayer = new SimpleLayer(TrainingSet.TagSize);
-                outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+                SimpleLayer outputLayer;
+                if (m_modelSetting.OutputLayerType == LayerType.NCESoftmax)
+                {
+                    Logger.WriteLine("Create NCESoftmax layer as output layer.");
+                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(TrainingSet.TagSize, m_modelSetting);
+                    nceOutputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+                    outputLayer = nceOutputLayer;
+                }
+                else if (m_modelSetting.OutputLayerType == LayerType.Softmax)
+                {
+                    Logger.WriteLine("Create Softmax layer as output layer.");
+                    outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                    outputLayer.InitializeWeights(TrainingSet.GetSparseDimension(), forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+                }
+                else
+                {
+                    throw new System.Exception(string.Format("Invalidate output layer type: {0}", m_modelSetting.OutputLayerType.ToString()));
+                }
 
                 rnn = new BiRNN(forwardHiddenLayers, backwardHiddenLayers, outputLayer);
             }

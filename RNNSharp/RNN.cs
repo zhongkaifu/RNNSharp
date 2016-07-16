@@ -331,12 +331,12 @@ namespace RNNSharp
                 int[] predicted;
                 if (IsCRFTraining == true)
                 {
-                    predicted = ProcessSequenceCRF(pSequence, RunningMode.Train);
+                    predicted = ProcessSequenceCRF(pSequence, RunningMode.Training);
                 }
                 else
                 {
                     Matrix<double> m;
-                    predicted = ProcessSequence(pSequence, RunningMode.Train, false, out m);
+                    predicted = ProcessSequence(pSequence, RunningMode.Training, false, out m);
                 }
 
                 int newTknErrCnt = GetErrorTokenNum(pSequence, predicted);

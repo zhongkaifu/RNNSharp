@@ -188,37 +188,53 @@ namespace RNNSharp
             return mergedLayer;
         }
 
-        private SimpleLayer[] ComputeTopLayer(Sequence pSequence, SimpleLayer[] lastLayer, out Matrix<double> rawOutputLayer, bool isTrain)
+        Array seqFinalOutput = null;
+        private SimpleLayer[] ComputeTopLayer(Sequence pSequence, SimpleLayer[] lastLayer, out Matrix<double> rawOutputLayer, bool isTraining, bool outputRawScore, out int[] seqBestOutput)
         {
             int numStates = lastLayer.Length;
+            seqBestOutput = new int[numStates];
 
             //Calculate output layer
-            Matrix<double> tmp_rawOutputLayer = new Matrix<double>(numStates, OutputLayer.LayerSize);
-            SimpleLayer[] seqFinalOutput = new SimpleLayer[numStates];
+            Matrix<double> tmp_rawOutputLayer = null;
+            if (outputRawScore == true)
+            {
+                tmp_rawOutputLayer = new Matrix<double>(numStates, OutputLayer.LayerSize);
+            }
+
+            //Initialize output layer or reallocate it
+            if (seqFinalOutput == null || seqFinalOutput.Length < numStates)
+            {
+                seqFinalOutput = Array.CreateInstance(OutputLayer.GetType(), numStates);
+                for (int i = 0; i < numStates; i++)
+                {
+                    seqFinalOutput.SetValue(Activator.CreateInstance(OutputLayer.GetType(), OutputLayer.LayerSize), i);
+                    OutputLayer.ShallowCopyWeightTo((SimpleLayer)seqFinalOutput.GetValue(i));
+                }
+            }
+
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 State state = pSequence.States[curState];
+                var outputCells = (SimpleLayer)seqFinalOutput.GetValue(curState);
+                outputCells.CurrentLabelId = state.Label;
+                outputCells.computeLayer(state.SparseData, lastLayer[curState].cellOutput, isTraining);
 
-                seqFinalOutput[curState] = new SimpleLayer(OutputLayer.LayerSize);
-                SimpleLayer outputCells = seqFinalOutput[curState];
-
-                outputCells.DenseWeights = OutputLayer.DenseWeights;
-                outputCells.DenseWeightsLearningRate = OutputLayer.DenseWeightsLearningRate;
-                outputCells.DenseFeatureSize = OutputLayer.DenseFeatureSize;
-
-                outputCells.SparseWeights = OutputLayer.SparseWeights;
-                outputCells.SparseWeightsLearningRate = OutputLayer.SparseWeightsLearningRate;
-                outputCells.SparseFeatureSize = OutputLayer.SparseFeatureSize;
-
-                outputCells.computeLayer(state.SparseData, lastLayer[curState].cellOutput, isTrain);
-                outputCells.cellOutput.CopyTo(tmp_rawOutputLayer[curState], 0);
-                outputCells.Softmax(isTrain);
-
+                if (outputRawScore == true)
+                {
+                    outputCells.cellOutput.CopyTo(tmp_rawOutputLayer[curState], 0);
+                }
+                outputCells.Softmax(isTraining);
             });
+            SimpleLayer[] tmpSeqFinalOutput = new SimpleLayer[numStates];
+            for (int i = 0; i < numStates; i++)
+            {
+                tmpSeqFinalOutput[i] = (SimpleLayer)seqFinalOutput.GetValue(i);
+                seqBestOutput[i] = tmpSeqFinalOutput[i].GetBestOutputIndex(isTraining);
+            }
 
             rawOutputLayer = tmp_rawOutputLayer;
 
-            return seqFinalOutput;
+            return tmpSeqFinalOutput;
 
         }
 
@@ -226,16 +242,16 @@ namespace RNNSharp
         /// Computing the output of each layer in the neural network
         /// </summary>
         /// <param name="pSequence"></param>
-        /// <param name="isTrain"></param>
+        /// <param name="isTraining"></param>
         /// <param name="layerList"></param>
         /// <param name="rawOutputLayer"></param>
         /// <returns></returns>
-        private SimpleLayer[] ComputeLayers(Sequence pSequence, bool isTrain, out List<SimpleLayer[]> layerList, out Matrix<double> rawOutputLayer)
+        private SimpleLayer[] ComputeLayers(Sequence pSequence, bool isTraining, out List<SimpleLayer[]> layerList, out Matrix<double> rawOutputLayer, bool outputRawScore, out int[] seqBestOutput)
         {
             layerList = new List<SimpleLayer[]>();
 
             SimpleLayer[] layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0]);
-            if (isTrain == true)
+            if (isTraining == true)
             {
                 layerList.Add(layer);
             }
@@ -243,14 +259,13 @@ namespace RNNSharp
             for (int i = 1; i < forwardHiddenLayers.Count; i++)
             {
                 layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
-                if (isTrain == true)
+                if (isTraining == true)
                 {
                     layerList.Add(layer);
                 }
             }
 
-            SimpleLayer[] seqFinalOutput = ComputeTopLayer(pSequence, layer, out rawOutputLayer, isTrain);
-            return seqFinalOutput;
+            return ComputeTopLayer(pSequence, layer, out rawOutputLayer, isTraining, outputRawScore, out seqBestOutput);
         }
 
         /// <summary>
@@ -384,7 +399,10 @@ namespace RNNSharp
             List<SimpleLayer[]> layerList;
 
             //Forward process from bottom layer to top layer
-            SimpleLayer[] seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Train, out layerList, out rawOutputLayer);
+            SimpleLayer[] seqOutput;
+            int[] seqBestOutput;
+            seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Training, out layerList, out rawOutputLayer, false, out seqBestOutput);
+
             if (runningMode != RunningMode.Test)
             {
                 int numStates = pSequence.States.Length;
@@ -394,7 +412,7 @@ namespace RNNSharp
                 }
             }
 
-            if (runningMode == RunningMode.Train)
+            if (runningMode == RunningMode.Training)
             {
                 //In training mode, we calculate each layer's error and update their net weights
                 List<double[][]> fErrLayers;
@@ -403,7 +421,7 @@ namespace RNNSharp
                 DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList);
             }
 
-            return GetBestResult(rawOutputLayer);
+            return seqBestOutput;
         }
 
         /// <summary>
@@ -419,7 +437,9 @@ namespace RNNSharp
             List<SimpleLayer[]> layerList;
             Matrix<double> rawOutputLayer;
 
-            SimpleLayer[] seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Train, out layerList, out rawOutputLayer);
+            SimpleLayer[] seqOutput;
+            int[] seqBestOutput;
+            seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Training, out layerList, out rawOutputLayer, true, out seqBestOutput);
 
             ForwardBackward(numStates, rawOutputLayer);
 
@@ -434,7 +454,7 @@ namespace RNNSharp
 
             int[] predict = Viterbi(rawOutputLayer, numStates);
 
-            if (runningMode == RunningMode.Train)
+            if (runningMode == RunningMode.Training)
             {
                 UpdateBigramTransition(pSequence);
 
@@ -464,14 +484,7 @@ namespace RNNSharp
                 }
 
                 fo.Write((int)ModelDirection);
-
-                // Signiture , 0 is for RNN or 1 is for RNN-CRF
-                int iflag = 0;
-                if (IsCRFTraining == true)
-                {
-                    iflag = 1;
-                }
-                fo.Write(iflag);
+                fo.Write(IsCRFTraining);
 
                 fo.Write(forwardHiddenLayers.Count);
                 //Save forward layers
@@ -487,9 +500,9 @@ namespace RNNSharp
                 //Save output layer
                 OutputLayer.Save(fo);
 
-                if (iflag == 1)
+                if (IsCRFTraining == true)
                 {
-                    // Save Bigram
+                    // Save CRF features weights
                     RNNHelper.SaveMatrix(CRFTagTransWeights, fo);
                 }
             }
@@ -505,19 +518,9 @@ namespace RNNSharp
 
                 int modelType = br.ReadInt32();
                 ModelDirection = (MODELDIRECTION)br.ReadInt32();
-
-                int iflag = br.ReadInt32();
-                if (iflag == 1)
-                {
-                    IsCRFTraining = true;
-                }
-                else
-                {
-                    IsCRFTraining = false;
-                }
-
+                IsCRFTraining = br.ReadBoolean();
+                
                 int layerSize = br.ReadInt32();
-
                 //Load forward layers from file
                 forwardHiddenLayers = new List<SimpleLayer>();
                 for (int i = 0; i < layerSize; i++)
@@ -561,7 +564,7 @@ namespace RNNSharp
                 OutputLayer = new SimpleLayer();
                 OutputLayer.Load(br);
 
-                if (iflag == 1)
+                if (IsCRFTraining == true)
                 {
                     Logger.WriteLine("Loading CRF tag trans weights...");
                     CRFTagTransWeights = RNNHelper.LoadMatrix(br);

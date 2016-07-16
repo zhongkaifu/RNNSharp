@@ -21,21 +21,23 @@ namespace RNNSharpConsole
         static string strTrainFile = "";
         static string strValidFile = "";
         static int maxIter = 20;
-        static List<int> layersize = null;
+        static List<int> hiddenLayerSizeList = null;
         static int iCRF = 0;
         static long savestep = 0;
         static float alpha = 0.1f;
         static float dropout = 0;
         static int bptt = 4;
-        static int modelType = 0;
+        static string hiddenLayerType = "BPTT";
+        static string outputLayerType = "Softmax";
         static int nBest = 1;
         static int iDir = 0;
         static int iVQ = 0;
         static float gradientCutoff = 15.0f;
+        static int nceSampleSize = 15;
 
         static void UsageTitle()
         {
-            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.0 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.1 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         static void Usage()
@@ -60,8 +62,14 @@ namespace RNNSharpConsole
             Console.WriteLine(" -modelfile <string>");
             Console.WriteLine("\tEncoded model file");
 
-            Console.WriteLine(" -modeltype <int>");
-            Console.WriteLine("\tModel type: 0 - BPTT-RNN, 1 - LSTM-RNN, default is 0");
+            Console.WriteLine(" -hiddenlayertype <string>");
+            Console.WriteLine("\tSupported type: BPTT and LSTM, default is BPTT");
+
+            Console.WriteLine(" -outputlayertype <string>");
+            Console.WriteLine("\tSupported type: Softmax and NCESoftmax, default is Softmax");
+
+            Console.WriteLine(" -ncesamplesize <int>");
+            Console.WriteLine("\tNoise contrastive estimation(NCE) sample size, default is 15");
 
             Console.WriteLine(" -dir <int>");
             Console.WriteLine("\tRecurrent direction: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0");
@@ -79,7 +87,7 @@ namespace RNNSharpConsole
             Console.WriteLine("\tDropout ratio [0, 1.0), default is 0");
 
             Console.WriteLine(" -layersize <int>");
-            Console.WriteLine("\tHidden layer size, default is 200");
+            Console.WriteLine("\tHidden layer size. The size of different layer is separated by comma, default is one layer which size is 200");
 
             Console.WriteLine(" -bptt <int>");
             Console.WriteLine("\tStep for back-propagation through time for BPTT-RNN. default is 4");
@@ -100,9 +108,9 @@ namespace RNNSharpConsole
             Console.WriteLine("\tGradient cut-off. Default is 15.0f");
 
             Console.WriteLine();
-            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -modeltype 0 -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0");
+            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0");
             Console.WriteLine();
-            Console.WriteLine("Above example will train a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one output layer. The first hidden layer size is 200 and the second hidden layer size is 100");
+            Console.WriteLine("This command trains a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one softmax output layer. The first hidden layer size is 200 and the second hidden layer size is 100");
 
         }
 
@@ -144,21 +152,23 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-tagfile", args)) >= 0) strTagFile = args[i + 1];
             if ((i = ArgPos("-ftrfile", args)) >= 0) strFeatureConfigFile = args[i + 1];
 
-            layersize = new List<int>();
+            hiddenLayerSizeList = new List<int>();
             if ((i = ArgPos("-layersize", args)) >= 0)
             {
                 string[] layers = args[i + 1].Split(',');
                 foreach (string layer in layers)
                 {
-                    layersize.Add(int.Parse(layer, CultureInfo.InvariantCulture));
+                    hiddenLayerSizeList.Add(int.Parse(layer, CultureInfo.InvariantCulture));
                 }
             }
             else
             {
-                layersize.Add(200);
+                hiddenLayerSizeList.Add(200);
             }
 
-            if ((i = ArgPos("-modeltype", args)) >= 0) modelType = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-ncesamplesize", args)) >= 0) nceSampleSize = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-hiddenlayertype", args)) >= 0) hiddenLayerType = args[i + 1].ToLower().Trim();
+            if ((i = ArgPos("-outputlayertype", args)) >= 0) outputLayerType = args[i + 1].ToLower().Trim();
             if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
@@ -427,6 +437,19 @@ namespace RNNSharpConsole
             sw.Close();
         }
 
+        public static LayerType ParseLayerType(string layerType)
+        {
+            foreach (LayerType type in Enum.GetValues(typeof(LayerType)))
+            {
+                if (layerType.Equals(type.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                {
+                    return type;
+                }
+            }
+
+            throw new ArgumentException(String.Format("Invalidated layer type: {0}", layerType));
+        }
+
         private static void Train()
         {
             Logger.LogFile = "RNNSharpConsole.log";
@@ -446,17 +469,19 @@ namespace RNNSharpConsole
             RNNConfig.TagFile = strTagFile;
             RNNConfig.Tags = tagSet;
             RNNConfig.ModelFile = strModelFile;
-            RNNConfig.NumHidden = layersize;
+            RNNConfig.HiddenLayerSizeList = hiddenLayerSizeList;
             RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
             RNNConfig.ModelDirection = iDir;
             RNNConfig.VQ = iVQ;
-            RNNConfig.ModelType = modelType;
+            RNNConfig.ModelType = ParseLayerType(hiddenLayerType);
+            RNNConfig.OutputLayerType = ParseLayerType(outputLayerType);
             RNNConfig.MaxIteration = maxIter;
             RNNConfig.SaveStep = savestep;
             RNNConfig.LearningRate = alpha;
             RNNConfig.Dropout = dropout;
             RNNConfig.Bptt = bptt;
             RNNConfig.GradientCutoff = gradientCutoff;
+            RNNConfig.NCESampleSize = nceSampleSize;
 
             //Dump RNN setting on console
             RNNConfig.DumpSetting();

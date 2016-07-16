@@ -214,14 +214,31 @@ namespace RNNSharp
 
         public virtual void ComputeLayerErr(SimpleLayer nextLayer, double[] destErrLayer, double[] srcErrLayer)
         {
-            //error output->hidden for words from specific class    	
-            RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            NCEOutputLayer largeOutputLayer = nextLayer as NCEOutputLayer;
+            if (largeOutputLayer != null)
+            {
+                RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, largeOutputLayer.DenseWeights, LayerSize, largeOutputLayer.negativeSampleWordList);
+            }
+            else
+            {
+                //error output->hidden for words from specific class    	
+                RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            }
         }
 
         public virtual void ComputeLayerErr(SimpleLayer nextLayer)
         {
-            //error output->hidden for words from specific class    	
-            RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            NCEOutputLayer largeOutputLayer = nextLayer as NCEOutputLayer;
+            if (largeOutputLayer != null)
+            {
+                RNNHelper.matrixXvectorADDErr(er, largeOutputLayer.er, largeOutputLayer.DenseWeights, LayerSize, largeOutputLayer.negativeSampleWordList);
+            }
+            else
+            {
+                //error output->hidden for words from specific class
+                RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            }
+
         }
 
         public virtual void ComputeLayerErr(Matrix<double> CRFSeqOutput, State state, int timeat)
@@ -246,6 +263,33 @@ namespace RNNSharp
             }
 
         }
+
+        public virtual void ShallowCopyWeightTo(SimpleLayer destLayer)
+        {
+            destLayer.DenseWeights = DenseWeights;
+            destLayer.DenseWeightsLearningRate = DenseWeightsLearningRate;
+            destLayer.DenseFeatureSize = DenseFeatureSize;
+
+            destLayer.SparseWeights = SparseWeights;
+            destLayer.SparseWeightsLearningRate = SparseWeightsLearningRate;
+            destLayer.SparseFeatureSize = SparseFeatureSize;
+        }
+
+        public virtual int GetBestOutputIndex(bool isTrain)
+        {
+            int imax = 0;
+            double dmax = cellOutput[0];
+            for (int k = 1; k < LayerSize; k++)
+            {
+                if (cellOutput[k] > dmax)
+                {
+                    dmax = cellOutput[k];
+                    imax = k;
+                }
+            }
+            return imax;
+        }
+
 
         public virtual void Softmax(bool isTrain)
         {

@@ -19,7 +19,7 @@ namespace RNNSharp
 
     public enum RunningMode
     {
-        Train = 0,
+        Training = 0,
         Validate = 1,
         Test = 2
     }
@@ -67,7 +67,7 @@ namespace RNNSharp
 
             int[] predicted = new int[numStates];
             bool isTraining = true;
-            if (runningMode == RunningMode.Train)
+            if (runningMode == RunningMode.Training)
             {
                 isTraining = true;
             }
@@ -107,14 +107,14 @@ namespace RNNSharp
 
                 OutputLayer.Softmax(isTraining);
 
-                predicted[curState] = GetBestOutputIndex();
+                predicted[curState] = OutputLayer.GetBestOutputIndex(isTraining);
 
                 if (runningMode != RunningMode.Test)
                 {
                     logp += Math.Log10(OutputLayer.cellOutput[state.Label] + 0.0001);
                 }
 
-                if (runningMode == RunningMode.Train)
+                if (runningMode == RunningMode.Training)
                 {
                     // error propogation
                     OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
@@ -144,21 +144,6 @@ namespace RNNSharp
             return predicted;
         }
 
-        public int GetBestOutputIndex()
-        {
-            int imax = 0;
-            double dmax = OutputLayer.cellOutput[0];
-            for (int k = 1; k < OutputLayer.LayerSize; k++)
-            {
-                if (OutputLayer.cellOutput[k] > dmax)
-                {
-                    dmax = OutputLayer.cellOutput[k];
-                    imax = k;
-                }
-            }
-            return imax;
-        }
-
         public override int[] ProcessSequenceCRF(Sequence pSequence, RunningMode runningMode)
         {
             int numStates = pSequence.States.Length;
@@ -183,7 +168,7 @@ namespace RNNSharp
             //Compute best path in CRF result
             int[] predicted = Viterbi(nnOutput, numStates);
 
-            if (runningMode == RunningMode.Train)
+            if (runningMode == RunningMode.Training)
             {
                 //Update tag bigram transition for CRF model
                 UpdateBigramTransition(pSequence);
@@ -246,16 +231,8 @@ namespace RNNSharp
             {
                 fo.Write(1);
             }
-        
             fo.Write((int)ModelDirection);
-
-            // Signiture , 0 is for RNN or 1 is for RNN-CRF
-            int iflag = 0;
-            if (IsCRFTraining == true)
-            {
-                iflag = 1;
-            }
-            fo.Write(iflag);
+            fo.Write(IsCRFTraining);
 
             fo.Write(HiddenLayerList.Count);
             foreach (SimpleLayer layer in HiddenLayerList)
@@ -264,9 +241,9 @@ namespace RNNSharp
             }
             OutputLayer.Save(fo);
 
-            if (iflag == 1)
+            if (IsCRFTraining == true)
             {
-                // Save Bigram
+                //Save CRF feature weights
                 RNNHelper.SaveMatrix(CRFTagTransWeights, fo);
             }
 
@@ -282,16 +259,7 @@ namespace RNNSharp
 
             int modelType = br.ReadInt32();
             ModelDirection = (MODELDIRECTION)br.ReadInt32();
-
-            int iflag = br.ReadInt32();
-            if (iflag == 1)
-            {
-                IsCRFTraining = true;
-            }
-            else
-            {
-                IsCRFTraining = false;
-            }
+            IsCRFTraining = br.ReadBoolean();
 
             //Create cells of each layer
             int layerSize = br.ReadInt32();
@@ -312,11 +280,10 @@ namespace RNNSharp
                 HiddenLayerList.Add(layer);
             }
 
-          //  OutputLayer = new LargeSimpleLayer();
             OutputLayer = new SimpleLayer();
             OutputLayer.Load(br);
 
-            if (iflag == 1)
+            if (IsCRFTraining == true)
             {
                 Logger.WriteLine("Loading CRF tag trans weights...");
                 CRFTagTransWeights = RNNHelper.LoadMatrix(br);

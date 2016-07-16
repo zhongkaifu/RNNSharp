@@ -27,8 +27,13 @@ namespace RNNSharp
 
         public BPTTLayer(int hiddenLayerSize, ModelSetting modelsetting) : base(hiddenLayerSize)
         {
+            Logger.WriteLine("Initializing BPTT Layer...");
+            Logger.WriteLine("Layer Size: {0}", hiddenLayerSize);
             bptt = modelsetting.Bptt + 1;
             bptt_block = 10;
+
+            Logger.WriteLine("BPTT Size: {0}", bptt);
+            Logger.WriteLine("BPTT Block Size: {0}", bptt_block);
         }
 
         public BPTTLayer()
