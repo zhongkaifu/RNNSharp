@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AdvUtils;
+using System;
 using System.Collections.Generic;
 
 /// <summary>
@@ -28,13 +29,14 @@ namespace RNNSharp
             else return States[0].SparseData.GetDimension();
         }
 
-        public void SetLabel(Sentence sent, TagSet tagSet)
+        public bool SetLabel(Sentence sent, TagSet tagSet)
         {
             List<string[]> tokensList = sent.TokensList;
             if (tokensList.Count != States.Length)
             {
-                throw new DataMisalignedException(String.Format("Error: Inconsistent token({0}) and state({1}) size. Tokens list: {2}",
+                Logger.WriteLine(Logger.Level.warn,String.Format("Error: Inconsistent token({0}) and state({1}) size. Tokens list: {2}",
                     tokensList.Count, States.Length, sent.ToString()));
+                return false;
             }
 
             for (int i = 0; i < tokensList.Count; i++)
@@ -43,12 +45,15 @@ namespace RNNSharp
                 int tagId = tagSet.GetIndex(strTagName);
                 if (tagId < 0)
                 {
-                    throw new DataMisalignedException(String.Format("Error: tag {0} is unknown. Tokens list: {1}", 
+                    Logger.WriteLine(Logger.Level.warn, String.Format("Error: tag {0} is unknown. Tokens list: {1}", 
                         strTagName, sent.ToString()));
+                    return false;
                 }
 
                 States[i].Label = tagId;
             }
+
+            return true;
         }
 
         public Sequence(int numStates)

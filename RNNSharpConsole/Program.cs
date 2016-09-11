@@ -269,16 +269,17 @@ namespace RNNSharpConsole
                 Sequence seq = featurizer.ExtractFeatures(sent);
 
                 //Set label for the sequence
-                seq.SetLabel(sent, featurizer.TagSet);
-
-                //Add the sequence into data set
-                dataSet.SequenceList.Add(seq);
-
-                //Show state at every 1000 record
-                RecordCount++;
-                if (RecordCount % 10000 == 0)
+                if (seq.SetLabel(sent, featurizer.TagSet))
                 {
-                    Logger.WriteLine("{0}...", RecordCount);
+                    //Add the sequence into data set
+                    dataSet.SequenceList.Add(seq);
+
+                    //Show state at every 1000 record
+                    RecordCount++;
+                    if (RecordCount % 10000 == 0)
+                    {
+                        Logger.WriteLine("{0}...", RecordCount);
+                    }
                 }
             }
 
@@ -374,7 +375,6 @@ namespace RNNSharpConsole
 
             //Create instance for decoder
             RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(strModelFile, featurizer);
-
 
             if (File.Exists(strTestFile) == false)
             {

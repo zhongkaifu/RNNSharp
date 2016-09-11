@@ -51,6 +51,43 @@ namespace RNNSharp
 
         }
 
+        public override List<double[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
+        {
+            int numStates = pSequence.States.Length;
+            int numLayers = HiddenLayerList.Count;
+
+            //reset all layers
+            foreach (SimpleLayer layer in HiddenLayerList)
+            {
+                layer.netReset(false);
+            }
+
+            List<double[]> outputs = new List<double[]>();
+            for (int curState = 0; curState < numStates; curState++)
+            {
+                //Compute first layer
+                State state = pSequence.States[curState];
+                SetInputLayer(state, curState, numStates, null);
+                HiddenLayerList[0].computeLayer(state.SparseData, state.DenseData.CopyTo(), false);
+
+                //Compute each layer
+                for (int i = 1; i < numLayers; i++)
+                {
+                    //We use previous layer's output as dense feature for current layer
+                    HiddenLayerList[i].computeLayer(state.SparseData, HiddenLayerList[i - 1].cellOutput, false);
+                }
+
+                double[] tmpOutput = new double[HiddenLayerList[numLayers - 1].cellOutput.Length];
+                for (int i = 0; i < HiddenLayerList[numLayers - 1].cellOutput.Length; i++)
+                {
+                    tmpOutput[i] = HiddenLayerList[numLayers - 1].cellOutput[i];
+                }
+                outputs.Add(tmpOutput);
+            }
+
+            return outputs;
+        }
+
         public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> m)
         {
             int numStates = pSequence.States.Length;

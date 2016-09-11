@@ -30,6 +30,8 @@ namespace RNNSharp
         public abstract void SaveModel(string filename);
         public abstract void LoadModel(string filename);
 
+        public abstract List<double[]> ComputeTopHiddenLayerOutput(Sequence pSequence);
+
 
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected Matrix<double> CRFSeqOutput;

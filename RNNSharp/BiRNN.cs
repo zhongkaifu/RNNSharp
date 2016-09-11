@@ -238,6 +238,21 @@ namespace RNNSharp
 
         }
 
+        public override List<double[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
+        {
+            SimpleLayer[] layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0]);
+            for (int i = 1; i < forwardHiddenLayers.Count; i++)
+            {
+                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
+            }
+            List<double[]> outputs = new List<double[]>(layer.Length);
+            for (int i = 0; i < layer.Length; i++)
+            {
+                outputs.Add(layer[i].cellOutput);
+            }
+            return outputs;
+        }
+
         /// <summary>
         /// Computing the output of each layer in the neural network
         /// </summary>

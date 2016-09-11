@@ -14,26 +14,35 @@ namespace RNNSharp
         FREQUENCY
     }
 
+    enum PRETRAIN_TYPE
+    {
+        AUTOENCODER,
+        EMBEDDING
+    }
+
     public class Featurizer
     {
         public TagSet TagSet { get; set; }
 
-        Dictionary<string, List<int>> m_FeatureConfiguration;
-        int m_SparseDimension;
-        int m_DenseDimension;
-        int m_WordEmbeddingCloumn;
-        TFEATURE_WEIGHT_TYPE_ENUM m_TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
-        WordEMWrapFeaturizer m_WordEmbedding;
-        TemplateFeaturizer m_TFeaturizer;
+        Dictionary<string, List<int>> FeatureContext;
+        int SparseDimension;
+        int PretrainedModelColumn;
+        TFEATURE_WEIGHT_TYPE_ENUM TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
+        WordEMWrapFeaturizer PretainedModel;
+        TemplateFeaturizer TFeaturizer;
 
         static string TFEATURE_CONTEXT = "TFEATURE_CONTEXT";
-        static string WORDEMBEDDING_CONTEXT = "WORDEMBEDDING_CONTEXT";
         static string TFEATURE_FILENAME = "TFEATURE_FILENAME";
-        static string WORDEMBEDDING_FILENAME = "WORDEMBEDDING_FILENAME";
-        static string WORDEMBEDDING_RAW_FILENAME = "WORDEMBEDDING_RAW_FILENAME";
         static string RT_FEATURE_CONTEXT = "RTFEATURE_CONTEXT";
-        static string WORDEMBEDDING_COLUMN = "WORDEMBEDDING_COLUMN";
         static string TFEATURE_WEIGHT_TYPE = "TFEATURE_WEIGHT_TYPE";
+
+        static string PRETRAIN_TYPE = "PRETRAIN_TYPE";
+        static string WORDEMBEDDING_CONTEXT = "WORDEMBEDDING_CONTEXT";
+        static string PRETRAINEDMODEL_FILENAME = "WORDEMBEDDING_FILENAME";
+        static string PRETRAINEDMODEL_RAW_FILENAME = "WORDEMBEDDING_RAW_FILENAME";
+        static string PRETRAINEDMODEL_COLUMN = "WORDEMBEDDING_COLUMN";
+        static string AUTOENCODER_MODEL = "AUTOENCODER_MODEL";
+        static string AUTOENCODER_FEATURECONFIG = "AUTOENCODER_FEATURECONFIG";
 
         //The format of configuration file
         public void LoadFeatureConfigFromFile(string strFileName)
@@ -41,7 +50,7 @@ namespace RNNSharp
             StreamReader sr = new StreamReader(strFileName);
             string strLine = null;
 
-            m_FeatureConfiguration = new Dictionary<string, List<int>>();
+            FeatureContext = new Dictionary<string, List<int>>();
             while ((strLine = sr.ReadLine()) != null)
             {
                 strLine = strLine.Trim();
@@ -57,66 +66,85 @@ namespace RNNSharp
                     continue;
                 }
 
-                string[] kv = strLine.Split(':');
-                string strKey = kv[0].Trim();
-                string strValue = kv[1].Trim().ToLower();
-                if (strKey == WORDEMBEDDING_FILENAME)
+                int idxSeparator = strLine.IndexOf(':');
+                string strKey = strLine.Substring(0, idxSeparator).Trim();
+                string strValue = strLine.Substring(idxSeparator + 1).Trim();
+                if (strKey == PRETRAINEDMODEL_FILENAME)
                 {
-                    if (m_WordEmbedding != null)
+                    if (PretainedModel != null)
                     {
-                        throw new ArgumentException("Embedding model has already been loaded. Please check if settings is duplicated in configuration file.");
+                        throw new ArgumentException("Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
                     }
-                    Logger.WriteLine("Loading embedding feature set from model {0}", strValue);
-                    m_WordEmbedding = new WordEMWrapFeaturizer(strValue);
-                    continue;
+                    Logger.WriteLine("Loading pretrained dense feature set from model {0}", strValue);
+                    PretainedModel = new WordEMWrapFeaturizer(strValue);
                 }
-                else if (strKey == WORDEMBEDDING_RAW_FILENAME)
+                else if (strKey == PRETRAINEDMODEL_RAW_FILENAME)
                 {
-                    if (m_WordEmbedding != null)
+                    if (PretainedModel != null)
                     {
-                        throw new ArgumentException("Embedding model has already been loaded. Please check if settings is duplicated in configuration file.");
+                        throw new ArgumentException("Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
                     }
-                    Logger.WriteLine("Loading embedding feature set from model {0} in text format", strValue);
-                    m_WordEmbedding = new WordEMWrapFeaturizer(strValue, true);
-                    continue;
+                    Logger.WriteLine("Loading pretrained dense feature set from model {0} in text format", strValue);
+                    PretainedModel = new WordEMWrapFeaturizer(strValue, true);
                 }
                 else if (strKey == TFEATURE_FILENAME)
                 {
                     Logger.WriteLine("Loading template feature set...");
-                    m_TFeaturizer = new TemplateFeaturizer(strValue);
-                    continue;
+                    TFeaturizer = new TemplateFeaturizer(strValue);
                 }
-                else if (strKey == WORDEMBEDDING_COLUMN)
+                else if (strKey == PRETRAINEDMODEL_COLUMN)
                 {
-                    m_WordEmbeddingCloumn = int.Parse(strValue);
-                    Logger.WriteLine("Word embedding feature column: {0}", m_WordEmbeddingCloumn);
-                    continue;
+                    PretrainedModelColumn = int.Parse(strValue);
+                    Logger.WriteLine("Pretrained model feature column: {0}", PretrainedModelColumn);
                 }
                 else if (strKey == TFEATURE_WEIGHT_TYPE)
                 {
                     Logger.WriteLine("TFeature weighting type: {0}", strValue);
                     if (strValue == "binary")
                     {
-                        m_TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
+                        TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
                     }
                     else
                     {
-                        m_TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
+                        TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
+                    }
+                }
+                else if (strKey == PRETRAIN_TYPE)
+                {
+                    if (strValue.Equals(RNNSharp.PRETRAIN_TYPE.AUTOENCODER.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        preTrainType = RNNSharp.PRETRAIN_TYPE.AUTOENCODER;
+                    }
+                    else
+                    {
+                        preTrainType = RNNSharp.PRETRAIN_TYPE.EMBEDDING;
                     }
 
-                    continue;
+                    Logger.WriteLine("Pretrain type: {0}", preTrainType);
                 }
-
-                string[] values = strValue.Split(',');
-
-                if (m_FeatureConfiguration.ContainsKey(strKey) == false)
+                else if (strKey == AUTOENCODER_FEATURECONFIG)
                 {
-                    m_FeatureConfiguration.Add(strKey, new List<int>());
+                    autoEncoderFeatureConfigFile = strValue;
+                    Logger.WriteLine("Auto encoder configuration file: {0}", autoEncoderFeatureConfigFile);
                 }
-
-                foreach (string value in values)
+                else if (strKey == AUTOENCODER_MODEL)
                 {
-                    m_FeatureConfiguration[strKey].Add(int.Parse(value));
+                    autoEncoderModelFile = strValue;
+                    Logger.WriteLine("Auto encoder model file: {0}", autoEncoderModelFile);
+                }
+                else
+                {
+                    string[] values = strValue.Split(',');
+
+                    if (FeatureContext.ContainsKey(strKey) == false)
+                    {
+                        FeatureContext.Add(strKey, new List<int>());
+                    }
+
+                    foreach (string value in values)
+                    {
+                        FeatureContext[strKey].Add(int.Parse(value));
+                    }
                 }
             }
 
@@ -138,62 +166,58 @@ namespace RNNSharp
 
         void InitComponentFeaturizer()
         {
-            var fc = m_FeatureConfiguration;
-            m_SparseDimension = 0;
-            if (m_TFeaturizer != null)
+            var fc = FeatureContext;
+            SparseDimension = 0;
+            if (TFeaturizer != null)
             {
                 if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
                 {
-                    m_SparseDimension += m_TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count;
+                    SparseDimension += TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count;
                 }
             }
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
             {
-                m_SparseDimension += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
+                SparseDimension += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
             }
 
-            m_DenseDimension = 0;
-            if (m_WordEmbedding != null)
+            if (preTrainType == RNNSharp.PRETRAIN_TYPE.AUTOENCODER)
             {
-                if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
-                {
-                    m_DenseDimension += m_WordEmbedding.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count;
-                }
+                InitializeAutoEncoder();
             }
         }
 
         public bool IsRunTimeFeatureUsed()
         {
-            var fc = m_FeatureConfiguration;
+            var fc = FeatureContext;
             return fc.ContainsKey(RT_FEATURE_CONTEXT);
         }
 
         public void ShowFeatureSize()
         {
-            var fc = m_FeatureConfiguration;
+            var fc = FeatureContext;
 
-            if (m_TFeaturizer != null)
-                Logger.WriteLine("Template feature size: {0}", m_TFeaturizer.GetFeatureSize());
+            if (TFeaturizer != null)
+                Logger.WriteLine("Template feature size: {0}", TFeaturizer.GetFeatureSize());
 
             if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
-                Logger.WriteLine("Template feature context size: {0}", m_TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
+                Logger.WriteLine("Template feature context size: {0}", TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
                 Logger.WriteLine("Run time feature size: {0}", TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
 
             if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
-                Logger.WriteLine("Word embedding feature size: {0}", m_WordEmbedding.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
+                Logger.WriteLine("Pretrained dense feature size: {0}", PretainedModel.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
         }
 
         void ExtractSparseFeature(int currentState, int numStates, List<string[]> features, State pState)
         {
             Dictionary<int, float> sparseFeature = new Dictionary<int, float>();
             int start = 0;
-            var fc = m_FeatureConfiguration;
+            var fc = FeatureContext;
 
             //Extract TFeatures in given context window
-            if (m_TFeaturizer != null)
+            if (TFeaturizer != null)
             {
                 if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
                 {
@@ -202,10 +226,10 @@ namespace RNNSharp
                     {
                         int offset = TruncPosition(currentState + v[j], 0, numStates);
 
-                        List<int> tfeatureList = m_TFeaturizer.GetFeatureIds(features, offset);
+                        List<int> tfeatureList = TFeaturizer.GetFeatureIds(features, offset);
                         foreach (int featureId in tfeatureList)
                         {
-                            if (m_TFeatureWeightType == TFEATURE_WEIGHT_TYPE_ENUM.BINARY)
+                            if (TFeatureWeightType == TFEATURE_WEIGHT_TYPE_ENUM.BINARY)
                             {
                                 sparseFeature[start + featureId] = 1;
                             }
@@ -221,7 +245,7 @@ namespace RNNSharp
                                 }
                             }
                         }
-                        start += m_TFeaturizer.GetFeatureSize();
+                        start += TFeaturizer.GetFeatureSize();
                     }
                 }
             }
@@ -248,22 +272,22 @@ namespace RNNSharp
             }
 
             SparseVector spSparseFeature = pState.SparseData;
-            spSparseFeature.SetDimension(m_SparseDimension);
+            spSparseFeature.SetDimension(SparseDimension);
             spSparseFeature.SetData(sparseFeature);
         }
 
         //Extract word embedding features from current context
         public VectorBase ExtractDenseFeature(int currentState, int numStates, List<string[]> features)
         {
-            var fc = m_FeatureConfiguration;
+            var fc = FeatureContext;
 
             if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
             {
                 List<int> v = fc[WORDEMBEDDING_CONTEXT];
                 if (v.Count == 1)
                 {
-                    string strKey = features[TruncPosition((int)currentState + v[0], 0, (int)numStates)][m_WordEmbeddingCloumn];
-                    return m_WordEmbedding.GetTermVector(strKey);
+                    string strKey = features[TruncPosition((int)currentState + v[0], 0, (int)numStates)][PretrainedModelColumn];
+                    return PretainedModel.GetTermVector(strKey);
                 }
 
                 CombinedVector dense = new CombinedVector();
@@ -272,12 +296,12 @@ namespace RNNSharp
                     int offset = currentState + v[j];
                     if (offset >= 0 && offset < numStates)
                     {
-                        string strKey = features[offset][m_WordEmbeddingCloumn];
-                        dense.Append(m_WordEmbedding.GetTermVector(strKey));
+                        string strKey = features[offset][PretrainedModelColumn];
+                        dense.Append(PretainedModel.GetTermVector(strKey));
                     }
                     else
                     {
-                        dense.Append(m_WordEmbedding.m_UnkEmbedding);
+                        dense.Append(PretainedModel.m_UnkEmbedding);
                     }
                 }
 
@@ -289,6 +313,21 @@ namespace RNNSharp
         }
 
 
+        PRETRAIN_TYPE preTrainType = RNNSharp.PRETRAIN_TYPE.EMBEDDING;
+        string autoEncoderModelFile = String.Empty;
+        string autoEncoderFeatureConfigFile = String.Empty;
+        RNNSharp.RNNDecoder autoEncoder = null;
+        public void InitializeAutoEncoder()
+        {
+            Logger.WriteLine("Initialize auto encoder...");
+
+            //Create feature extractors and load word embedding data from file
+            Featurizer featurizer = new Featurizer(autoEncoderFeatureConfigFile, null);
+
+            //Create instance for decoder
+            autoEncoder = new RNNSharp.RNNDecoder(autoEncoderModelFile, featurizer);
+        }
+
         public Sequence ExtractFeatures(Sentence sentence)
         {
             int n = sentence.TokensList.Count;
@@ -299,8 +338,24 @@ namespace RNNSharp
             {
                 State state = sequence.States[i];
                 ExtractSparseFeature(i, n, sentence.TokensList, state);
+            }
 
-                state.DenseData = ExtractDenseFeature(i, n, sentence.TokensList);
+            if (preTrainType == RNNSharp.PRETRAIN_TYPE.AUTOENCODER)
+            {
+                List<double[]> outputs = autoEncoder.ComputeTopHiddenLayerOutput(sentence);
+                for (int i = 0; i < n; i++)
+                {
+                    State state = sequence.States[i];
+                    state.DenseData = new SingleVector(outputs[i].Length, outputs[i]);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    State state = sequence.States[i];
+                    state.DenseData = ExtractDenseFeature(i, n, sentence.TokensList);
+                }
             }
 
             return sequence;

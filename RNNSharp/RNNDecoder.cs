@@ -63,5 +63,11 @@ namespace RNNSharp
 
             return predicted;
         }
+
+        public List<double[]> ComputeTopHiddenLayerOutput(Sentence sent)
+        {
+            Sequence seq = m_Featurizer.ExtractFeatures(sent);
+            return m_Rnn.ComputeTopHiddenLayerOutput(seq);
+        }
     }
 }
