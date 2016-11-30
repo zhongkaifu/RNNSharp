@@ -37,8 +37,8 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-    <Reference Include="System.Numerics.Vectors, Version=4.1.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Numerics.Vectors.4.1.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    <Reference Include="System.Numerics.Vectors, Version=4.1.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.3.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System.Xml.Linq" />
@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="BiRNN.cs" />
     <Compile Include="DropoutLayer.cs" />
+    <Compile Include="ISequence.cs" />
     <Compile Include="NCEOutputLayer.cs" />
     <Compile Include="RNN.cs" />
     <Compile Include="LSTMLayer.cs" />
@@ -68,7 +69,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RNNEncoder.cs" />
     <Compile Include="Sentence.cs" />
+    <Compile Include="SentencePair.cs" />
     <Compile Include="Sequence.cs" />
+    <Compile Include="SequencePair.cs" />
     <Compile Include="SimpleLayer.cs" />
     <Compile Include="TagSet.cs" />
     <Compile Include="SparseVector.cs" />

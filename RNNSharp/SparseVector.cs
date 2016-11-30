@@ -7,33 +7,46 @@ namespace RNNSharp
 {
     public class SparseVector : SingleVector
     {
-        KeyValuePair<int, float>[] m_Data;
-        int m_Dimension;
-        public int Count { get; set; }
+        List<KeyValuePair<int, float>> kvData;
+        int length;
 
-        public KeyValuePair<int, float> GetEntry(int pos) { return m_Data[pos]; }
+        public override int Length { get { return length; } }
 
-        public override int GetDimension() { return m_Dimension; }
-
-        public void ChangeValue(int positionInSparseVector, int dimension, float value)
+        public IEnumerator<KeyValuePair<int, float>> GetEnumerator()
         {
-            m_Data[positionInSparseVector] = new KeyValuePair<int, float>(dimension, value);
-        }
-
-        public void SetDimension(int s) { m_Dimension = s; }
-
-        public void SetData(Dictionary<int, float> m)
-        {
-            Count = m.Count;
-            m_Data = new KeyValuePair<int, float>[Count];
-
-            int count = 0;
-            foreach (KeyValuePair<int, float> pair in m)
+            foreach (KeyValuePair<int, float> pair in kvData)
             {
-                m_Data[count] = pair;
-                count++;
+                yield return pair;
             }
         }
 
+
+        public SparseVector()
+        {
+            kvData = new List<KeyValuePair<int, float>>();
+        }
+
+        public void ChangeValue(int positionInSparseVector, int dimension, float value)
+        {
+            kvData[positionInSparseVector] = new KeyValuePair<int, float>(dimension, value);
+        }
+
+        public void SetLength(int len) { length = len; }
+
+        public void AddKeyValuePairData(Dictionary<int, float> kv)
+        {
+            foreach (KeyValuePair<int, float> pair in kv)
+            {
+                kvData.Add(pair);
+            }
+        }
+
+        public void AddKeyValuePairData(SparseVector sparseVector)
+        {
+            foreach (KeyValuePair<int, float> pair in sparseVector)
+            {
+                kvData.Add(pair);
+            }
+        }
     }
 }

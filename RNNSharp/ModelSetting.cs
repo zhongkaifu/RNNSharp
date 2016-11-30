@@ -20,7 +20,6 @@ namespace RNNSharp
     {
         public string TagFile { get; set; }
         public TagSet Tags { get; set; }
-        public DataSet TrainDataSet { get; set; }
         public string ModelFile { get; set; }
         public List<int> HiddenLayerSizeList { get; set; }
         public float LearningRate { get; set; }
@@ -28,6 +27,8 @@ namespace RNNSharp
         public int Bptt { get; set; }
         public int MaxIteration { get; set; }
         public bool IsCRFTraining { get; set; }
+        public bool IsSeq2SeqTraining { get; set; }
+        public bool IsConstAlpha { get; set; }
         public long SaveStep { get; set; }
         public int ModelDirection { get; set; }
         public int VQ { get; set; }
@@ -51,7 +52,9 @@ namespace RNNSharp
                 Logger.WriteLine("RNN Direction: Bi-directional");
             }
 
-            Logger.WriteLine("Learning rate: {0}", LearningRate);
+            Logger.WriteLine("Seq2Seq model: {0}", IsSeq2SeqTraining);
+            Logger.WriteLine("Use const learning rate: {0}", IsConstAlpha);
+            Logger.WriteLine("Starting learning rate: {0}", LearningRate);
             Logger.WriteLine("Dropout: {0}", Dropout);
             Logger.WriteLine("Max Iteration: {0}", MaxIteration);
             Logger.WriteLine("Hidden layers: {0}", HiddenLayerSizeList.Count);

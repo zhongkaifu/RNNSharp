@@ -8,11 +8,12 @@ using System.Threading.Tasks;
 
 namespace RNNSharp
 {
-    abstract public class RNN
+    abstract public class RNN<T> where T: ISequence
     {
         public double logp;
         protected double minTknErrRatio = double.MaxValue;
         public virtual bool IsCRFTraining { get; set; }
+        public virtual MODELTYPE ModelType { get; set; }
         public virtual string ModelFile { get; set; }
         public string ModelTempFile { get { return ModelFile + ".tmp"; } }
         public virtual MODELDIRECTION ModelDirection { get; set; }
@@ -26,17 +27,23 @@ namespace RNNSharp
 
         public abstract int[] ProcessSequenceCRF(Sequence pSequence, RunningMode runningMode);
         public abstract int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> m);
+
+        public abstract int[] ProcessSeq2Seq(SequencePair pSequence, RunningMode runningMode);
+
+        public abstract int[] TestSeq2Seq(Sentence srcSentence, Featurizer featurizer);
+
         public abstract void CleanStatus();
         public abstract void SaveModel(string filename);
         public abstract void LoadModel(string filename);
 
         public abstract List<double[]> ComputeTopHiddenLayerOutput(Sequence pSequence);
+        public abstract int GetTopHiddenLayerSize();
 
 
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected Matrix<double> CRFSeqOutput;
 
-        public void SetInputLayer(State state, int curState, int numStates, int[] predicted, bool forward = true)
+        public void SetRuntimeFeatures(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
             if (predicted != null && state.RuntimeFeatures != null)
             {
@@ -309,7 +316,7 @@ namespace RNNSharp
             return output;
         }
 
-        public double TrainNet(DataSet trainingSet, int iter)
+        public double TrainNet(DataSet<T> trainingSet, int iter)
         {
             DateTime start = DateTime.Now;
             Logger.WriteLine("Iter " + iter + " begins with learning rate alpha = " + RNNHelper.LearningRate + " ...");
@@ -327,21 +334,45 @@ namespace RNNSharp
             Logger.WriteLine("Progress = 0/" + numSequence / 1000.0 + "K\r");
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                Sequence pSequence = trainingSet.SequenceList[curSequence];
-                wordCnt += pSequence.States.Length;
+                T pSequence = trainingSet.SequenceList[curSequence];
+
+                if (pSequence is Sequence)
+                {
+                    wordCnt += (pSequence as Sequence).States.Length;
+                }
+                else
+                {
+                    wordCnt += (pSequence as SequencePair).tgtSequence.States.Length;
+                }
 
                 int[] predicted;
                 if (IsCRFTraining == true)
                 {
-                    predicted = ProcessSequenceCRF(pSequence, RunningMode.Training);
+                    predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Training);
+                }
+                else if (ModelType == MODELTYPE.SEQ2SEQ)
+                {
+                    predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Training);
                 }
                 else
                 {
                     Matrix<double> m;
-                    predicted = ProcessSequence(pSequence, RunningMode.Training, false, out m);
+                    predicted = ProcessSequence(pSequence as Sequence, RunningMode.Training, false, out m);
                 }
 
-                int newTknErrCnt = GetErrorTokenNum(pSequence, predicted);
+                int newTknErrCnt = 0;
+
+                if (pSequence is Sequence)
+                {
+                    newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
+
+                }
+                else
+                {
+                    newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
+                }
+
+
                 tknErrCnt += newTknErrCnt;
                 if (newTknErrCnt > 0)
                 {
@@ -378,7 +409,7 @@ namespace RNNSharp
 
         public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
 
-        public bool ValidateNet(DataSet validationSet, int iter)
+        public bool ValidateNet(DataSet<T> validationSet, int iter)
         {
             Logger.WriteLine("Start validation ...");
             int wordcn = 0;
@@ -390,21 +421,42 @@ namespace RNNSharp
             int numSequence = validationSet.SequenceList.Count;
             for (int curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                Sequence pSequence = validationSet.SequenceList[curSequence];
-                wordcn += pSequence.States.Length;
+                T pSequence = validationSet.SequenceList[curSequence];
+                if (pSequence is Sequence)
+                {
+                    wordcn += (pSequence as Sequence).States.Length;
+                }
+                else
+                {
+                    wordcn += (pSequence as SequencePair).tgtSequence.States.Length;
+                }
 
                 int[] predicted;
                 if (IsCRFTraining == true)
                 {
-                    predicted = ProcessSequenceCRF(pSequence, RunningMode.Validate);
+                    predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Validate);
+                }
+                else if (ModelType == MODELTYPE.SEQ2SEQ)
+                {
+                    predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Validate);
                 }
                 else
                 {
                     Matrix<double> m;
-                    predicted = ProcessSequence(pSequence, RunningMode.Validate, false, out m);
+                    predicted = ProcessSequence(pSequence as Sequence, RunningMode.Validate, false, out m);
                 }
 
-                int newTknErrCnt = GetErrorTokenNum(pSequence, predicted);
+                int newTknErrCnt = 0;
+                if (pSequence is Sequence)
+                {
+                    newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
+
+                }
+                else
+                {
+                    newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
+                }
+
                 tknErrCnt += newTknErrCnt;
                 if (newTknErrCnt > 0)
                 {
@@ -545,6 +597,11 @@ namespace RNNSharp
         {
             Matrix<double> ys; 
             return ProcessSequence(seq, RunningMode.Test, false, out ys);
+        }
+
+        public int[] DecodeSeq2Seq(Sentence srcSent, Featurizer feature)
+        {
+            return TestSeq2Seq(srcSent, feature);
         }
 
         public int[] DecodeCRF(Sequence seq)

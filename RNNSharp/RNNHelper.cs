@@ -14,11 +14,11 @@ namespace RNNSharp
     {
         public static double GradientCutoff { get; set; }
         public static float LearningRate { get; set; }
+        public static bool IsConstAlpha { get; set; }
 
         public static Vector<double> vecMaxGrad;
         public static Vector<double> vecMinGrad;
         public static Vector<double> vecNormalLearningRate;
-
         public static Random rand = new Random(DateTime.Now.Millisecond);
 
         public static double random(double min, double max)
@@ -55,18 +55,32 @@ namespace RNNSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector<double> ComputeLearningRate(Vector<double> vecDelta, ref Vector<double> vecLearningRateWeights)
+        public static Vector<double> UpdateLearningRate(Vector<double> vecDelta, ref Vector<double> vecLearningRateWeights)
         {
-            vecLearningRateWeights += (vecDelta * vecDelta);
-            return vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRateWeights));
+            if (IsConstAlpha)
+            {
+                return vecNormalLearningRate;
+            }
+            else
+            {
+                vecLearningRateWeights += (vecDelta * vecDelta);
+                return vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRateWeights));
+            }
         }
 
         public static double UpdateLearningRate(Matrix<double> m, int i, int j, double delta)
         {
-            double dg = m[i][j] + delta * delta;
-            m[i][j] = dg;
+            if (IsConstAlpha)
+            {
+                return LearningRate;
+            }
+            else
+            {
+                double dg = m[i][j] + delta * delta;
+                m[i][j] = dg;
 
-            return LearningRate / (1.0 + Math.Sqrt(dg));
+                return LearningRate / (1.0 + Math.Sqrt(dg));
+            }
         }
 
         //Save matrix into file as binary format
@@ -132,6 +146,37 @@ namespace RNNSharp
                 }
             }
         }
+        public static double[] ConcatenateVector(VectorBase src1, double[] src2)
+        {
+            double[] dest = new double[src1.Length + src2.Length];
+            Parallel.Invoke(() =>
+            {
+                src1.CopyTo().CopyTo(dest, 0);
+            }
+            ,
+             () =>
+             {
+                 src2.CopyTo(dest, src1.Length);
+             });
+
+            return dest;
+        }
+
+        public static double[] ConcatenateVector(double[] src1, double[] src2)
+        {
+            double[] dest = new double[src1.Length + src2.Length];
+            Parallel.Invoke(() =>
+            {
+                src1.CopyTo(dest, 0);
+            }
+            ,
+             () =>
+             {
+                 src2.CopyTo(dest, src1.Length);
+             });
+
+            return dest;
+        }
 
         public static void matrixXvectorADD(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, bool cleanDest = true)
         {
@@ -182,16 +227,21 @@ namespace RNNSharp
             });
         }
 
-        public static void CheckModelFileType(string filename, out MODELDIRECTION modelDir)
+        public static void CheckModelFileType(string filename, out MODELDIRECTION modelDir, out MODELTYPE modelType)
         {
             using (StreamReader sr = new StreamReader(filename))
             {
                 BinaryReader br = new BinaryReader(sr.BaseStream);
-                int modelType = br.ReadInt32();
+                LAYERTYPE layerType = (LAYERTYPE)br.ReadInt32();
                 modelDir = (MODELDIRECTION)br.ReadInt32();
-            }
+                modelType = (MODELTYPE)br.ReadInt32();
 
-            Logger.WriteLine("Get model direction: {0}", modelDir);
+                Logger.WriteLine("Model information:");
+                Logger.WriteLine("File name : '{0}'", filename);
+                Logger.WriteLine("Direction: '{0}'", modelDir);
+                Logger.WriteLine("Model type: '{0}'", modelType);
+                Logger.WriteLine("Layer type: '{0}'", layerType);
+            }
         }
 
         public static Matrix<double> LoadMatrix(BinaryReader br)

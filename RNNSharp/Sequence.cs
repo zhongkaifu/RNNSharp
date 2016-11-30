@@ -7,26 +7,32 @@ using System.Collections.Generic;
 /// </summary>
 namespace RNNSharp
 {
-    public class Sequence
+    public class Sequence : ISequence
     {
         public State[] States { get;}
 
-        public int GetDenseDimension()
+        public int DenseFeatureSize
         {
-            if (0 == States.Length || States[0].DenseData == null)
+            get
             {
-                return 0;
-            }
-            else
-            {
-                return States[0].DenseData.GetDimension();
+                if (0 == States.Length || States[0].DenseFeature == null)
+                {
+                    return 0;
+                }
+                else
+                {
+                    return States[0].DenseFeature.Length;
+                }
             }
         }
 
-        public int GetSparseDimension()
+        public int SparseFeatureSize
         {
-            if (0 == States.Length) return 0;
-            else return States[0].SparseData.GetDimension();
+            get
+            {
+                if (0 == States.Length) return 0;
+                else return States[0].SparseFeature.Length;
+            }
         }
 
         public bool SetLabel(Sentence sent, TagSet tagSet)

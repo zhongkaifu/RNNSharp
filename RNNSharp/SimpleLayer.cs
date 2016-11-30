@@ -34,7 +34,7 @@ namespace RNNSharp
         public double[] DenseFeature;
         public virtual int DenseFeatureSize { get; set; }
 
-        public int CurrentLabelId;
+        public List<int> LabelShortList;
 
         public SimpleLayer(int hiddenLayerSize)
         {
@@ -54,13 +54,26 @@ namespace RNNSharp
             er = new double[LayerSize];
         }
 
-        public SimpleLayer GetHiddenLayer()
+        public SimpleLayer CloneHiddenLayer()
         {
             SimpleLayer m = new SimpleLayer(LayerSize);
-            for (int i = 0; i < LayerSize; i++)
+
+            int j = 0;
+            while (j < LayerSize - Vector<double>.Count)
             {
-                m.cellOutput[i] = cellOutput[i];
-                m.er[i] = er[i];
+                Vector<double> vCellOutput = new Vector<double>(cellOutput, j);
+                vCellOutput.CopyTo(m.cellOutput, j);
+                Vector<double> vEr = new Vector<double>(er, j);
+                vEr.CopyTo(m.er, j);
+
+                j += Vector<double>.Count;
+            }
+
+            while (j < LayerSize)
+            {
+                m.cellOutput[j] = cellOutput[j];
+                m.er[j] = er[j];
+                j++;
             }
 
             return m;
@@ -147,6 +160,12 @@ namespace RNNSharp
 
         public virtual void computeLayer(SparseVector sparseFeature, double[] denseFeature, bool isTrain = true)
         {
+            if (DenseFeatureSize > 0)
+            {
+                DenseFeature = denseFeature;
+                RNNHelper.matrixXvectorADD(cellOutput, denseFeature, DenseWeights, LayerSize, DenseFeatureSize);
+            }
+
             if (SparseFeatureSize > 0)
             {
                 //Apply sparse features
@@ -155,19 +174,12 @@ namespace RNNSharp
                 {
                     double score = 0;
                     double[] vector_b = SparseWeights[b];
-                    for (int i = 0; i < SparseFeature.Count; i++)
+                    foreach (KeyValuePair<int, float> pair in SparseFeature)
                     {
-                        var entry = SparseFeature.GetEntry(i);
-                        score += entry.Value * vector_b[entry.Key];
+                        score += pair.Value * vector_b[pair.Key];
                     }
                     cellOutput[b] += score;
                 });
-            }
-
-            if (DenseFeatureSize > 0)
-            {
-                DenseFeature = denseFeature;
-                RNNHelper.matrixXvectorADD(cellOutput, denseFeature, DenseWeights, LayerSize, DenseFeatureSize);
             }
         }
 
@@ -197,10 +209,10 @@ namespace RNNSharp
                 {
                     double er2 = er[c];
                     double[] vector_c = SparseWeights[c];
-                    for (int a = 0; a < SparseFeature.Count; a++)
+                    foreach (KeyValuePair<int, float> pair in SparseFeature)
                     {
-                        int pos = SparseFeature.GetEntry(a).Key;
-                        double val = SparseFeature.GetEntry(a).Value;
+                        int pos = pair.Key;
+                        double val = pair.Value;
                         double delta = RNNHelper.NormalizeGradient(er2 * val);
                         double newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
                         vector_c[pos] += newLearningRate * delta;
@@ -298,7 +310,7 @@ namespace RNNSharp
             {
                 double cell = cellOutput[c];
                 if (cell > 50) cell = 50;
-                if (cell < -50) cell = -50;
+                else if (cell < -50) cell = -50;
                 double val = Math.Exp(cell);
                 sum += val;
                 cellOutput[c] = val;

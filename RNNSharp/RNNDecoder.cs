@@ -9,40 +9,46 @@ namespace RNNSharp
 {
     public class RNNDecoder
     {
-        RNN m_Rnn;
-        Featurizer m_Featurizer;
+        RNN<Sequence> rnn;
+        public Featurizer Featurizer;
+        public MODELTYPE ModelType { get; set; }
 
-        public RNNDecoder(string strModelFileName, Featurizer featurizer)
+        public RNNDecoder(string strModelFileName)
         {
             MODELDIRECTION modelDir = MODELDIRECTION.FORWARD;
+            MODELTYPE modelType;
 
-            RNNHelper.CheckModelFileType(strModelFileName, out modelDir);
+            RNNHelper.CheckModelFileType(strModelFileName, out modelDir, out modelType);
             if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
             {
                 Logger.WriteLine("Model Structure: Bi-directional RNN");
-                m_Rnn = new BiRNN();
+                rnn = new BiRNN<Sequence>();
             }
             else
             {
                 Logger.WriteLine("Model Structure: Simple RNN");
-                m_Rnn = new ForwardRNN();
+                rnn = new ForwardRNN<Sequence>();
             }
+            ModelType = modelType;
 
-            m_Rnn.LoadModel(strModelFileName);
-            Logger.WriteLine("CRF Model: {0}", m_Rnn.IsCRFTraining);
-            m_Featurizer = featurizer;
+            rnn.LoadModel(strModelFileName);
+            Logger.WriteLine("CRF Model: {0}", rnn.IsCRFTraining);
         }
 
+        public void SetFeaturizer(Featurizer featurizer)
+        {
+            Featurizer = featurizer;
+        }
 
         public int[][] ProcessNBest(Sentence sent, int nbest)
         {
-            if (m_Rnn.IsCRFTraining == false)
+            if (rnn.IsCRFTraining == false)
             {
                 throw new ArgumentException("N-best result is only for RNN-CRF model.");
             }
 
-            Sequence seq = m_Featurizer.ExtractFeatures(sent);
-            int[][] predicted = m_Rnn.DecodeNBestCRF(seq, nbest);
+            Sequence seq = Featurizer.ExtractFeatures(sent);
+            int[][] predicted = rnn.DecodeNBestCRF(seq, nbest);
 
             return predicted;
         }
@@ -50,24 +56,41 @@ namespace RNNSharp
 
         public int[] Process(Sentence sent)
         {
-            Sequence seq = m_Featurizer.ExtractFeatures(sent);
+            Sequence seq = Featurizer.ExtractFeatures(sent);
             int[] predicted;
-            if (m_Rnn.IsCRFTraining == true)
+            if (rnn.IsCRFTraining == true)
             {
-                predicted = m_Rnn.DecodeCRF(seq);
+                predicted = rnn.DecodeCRF(seq);
             }
             else
             {
-                predicted = m_Rnn.DecodeNN(seq);
+                predicted = rnn.DecodeNN(seq);
             }
 
             return predicted;
         }
 
+        public int[] ProcessSeq2Seq(Sentence sent)
+        {
+            int[] predicted;
+            predicted = rnn.TestSeq2Seq(sent, Featurizer);
+            return predicted;
+        }
+
         public List<double[]> ComputeTopHiddenLayerOutput(Sentence sent)
         {
-            Sequence seq = m_Featurizer.ExtractFeatures(sent);
-            return m_Rnn.ComputeTopHiddenLayerOutput(seq);
+            Sequence seq = Featurizer.ExtractFeatures(sent);
+            return rnn.ComputeTopHiddenLayerOutput(seq);
+        }
+
+        public List<double[]> ComputeTopHiddenLayerOutput(Sequence seq)
+        {
+            return rnn.ComputeTopHiddenLayerOutput(seq);
+        }
+
+        public int GetTopHiddenLayerSize()
+        {
+            return rnn.GetTopHiddenLayerSize();
         }
     }
 }

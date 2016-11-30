@@ -6,9 +6,9 @@ using System.Collections.Generic;
 /// </summary>
 namespace RNNSharp
 {
-    public class DataSet
+    public class DataSet<T> where T : ISequence
     {
-        public List<Sequence> SequenceList { get; set; }
+        public List<T> SequenceList { get; set; }
         public int TagSize { get; set; }
         public List<List<float>> CRFLabelBigramTransition { get; set; }
 
@@ -18,7 +18,7 @@ namespace RNNSharp
             for (int i = 0; i < SequenceList.Count; i++)
             {
                 int m = rnd.Next() % SequenceList.Count;
-                Sequence tmp = SequenceList[i];
+                T tmp = SequenceList[i];
                 SequenceList[i] = SequenceList[m];
                 SequenceList[m] = tmp;
             }
@@ -27,20 +27,26 @@ namespace RNNSharp
         public DataSet(int tagSize)
         {
             TagSize = tagSize;
-            SequenceList = new List<Sequence>();
+            SequenceList = new List<T>();
             CRFLabelBigramTransition = new List<List<float>>();
         }
 
-        public int DenseFeatureSize()
+        public int DenseFeatureSize
         {
-            if (0 == SequenceList.Count) return 0;
-            return SequenceList[0].GetDenseDimension();
+            get
+            {
+                if (0 == SequenceList.Count) return 0;
+                return SequenceList[0].DenseFeatureSize;
+            }
         }
 
-        public int GetSparseDimension()
+        public int SparseFeatureSize
         {
-            if (0 == SequenceList.Count) return 0;
-            return SequenceList[0].GetSparseDimension();
+            get
+            {
+                if (0 == SequenceList.Count) return 0;
+                return SequenceList[0].SparseFeatureSize;
+            }
         }
 
         public void BuildLabelBigramTransition(float smooth = 1.0f)
@@ -61,7 +67,7 @@ namespace RNNSharp
 
             for (int i = 0; i < SequenceList.Count; i++)
             {
-                var sequence = SequenceList[i];
+                var sequence = SequenceList[i] as Sequence;
                 if (sequence.States.Length <= 1)
                     continue;
 

@@ -491,10 +491,9 @@ namespace RNNSharp
                 {
                     //Apply sparse weights
                     Vector4[] weights = input2hidden[j];
-                    for (int i = 0; i < SparseFeature.Count; i++)
+                    foreach (KeyValuePair<int, float> pair in SparseFeature)
                     {
-                        var entry = SparseFeature.GetEntry(i);
-                        vecCell_j += weights[entry.Key] * entry.Value;
+                        vecCell_j += weights[pair.Key] * pair.Value;
                     }
                 }
 
@@ -574,16 +573,12 @@ namespace RNNSharp
                 if (SparseFeatureSize > 0)
                 {
                     //Get sparse feature and apply it into hidden layer
-                    var sparse = SparseFeature;
-                    int sparseFeatureSize = sparse.Count;
-
                     Vector4[] w_i = input2hidden[i];
                     Vector3[] wd_i = input2hiddenDeri[i];
                     Vector4[] wlr_i = Input2HiddenLearningRate[i];
-                    for (int k = 0; k < sparseFeatureSize; k++)
-                    {
-                        var entry = sparse.GetEntry(k);
 
+                    foreach (KeyValuePair<int, float> entry in SparseFeature)
+                    {
                         Vector3 wd = vecDerivate * entry.Value;
                         if (curState > 0)
                         {
@@ -631,7 +626,6 @@ namespace RNNSharp
                 }
 
                 //Update peephols weights
-
                 //partial derivatives for internal connections
                 c.dSWPeepholeIn = c.dSWPeepholeIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellState;
 
@@ -655,8 +649,6 @@ namespace RNNSharp
                 c.wPeepholeIn += vecCellDelta.X;
                 c.wPeepholeForget += vecCellDelta.Y;
                 c.wPeepholeOut += vecCellDelta.Z;
-
-
 
                 //Update cells weights
                 double c_previousCellOutput = previousCellOutput[i];

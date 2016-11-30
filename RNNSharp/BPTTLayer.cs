@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.IO;
 using AdvUtils;
+using System.Collections.Generic;
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
@@ -196,10 +197,9 @@ namespace RNNSharp
                     if (SparseFeatureSize > 0)
                     {
                         double[] vector_b = SparseWeights[b];
-                        for (int i = 0; i < SparseFeature.Count; i++)
+                        foreach (KeyValuePair<int, float> pair in SparseFeature)
                         {
-                            var entry = SparseFeature.GetEntry(i);
-                            score += entry.Value * vector_b[entry.Key];
+                            score += pair.Value * vector_b[pair.Key];
                         }
                     }
                     cellOutput[b] += score;
@@ -324,10 +324,9 @@ namespace RNNSharp
                     {
                         //sparse weight update hidden->input
                         vector_a = SparseWeightsDelta[a];
-                        for (i = 0; i < sparse.Count; i++)
+                        foreach (KeyValuePair<int, float> pair in sparse)
                         {
-                            var entry = sparse.GetEntry(i);
-                            vector_a[entry.Key] += er2 * entry.Value;
+                            vector_a[pair.Key] += er2 * pair.Value;
                         }
                     }
 
@@ -396,7 +395,7 @@ namespace RNNSharp
                     vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                     //Computing learning rate and update its weights
-                    Vector<double> vecLearningRate = RNNHelper.ComputeLearningRate(vecDelta, ref vecLearningRateWeights);
+                    Vector<double> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
                     vecLearningRateWeights.CopyTo(vector_lr, i);
 
                     //Update weights
@@ -439,7 +438,7 @@ namespace RNNSharp
                         vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                         //Computing learning rate and update its weights
-                        Vector<double> vecLearningRate = RNNHelper.ComputeLearningRate(vecDelta, ref vecLearningRateWeights);
+                        Vector<double> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
                         vecLearningRateWeights.CopyTo(vector_lr, i);
 
                         //Update weights
@@ -477,9 +476,9 @@ namespace RNNSharp
                         if (sparse == null)
                             break;
 
-                        for (i = 0; i < sparse.Count; i++)
+                        foreach (KeyValuePair<int, float> pair in sparse)
                         {
-                            int pos = sparse.GetEntry(i).Key;
+                            int pos = pair.Key;
 
                             double delta = RNNHelper.NormalizeGradient(vector_bf[pos]);
                             double newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, b, pos, delta);

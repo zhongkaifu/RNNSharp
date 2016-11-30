@@ -8,9 +8,12 @@ namespace RNNSharp
 {
     public class VectorBase
     {
-        public virtual int GetDimension()
+        public virtual int Length
         {
-            return 0;
+            get
+            {
+                return 0;
+            }
         }
 
         public virtual double this[int i]
@@ -38,7 +41,7 @@ namespace RNNSharp
         int m_nLenPerBlock;
         int m_nLen;
 
-        public override int GetDimension() { return m_nLen; }
+        public override int Length { get { return m_nLen; } }
 
         public CombinedVector()
         {
@@ -51,14 +54,14 @@ namespace RNNSharp
         {
             if (m_nLenPerBlock > 0)
             {
-                if (m_nLenPerBlock != vector.GetDimension())
+                if (m_nLenPerBlock != vector.Length)
                 {
                     throw new Exception("The dimension of appending vector is not the same as the previous one");
                 }
             }
 
             m_innerData.Add(vector);
-            m_nLenPerBlock = vector.GetDimension();
+            m_nLenPerBlock = vector.Length;
             m_nLen += m_nLenPerBlock;
         }
 
@@ -80,7 +83,7 @@ namespace RNNSharp
             double[] val = new double[m_nLen];
             for (int i = 0; i < m_innerData.Count; i++)
             {
-                for (int j = 0; j < m_innerData[i].GetDimension(); j++)
+                for (int j = 0; j < m_innerData[i].Length; j++)
                 {
                     val[i * m_nLenPerBlock + j] = m_innerData[i][j];
                 }
@@ -94,8 +97,7 @@ namespace RNNSharp
     public class SingleVector : VectorBase
     {
         private double[] m_innerData;
-        int m_nLen;
-        public override int GetDimension() { return m_nLen; }
+        public override int Length { get { return m_innerData.Length; } }
 
         public SingleVector()
         {
@@ -104,9 +106,8 @@ namespace RNNSharp
 
         public SingleVector(int nLen, float[] val)
         {
-            m_nLen = nLen;
-            m_innerData = new double[m_nLen];
-            for (int i = 0; i < m_nLen; i++)
+            m_innerData = new double[nLen];
+            for (int i = 0; i < nLen; i++)
             {
                 m_innerData[i] = val[i];
             }
@@ -114,9 +115,8 @@ namespace RNNSharp
 
         public SingleVector(int nLen, double[] val)
         {
-            m_nLen = nLen;
-            m_innerData = new double[m_nLen];
-            for (int i = 0; i < m_nLen; i++)
+            m_innerData = new double[nLen];
+            for (int i = 0; i < nLen; i++)
             {
                 m_innerData[i] = (float)val[i];
             }
@@ -125,7 +125,6 @@ namespace RNNSharp
         public SingleVector(int nLen)
         {
             m_innerData = new double[nLen];
-            m_nLen = nLen;
         }
 
 

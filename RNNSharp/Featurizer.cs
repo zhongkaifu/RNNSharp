@@ -23,13 +23,19 @@ namespace RNNSharp
     public class Featurizer
     {
         public TagSet TagSet { get; set; }
+        public RNNSharp.RNNDecoder AutoEncoder = null;
+        public int SparseFeatureSize;
 
         Dictionary<string, List<int>> FeatureContext;
-        int SparseDimension;
         int PretrainedModelColumn;
         TFEATURE_WEIGHT_TYPE_ENUM TFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
         WordEMWrapFeaturizer PretainedModel;
         TemplateFeaturizer TFeaturizer;
+        bool bSeq2Seq = false;
+        PRETRAIN_TYPE preTrainType = RNNSharp.PRETRAIN_TYPE.EMBEDDING;
+        string autoEncoderModelFile = String.Empty;
+        string autoEncoderFeatureConfigFile = String.Empty;
+
 
         static string TFEATURE_CONTEXT = "TFEATURE_CONTEXT";
         static string TFEATURE_FILENAME = "TFEATURE_FILENAME";
@@ -157,8 +163,9 @@ namespace RNNSharp
             return (current < lower) ? lower : ((current >= upper) ? upper - 1 : current);
         }
 
-        public Featurizer(string strFeatureConfigFileName, TagSet tagSet)
+        public Featurizer(string strFeatureConfigFileName, TagSet tagSet, bool seq2seq = false)
         {
+            bSeq2Seq = seq2seq;
             LoadFeatureConfigFromFile(strFeatureConfigFileName);
             TagSet = tagSet;
             InitComponentFeaturizer();
@@ -167,21 +174,21 @@ namespace RNNSharp
         void InitComponentFeaturizer()
         {
             var fc = FeatureContext;
-            SparseDimension = 0;
+            SparseFeatureSize = 0;
             if (TFeaturizer != null)
             {
                 if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
                 {
-                    SparseDimension += TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count;
+                    SparseFeatureSize += TFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count;
                 }
             }
 
             if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
             {
-                SparseDimension += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
+                SparseFeatureSize += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
             }
 
-            if (preTrainType == RNNSharp.PRETRAIN_TYPE.AUTOENCODER)
+            if (preTrainType == RNNSharp.PRETRAIN_TYPE.AUTOENCODER || bSeq2Seq)
             {
                 InitializeAutoEncoder();
             }
@@ -271,9 +278,9 @@ namespace RNNSharp
                 }
             }
 
-            SparseVector spSparseFeature = pState.SparseData;
-            spSparseFeature.SetDimension(SparseDimension);
-            spSparseFeature.SetData(sparseFeature);
+            SparseVector spSparseFeature = pState.SparseFeature;
+            spSparseFeature.SetLength(SparseFeatureSize);
+            spSparseFeature.AddKeyValuePairData(sparseFeature);
         }
 
         //Extract word embedding features from current context
@@ -312,11 +319,6 @@ namespace RNNSharp
             return new SingleVector();
         }
 
-
-        PRETRAIN_TYPE preTrainType = RNNSharp.PRETRAIN_TYPE.EMBEDDING;
-        string autoEncoderModelFile = String.Empty;
-        string autoEncoderFeatureConfigFile = String.Empty;
-        RNNSharp.RNNDecoder autoEncoder = null;
         public void InitializeAutoEncoder()
         {
             Logger.WriteLine("Initialize auto encoder...");
@@ -325,8 +327,33 @@ namespace RNNSharp
             Featurizer featurizer = new Featurizer(autoEncoderFeatureConfigFile, null);
 
             //Create instance for decoder
-            autoEncoder = new RNNSharp.RNNDecoder(autoEncoderModelFile, featurizer);
+            AutoEncoder = new RNNSharp.RNNDecoder(autoEncoderModelFile);
+            AutoEncoder.SetFeaturizer(featurizer);
         }
+
+
+        public SequencePair ExtractFeatures(SentencePair sentence)
+        {
+            SequencePair sPair = new SequencePair();
+            sPair.autoEncoder = AutoEncoder;
+            sPair.srcSentence = sentence.srcSentence;
+            sPair.tgtSequence = ExtractFeatures(sentence.tgtSentence);
+
+            return sPair;
+        }
+
+        public State ExtractFeatures(string[] word)
+        {
+            State state = new State();
+            List<string[]> tokenList = new List<string[]>();
+            tokenList.Add(word);
+
+            ExtractSparseFeature(0, 1, tokenList, state);
+            state.DenseFeature = ExtractDenseFeature(0, 1, tokenList);
+
+            return state;
+        }
+
 
         public Sequence ExtractFeatures(Sentence sentence)
         {
@@ -342,11 +369,11 @@ namespace RNNSharp
 
             if (preTrainType == RNNSharp.PRETRAIN_TYPE.AUTOENCODER)
             {
-                List<double[]> outputs = autoEncoder.ComputeTopHiddenLayerOutput(sentence);
+                List<double[]> outputs = AutoEncoder.ComputeTopHiddenLayerOutput(sentence);
                 for (int i = 0; i < n; i++)
                 {
                     State state = sequence.States[i];
-                    state.DenseData = new SingleVector(outputs[i].Length, outputs[i]);
+                    state.DenseFeature = new SingleVector(outputs[i].Length, outputs[i]);
                 }
             }
             else
@@ -354,7 +381,7 @@ namespace RNNSharp
                 for (int i = 0; i < n; i++)
                 {
                     State state = sequence.States[i];
-                    state.DenseData = ExtractDenseFeature(i, n, sentence.TokensList);
+                    state.DenseFeature = ExtractDenseFeature(i, n, sentence.TokensList);
                 }
             }
 

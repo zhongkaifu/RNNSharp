@@ -12,7 +12,7 @@ namespace RNNSharp
     {
         public List<string[]> TokensList { get; }
 
-        public Sentence(List<string[]> tokensList)
+        public Sentence(List<string[]> tokensList, bool addSentBE = true)
         {
             int dim = 0;
             TokensList = new List<string[]>();
@@ -35,21 +35,24 @@ namespace RNNSharp
                 TokensList.Add(tokens);
             }
 
-            //Add begin/end of sentence flag into feature
-            string[] beginFeatures = new string[dim];
-            string[] endFeatures = new string[dim];
-
-            for (int i = 0; i < dim - 1; i++)
+            if (addSentBE)
             {
-                beginFeatures[i] = "<s>";
-                endFeatures[i] = "</s>";
+                //Add begin/end of sentence flag into feature
+                string[] beginFeatures = new string[dim];
+                string[] endFeatures = new string[dim];
+
+                for (int i = 0; i < dim - 1; i++)
+                {
+                    beginFeatures[i] = "<s>";
+                    endFeatures[i] = "</s>";
+                }
+
+                beginFeatures[dim - 1] = TagSet.DefaultTag;
+                endFeatures[dim - 1] = TagSet.DefaultTag;
+
+                TokensList.Insert(0, beginFeatures);
+                TokensList.Add(endFeatures);
             }
-
-            beginFeatures[dim - 1] = TagSet.DefaultTag;
-            endFeatures[dim - 1] = TagSet.DefaultTag;
-
-            TokensList.Insert(0, beginFeatures);
-            TokensList.Add(endFeatures);
         }
 
         public override string ToString()

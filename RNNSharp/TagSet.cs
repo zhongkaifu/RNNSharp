@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using AdvUtils;
+using System;
+using System.Collections.Generic;
 using System.IO;
 
 /// <summary>
@@ -61,8 +63,15 @@ namespace RNNSharp
                         continue;
                     }
 
-                    m_Tag2Index.Add(strLine, idx);
-                    idx++;
+                    if (m_Tag2Index.ContainsKey(strLine))
+                    {
+                        Logger.WriteLine(String.Format("Character '{0}' (index = '{1}') is duplicated in tag set.", strLine, idx));
+                    }
+                    else
+                    {
+                        m_Tag2Index.Add(strLine, idx);
+                        idx++;
+                    }
                 }
             }
         }

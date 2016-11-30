@@ -1,16 +1,14 @@
 # RNNSharp
-RNNSharp is a toolkit of deep recurrent neural network which is widely used for many different kinds of tasks, such as sequence labeling. It's written by C# language and based on .NET framework 4.6 or above version.
+RNNSharp is a toolkit of deep recurrent neural network which is widely used for many different kinds of tasks, such as sequence labeling, sequence-to-sequence and so on. It's written by C# language and based on .NET framework 4.6 or above version.
 
-This page will introduces you about what is RNNSharp, how it works and how to use it. To get the demo package, please access release page and download the package.
+This page introduces what is RNNSharp, how it works and how to use it. To get the demo package, you can access release page.
 
 ## Overview
-RNNSharp supports many different types of deep recurrent neural network (aka DeepRNN) structures.In the aspect of historical memory, it supports BPTT(BackPropagation Through Time) and LSTM(Long Short-Term Memory) structures. And in respect of output layer structure, RNNSharp supports native output layer and recurrent CRFs[1]. In additional, RNNSharp also support forward RNN and bi-directional RNN structures.
+RNNSharp supports many different types of deep recurrent neural network (aka DeepRNN) structures. In terms of historical memory, it supports BPTT(BackPropagation Through Time) and LSTM(Long Short-Term Memory) structures. And in respect of output layer structure, RNNSharp supports softmax, negative sampling softmax and recurrent CRFs[1]. In additional, RNNSharp also supports forward RNN and bi-directional RNN structures.
 
-For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. It's not good at preserving long time historical memory. LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure which helps it to save very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences.
+For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. It's not good at preserving long time historical memory. LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure for very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences.
 
-For native RNN output, many widely experiments and applications have proved that it has better results than tranditional algorithms, such as MMEM, for online sequence labeling tasks, such as speech recognition, auto suggestion and so on.
-
-For RNN-CRF, based on native RNN outputs and their transition, we compute CRF output for entire sequence. Compred with native RNN, RNN-CRF has better performance for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF.
+For output layer, softmax output layer is the tranditional type which is widely used in online sequence labeling tasks, such as speech recognition, auto suggestion and so on. Negative sampling softmax output layer is especially used for the tasks with large output vocabulary, such as sequence generation tasks (sequence-to-sequence model). For recurrent CRF, based on softmax outputs and tags transition, RNNSharp computes CRF output for entire sequence. Compred with native RNN, RNN-CRF has better performance for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF.
 
 For bi-directional RNN, the output result combines the result of both forward RNN and backward RNN. It usually has better performance than single-directional RNN.
 
@@ -20,8 +18,11 @@ Here is an example of deep bi-directional RNN-CRF network. It contains 3 hidden 
 Here is the inner structure of one bi-directional hidden layer.  
 ![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpLayer.jpg)
 
+Here is the neural network for sequence-to-sequence task. "TokenN" are from source sequence, and "ELayerX-Y" are auto-encoder's hidden layers. Auto-encoder is defined in feature configuration file. "<s>" is always the beginning of target sentence, and "DLayerX-Y" means the decoder's hidden layers. In decoder, it generates one token at one time until "</s>" is generated.  
+![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpSeq2Seq.jpg)
+
 ## Supported Feature Types
-RNNSharp supports four types of feature set. They are template features, context template features, run time feature and word embedding features. These features are controlled by configuration file, the following paragraph will introduce what these features are and how to use them in configuration file.
+RNNSharp supports four types of feature set. They are template features, context template features, run time feature and word embedding features. These features are controlled by configuration file, the following paragraph will introduce how these feaures work.
 
 ## Template Features
 
@@ -155,9 +156,7 @@ Training corpus contains many records to describe what the model should be. For 
 
 In training file, each record can be represented as a matrix and ends with an empty line. In the matrix, each row describes one token and its features, and each column represents a feature in one dimension. In entire training corpus, the number of column must be fixed.
 
-When RNNSharp encodes, if the column size is N, according template file describes, the first N-1 columns will be used as input data for binary feature set generation and model training. The Nth column (aka last column) is the answer of current token, which the model should output. 
-
-There is an example for named entity recognition task(The full training file is at release section, you can download it there): 
+Sequence labeling task and sequence-to-sequence task have different training corpus format. For sequence labeling tasks, the first N-1 columns are input features for training, and the Nth column (aka last column) is the answer of current token. Here is an example for named entity recognition task(The full training file is at release section, you can download it there): 
 
 Word       | Pos  | Tag
 -----------|------|----
@@ -195,13 +194,31 @@ The named entity type looks like "Position_NamedEntityType". "Position" is the w
  ORGANIZATION : the name of one organization  
  LOCATION : the name of one location  
 
+For sequence-to-sequence task, the training corpus format is different. For each sequence pair, it has two sections, one is source sequence, the other is target sequence. Here is an example:  
+ 
+Word       
+--------
+What   
+is     
+your     
+name    
+?       
+
+I
+am
+Zhongkai
+Fu
+
+In above example, "What is your name ?" is the source sentence, and "I am Zhongkai Fu" is the target sentence generated by RNNSharp seq-to-seq model. In source sentence, beside word features, any other feautes can be added for it as well such as postag feature in sequence labeling task in above.  
+
+
 ## Test file format
 
-Test file has the similar format as training file. The only different between them is the last column. In test file, all columns are features for model decoding.
+Test file has the similar format as training file. For sequence labeling task, the only different between them is the last column. In test file, all columns are features for model decoding. For sequence-to-sequence task, it only contains source sequence. The target sentence will be generated by model.  
 
-## Tag Mapping File
+## Tag (Output Vocabulary) File
 
-This file contains available result tags of the model. For readable, RNNSharp uses tag name in corpus, however, for high efficiency in encoding and decoding, tag names are mapped into integer values. The mapping is defined in a file (-tagfile as parameter in console tool). Each line is one tag name.
+For sequence labeling task, this file contains output tag set. For sequence-to-sequence task, it's output vocabulary file.  
 
 ## Console Tool
 
@@ -232,10 +249,15 @@ RNNSharpConsole.exe -mode train <parameters>
 -savestep <int>: save temporary model after every <int> sentence, default is 0  
 -dir <int> : RNN directional: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0  
 -vq <int> : Model vector quantization, 0 is disable, 1 is enable. default is 0  
+-seq2seq <boolean> : Train a sequence-to-sequence model if it's true, otherwise, train a sequence labeling model. Default is false  
 
-Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0  
+Example for sequence labeling task: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0  
   
 This command trains a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one softmax output layer. The first hidden layer size is 200 and the second hidden layer size is 100  
+
+Example for sequence-to-sequence task: RNNSharpConsole.exe -mode train -trainfile train.txt -modelfile model.bin -ftrfile features_seq2seq.txt -tagfile tags.txt -hiddenlayertype lstm -outputlayertype ncesoftmax -ncesamplesize 20 -layersize 300 -alpha 0.1 -crf 0 -maxiter 0 -savestep 200K -dir 0 -dropout 0 -seq2seq true  
+
+This command trains a forward-directional sequence-to-sequence LSTM model, and the output layer is negative sampling softmax. The encoder is defined in [AUTOENCODER_XXX] section in features_seq2seq.txt file.  
 
 ### Decode Model
 

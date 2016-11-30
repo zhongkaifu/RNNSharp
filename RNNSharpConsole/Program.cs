@@ -34,10 +34,12 @@ namespace RNNSharpConsole
         static int iVQ = 0;
         static float gradientCutoff = 15.0f;
         static int nceSampleSize = 15;
+        static bool Seq2Seq = false;
+        static bool constAlpha = false;
 
         static void UsageTitle()
         {
-            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.1 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.2 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         static void Usage()
@@ -63,16 +65,16 @@ namespace RNNSharpConsole
             Console.WriteLine("\tEncoded model file");
 
             Console.WriteLine(" -hiddenlayertype <string>");
-            Console.WriteLine("\tSupported type: BPTT and LSTM, default is BPTT");
+            Console.WriteLine("\tSupported type: BPTT and LSTM. Default is BPTT");
 
             Console.WriteLine(" -outputlayertype <string>");
-            Console.WriteLine("\tSupported type: Softmax and NCESoftmax, default is Softmax");
+            Console.WriteLine("\tSupported type: Softmax and NCESoftmax. Default is Softmax");
 
             Console.WriteLine(" -ncesamplesize <int>");
-            Console.WriteLine("\tNoise contrastive estimation(NCE) sample size, default is 15");
+            Console.WriteLine("\tNoise contrastive estimation(NCE) sample size. Default is 15");
 
             Console.WriteLine(" -dir <int>");
-            Console.WriteLine("\tRecurrent direction: 0 - Forward RNN, 1 - Bi-directional RNN, default is 0");
+            Console.WriteLine("\tRecurrent direction: 0 - Forward RNN, 1 - Bi-directional RNN. Default is 0");
 
             Console.WriteLine(" -ftrfile <string>");
             Console.WriteLine("\tFeature configuration file");
@@ -81,31 +83,37 @@ namespace RNNSharpConsole
             Console.WriteLine("\tSupported output tagid-name list file");
 
             Console.WriteLine(" -alpha <float>");
-            Console.WriteLine("\tInitializing learning rate, default is 0.1");
+            Console.WriteLine("\tInitializing learning rate. Default is 0.1");
+
+            Console.WriteLine(" -constalpha <boolean>");
+            Console.WriteLine("\tUse const learning rat. Default is false");
 
             Console.WriteLine(" -dropout <float>");
-            Console.WriteLine("\tDropout ratio [0, 1.0), default is 0");
+            Console.WriteLine("\tDropout ratio [0, 1.0). Default is 0");
 
             Console.WriteLine(" -layersize <int>");
-            Console.WriteLine("\tHidden layer size. The size of different layer is separated by comma, default is one layer which size is 200");
+            Console.WriteLine("\tHidden layer size. The size of different layer is separated by comma. Default is one layer which size is 200");
 
             Console.WriteLine(" -bptt <int>");
-            Console.WriteLine("\tStep for back-propagation through time for BPTT-RNN. default is 4");
+            Console.WriteLine("\tStep for back-propagation through time for BPTT-RNN. Default is 4");
 
             Console.WriteLine(" -crf <int>");
-            Console.WriteLine("\tEnable CRF model at output, 0 is disable, 1 is enable. default is 0");
+            Console.WriteLine("\tEnable CRF model at output, 0 is disable, 1 is enable. Default is 0");
 
             Console.WriteLine(" -maxiter <int>");
-            Console.WriteLine("\tMaximum iteration for training, 0 is unlimited. default is 20");
+            Console.WriteLine("\tMaximum iteration for training, 0 is unlimited. Default is 20");
 
             Console.WriteLine(" -savestep <int>");
-            Console.WriteLine("\tSave temporary model after every <int> sentences, default is 0");
+            Console.WriteLine("\tSave temporary model after every <int> sentences. Default is 0");
 
             Console.WriteLine(" -vq <int>");
-            Console.WriteLine("\tModel vector quantization, 0 is disable, 1 is enable. default is 0");
+            Console.WriteLine("\tModel vector quantization, 0 is disable, 1 is enable. Default is 0");
 
             Console.WriteLine(" -grad <float>");
             Console.WriteLine("\tGradient cut-off. Default is 15.0f");
+
+            Console.WriteLine(" -seq2seq <boolean>");
+            Console.WriteLine("\tTrain a sequence-to-sequence model if it's true, otherwise, train a sequence labeling model. Default is false");
 
             Console.WriteLine();
             Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0");
@@ -179,6 +187,9 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
 
+            if ((i = ArgPos("-seq2seq", args)) >= 0) Seq2Seq = bool.Parse(args[i + 1]);
+            if ((i = ArgPos("-constalpha", args)) >= 0) constAlpha = bool.Parse(args[i + 1]);
+
             if ((i = ArgPos("-savestep", args)) >= 0)
             {
                 string str = args[i + 1].ToLower();
@@ -249,29 +260,28 @@ namespace RNNSharpConsole
 
         }
 
-        static void LoadDataset(string strFileName, Featurizer featurizer, DataSet dataSet)
+        static void LoadSeq2SeqDataSet(string strFileName, Featurizer featurizer, DataSet<SequencePair> dataSet)
         {
-            CheckCorpus(strFileName);
-
+            Logger.WriteLine("Loading data set for seq2seq2 training...");
             StreamReader sr = new StreamReader(strFileName);
             int RecordCount = 0;
-
             while (true)
             {
+                SentencePair sentPair = new SentencePair();
+
                 //Extract features from it and convert it into sequence
-                Sentence sent = new Sentence(ReadRecord(sr));
-                if (sent.TokensList.Count <= 2)
+                sentPair.srcSentence = new Sentence(ReadRecord(sr));
+                sentPair.tgtSentence = new Sentence(ReadRecord(sr), false);
+
+                if (sentPair.srcSentence.TokensList.Count <= 2 || sentPair.tgtSentence.TokensList.Count <= 0)
                 {
                     //No more record, it only contain <s> and </s>
                     break;
                 }
 
-                Sequence seq = featurizer.ExtractFeatures(sent);
-
-                //Set label for the sequence
-                if (seq.SetLabel(sent, featurizer.TagSet))
+                SequencePair seq = featurizer.ExtractFeatures(sentPair);
+                if (seq.tgtSequence.SetLabel(sentPair.tgtSentence, featurizer.TagSet))
                 {
-                    //Add the sequence into data set
                     dataSet.SequenceList.Add(seq);
 
                     //Show state at every 1000 record
@@ -280,6 +290,54 @@ namespace RNNSharpConsole
                     {
                         Logger.WriteLine("{0}...", RecordCount);
                     }
+                }
+            }
+
+            sr.Close();
+
+        }
+
+
+
+        static void LoadDataset(string strFileName, Featurizer featurizer, DataSet<Sequence> dataSet)
+        {
+            Logger.WriteLine("Loading data set...");
+            CheckCorpus(strFileName);
+
+            StreamReader sr = new StreamReader(strFileName);
+            int RecordCount = 0;
+
+            while (true)
+            {
+                try
+                {
+                    //Extract features from it and convert it into sequence
+                    Sentence sent = new Sentence(ReadRecord(sr));
+                    if (sent.TokensList.Count <= 2)
+                    {
+                        //No more record, it only contain <s> and </s>
+                        break;
+                    }
+
+                    Sequence seq = featurizer.ExtractFeatures(sent);
+
+                    //Set label for the sequence
+                    if (seq.SetLabel(sent, featurizer.TagSet))
+                    {
+                        //Add the sequence into data set
+                        dataSet.SequenceList.Add(seq);
+
+                        //Show state at every 1000 record
+                        RecordCount++;
+                        if (RecordCount % 10000 == 0)
+                        {
+                            Logger.WriteLine("{0}...", RecordCount);
+                        }
+                    }
+                }
+                catch (Exception err)
+                {
+                    Logger.WriteLine("Fail to parse corpus: '{0}'", err.Message.ToString());
                 }
             }
 
@@ -301,7 +359,15 @@ namespace RNNSharpConsole
                 strMode = args[i + 1].ToLower();
                 if (strMode == "train")
                 {
-                    Train();
+                    if (Seq2Seq)
+                    {
+                        Logger.WriteLine("Start to train seq2seq model.");
+                        TrainSeq2Seq();
+                    }
+                    else
+                    {
+                        Train();
+                    }
                 }
                 else if (strMode == "test")
                 {
@@ -346,6 +412,7 @@ namespace RNNSharpConsole
             }
 
             //Load tag name
+            Logger.WriteLine($"Loading tag file '{strTagFile}'");
             TagSet tagSet = new TagSet(strTagFile);
 
             if (String.IsNullOrEmpty(strModelFile) == true)
@@ -369,12 +436,15 @@ namespace RNNSharpConsole
                 return;
             }
 
-            //Create feature extractors and load word embedding data from file
-            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet);
-            featurizer.ShowFeatureSize();
-
             //Create instance for decoder
-            RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(strModelFile, featurizer);
+            Logger.WriteLine($"Loading model from {strModelFile} and creating decoder instance...");
+            RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(strModelFile);
+
+            //Create feature extractors and load word embedding data from file
+            Logger.WriteLine($"Initializing featurizer. Feature config file = '{strFeatureConfigFile}'");
+            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet, (decoder.ModelType == MODELTYPE.SEQ2SEQ));
+            decoder.SetFeaturizer(featurizer);
+            featurizer.ShowFeatureSize();
 
             if (File.Exists(strTestFile) == false)
             {
@@ -397,20 +467,45 @@ namespace RNNSharpConsole
 
                 if (nBest == 1)
                 {
-                    int[] output = decoder.Process(sent);
                     //Output decoded result
-                    //Append the decoded result into the end of feature set of each token
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < sent.TokensList.Count; i++)
+                    if (decoder.ModelType == MODELTYPE.SEQLABEL)
                     {
-                        string tokens = String.Join("\t", sent.TokensList[i]);
-                        sb.Append(tokens);
-                        sb.Append("\t");
-                        sb.Append(tagSet.GetTagName(output[i]));
-                        sb.AppendLine();
-                    }
+                        //Append the decoded result into the end of feature set of each token
+                        int[] output = decoder.Process(sent);
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < sent.TokensList.Count; i++)
+                        {
+                            string tokens = String.Join("\t", sent.TokensList[i]);
+                            sb.Append(tokens);
+                            sb.Append("\t");
+                            sb.Append(tagSet.GetTagName(output[i]));
+                            sb.AppendLine();
+                        }
 
-                    sw.WriteLine(sb.ToString());
+                        sw.WriteLine(sb.ToString());
+                    }
+                    else
+                    {
+                        //Print out source sentence at first, and then generated result sentence
+                        int[] output = decoder.ProcessSeq2Seq(sent);
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < sent.TokensList.Count; i++)
+                        {
+                            string tokens = String.Join("\t", sent.TokensList[i]);
+                            sb.AppendLine(tokens);
+                        }
+                        sw.WriteLine(sb.ToString());
+                        sw.WriteLine();
+
+                        sb.Clear();
+                        for (int i = 0; i < output.Length; i++)
+                        {
+                            string token = tagSet.GetTagName(output[i]);
+                            sb.AppendLine(token);
+                        }
+                        sw.WriteLine(sb.ToString());
+                        sw.WriteLine();
+                    }
                 }
                 else
                 {
@@ -450,6 +545,105 @@ namespace RNNSharpConsole
             throw new ArgumentException(String.Format("Invalidated layer type: {0}", layerType));
         }
 
+
+        private static void TrainSeq2Seq()
+        {
+            Logger.LogFile = "RNNSharpConsole.log";
+
+            if (File.Exists(strTagFile) == false)
+            {
+                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't existed.", strTagFile);
+                UsageTrain();
+                return;
+            }
+
+            //Load tag id and its name from file
+            TagSet tagSet = new TagSet(strTagFile);
+
+            //Create configuration instance and set parameters
+            ModelSetting RNNConfig = new ModelSetting();
+            RNNConfig.TagFile = strTagFile;
+            RNNConfig.Tags = tagSet;
+            RNNConfig.ModelFile = strModelFile;
+            RNNConfig.HiddenLayerSizeList = hiddenLayerSizeList;
+            RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
+            RNNConfig.ModelDirection = iDir;
+            RNNConfig.VQ = iVQ;
+            RNNConfig.ModelType = ParseLayerType(hiddenLayerType);
+            RNNConfig.OutputLayerType = ParseLayerType(outputLayerType);
+            RNNConfig.MaxIteration = maxIter;
+            RNNConfig.SaveStep = savestep;
+            RNNConfig.LearningRate = alpha;
+            RNNConfig.Dropout = dropout;
+            RNNConfig.Bptt = bptt;
+            RNNConfig.GradientCutoff = gradientCutoff;
+            RNNConfig.NCESampleSize = nceSampleSize;
+            RNNConfig.IsSeq2SeqTraining = true;
+            RNNConfig.IsConstAlpha = constAlpha;
+
+            //Dump RNN setting on console
+            RNNConfig.DumpSetting();
+
+            if (File.Exists(strFeatureConfigFile) == false)
+            {
+                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.", strFeatureConfigFile);
+                UsageTrain();
+                return;
+            }
+            //Create feature extractors and load word embedding data from file
+            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet, true);
+            featurizer.ShowFeatureSize();
+
+            if (featurizer.IsRunTimeFeatureUsed() == true && iDir == 1)
+            {
+                Logger.WriteLine(Logger.Level.err, "FAILED: Run time feature is not available for bi-directional RNN model.");
+                UsageTrain();
+                return;
+            }
+
+            if (File.Exists(strTrainFile) == false)
+            {
+                Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus doesn't exist.");
+                UsageTrain();
+                return;
+            }
+
+            //Create RNN encoder and save necessary parameters
+            RNNEncoder<SequencePair> encoder = new RNNEncoder<SequencePair>(RNNConfig);
+            encoder.Featurizer = featurizer;
+
+            //LoadFeatureConfig training corpus and extract feature set
+            encoder.TrainingSet = new DataSet<SequencePair>(tagSet.GetSize());
+
+            LoadSeq2SeqDataSet(strTrainFile, featurizer, encoder.TrainingSet);
+
+            if (String.IsNullOrEmpty(strValidFile) == false)
+            {
+                //LoadFeatureConfig validated corpus and extract feature set
+                Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                encoder.ValidationSet = new DataSet<SequencePair>(tagSet.GetSize());
+                LoadSeq2SeqDataSet(strValidFile, featurizer, encoder.ValidationSet);
+            }
+            else
+            {
+                Logger.WriteLine("Validated corpus isn't specified.");
+                encoder.ValidationSet = null;
+            }
+
+            if (iCRF == 1)
+            {
+                Logger.WriteLine("Initialize output tag bigram transition probability...");
+                //Build tag bigram transition matrix
+                encoder.TrainingSet.BuildLabelBigramTransition();
+            }
+
+            //Start to train the model
+            encoder.Train();
+
+
+
+        }
+
         private static void Train()
         {
             Logger.LogFile = "RNNSharpConsole.log";
@@ -482,6 +676,7 @@ namespace RNNSharpConsole
             RNNConfig.Bptt = bptt;
             RNNConfig.GradientCutoff = gradientCutoff;
             RNNConfig.NCESampleSize = nceSampleSize;
+            RNNConfig.IsConstAlpha = constAlpha;
 
             //Dump RNN setting on console
             RNNConfig.DumpSetting();
@@ -511,18 +706,18 @@ namespace RNNSharpConsole
             }
 
             //Create RNN encoder and save necessary parameters
-            RNNEncoder encoder = new RNNEncoder(RNNConfig);
+            RNNEncoder<Sequence> encoder = new RNNEncoder<Sequence>(RNNConfig);
+            encoder.Featurizer = featurizer;
 
             //LoadFeatureConfig training corpus and extract feature set
-            encoder.TrainingSet = new DataSet(tagSet.GetSize());
+            encoder.TrainingSet = new DataSet<Sequence>(tagSet.GetSize());
             LoadDataset(strTrainFile, featurizer, encoder.TrainingSet);
-            RNNConfig.TrainDataSet = encoder.TrainingSet;
 
             if (String.IsNullOrEmpty(strValidFile) == false)
             {
                 //LoadFeatureConfig validated corpus and extract feature set
                 Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
-                encoder.ValidationSet = new DataSet(tagSet.GetSize());
+                encoder.ValidationSet = new DataSet<Sequence>(tagSet.GetSize());
                 LoadDataset(strValidFile, featurizer, encoder.ValidationSet);
             }
             else
