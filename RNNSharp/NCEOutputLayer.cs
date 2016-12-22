@@ -15,7 +15,6 @@ namespace RNNSharp
         public int vocab_size;
         public long accTotalFreq;
 
-        public ModelSetting m_modelSetting;
         private int NegativeSampleSize = 10;
 
 
@@ -83,24 +82,15 @@ namespace RNNSharp
 
         public NCEOutputLayer()
         {
-
+            LayerConfig = new LayerConfig();
         }
 
-        public NCEOutputLayer(int hiddenLayerSize) : base(hiddenLayerSize)
+        public NCEOutputLayer(NCELayerConfig config) : base(config)
         {
-
-        }
-        public NCEOutputLayer(int hiddenLayerSize, ModelSetting modelSetting) : base(hiddenLayerSize)
-        {
-            Logger.WriteLine("Initializing NCEOutputLayer...");
-            m_modelSetting = modelSetting;
-            NegativeSampleSize = m_modelSetting.NCESampleSize;
-            Logger.WriteLine("Hidden layer size: {0}", hiddenLayerSize);
-            Logger.WriteLine("Negative sampling size: {0}", NegativeSampleSize);
-
-            if (NegativeSampleSize > hiddenLayerSize)
+            NegativeSampleSize = config.NegativeSampleSize;
+            if (NegativeSampleSize > LayerSize)
             {
-                throw new ArgumentException(String.Format("The size of negative sampling('{0}') cannot be greater than the hidden layer size('{1}').", NegativeSampleSize, hiddenLayerSize));
+                throw new ArgumentException(String.Format("The size of negative sampling('{0}') cannot be greater than the hidden layer size('{1}').", NegativeSampleSize, LayerSize));
             }
         }
 
@@ -152,7 +142,7 @@ namespace RNNSharp
             base.ShallowCopyWeightTo(layer);
         }
 
-        public override void computeLayer(SparseVector sparseFeature, double[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             if (isTrain == true)
             {
@@ -186,8 +176,8 @@ namespace RNNSharp
                     SparseFeature = sparseFeature;
                     Parallel.ForEach(negativeSampleWordList, b =>
                     {
-                        double score = 0;
-                        double[] vector_b = SparseWeights[b];
+                        float score = 0;
+                        float[] vector_b = SparseWeights[b];
                         foreach (KeyValuePair<int, float> pair in SparseFeature)
                         {
                             score += pair.Value * vector_b[pair.Key];
@@ -200,7 +190,7 @@ namespace RNNSharp
             }
             else
             {
-                base.computeLayer(sparseFeature, denseFeature, isTrain);
+                base.ForwardPass(sparseFeature, denseFeature, isTrain);
             }
         }
 
@@ -233,17 +223,17 @@ namespace RNNSharp
                 double sum = 0;
                 foreach (int c in negativeSampleWordList)
                 {
-                    double cell = cellOutput[c];
+                    float cell = cellOutput[c];
                     if (cell > 50) cell = 50;
                     if (cell < -50) cell = -50;
-                    double val = Math.Exp(cell);
+                    float val = (float)Math.Exp(cell);
                     sum += val;
                     cellOutput[c] = val;
                 }
 
                 foreach (int c in negativeSampleWordList)
                 {
-                    cellOutput[c] /= sum;
+                    cellOutput[c] /= (float)sum;
                 }
             }
             else
@@ -252,21 +242,29 @@ namespace RNNSharp
             }
         }
 
-        public override void LearnFeatureWeights(int numStates, int curState)
+        public override void BackwardPass(int numStates, int curState)
         {
             if (DenseFeatureSize > 0)
             {
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    double er2 = er[c];
-                    double[] vector_c = DenseWeights[c];
-                    for (int a = 0; a < DenseFeatureSize; a++)
+                    float err = er[c];
+                    float[] featureWeightCol = DenseWeights[c];
+                    float[] featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
+                    int j = 0;
+                    while (j < DenseFeatureSize - Vector<float>.Count)
                     {
-                        double delta = RNNHelper.NormalizeGradient(er2 * DenseFeature[a]);
-                        double newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, c, a, delta);
+                        RNNHelper.UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol, err, j);
+                        j += Vector<float>.Count;
+                    }
 
-                        vector_c[a] += newLearningRate * delta;
+                    while (j < DenseFeatureSize)
+                    {
+                        float delta = RNNHelper.NormalizeGradient(err * DenseFeature[j]);
+                        float newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, c, j, delta);
+                        featureWeightCol[j] += newLearningRate * delta;
+                        j++;
                     }
                 });
             }
@@ -277,14 +275,14 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    double er2 = er[c];
-                    double[] vector_c = SparseWeights[c];
+                    float er2 = er[c];
+                    float[] vector_c = SparseWeights[c];
                     foreach (KeyValuePair<int, float> pair in SparseFeature)
                     {
                         int pos = pair.Key;
-                        double val = pair.Value;
-                        double delta = RNNHelper.NormalizeGradient(er2 * val);
-                        double newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
+                        float val = pair.Value;
+                        float delta = RNNHelper.NormalizeGradient(er2 * val);
+                        float newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
                         vector_c[pos] += newLearningRate * delta;
                     }
                 });
@@ -292,7 +290,7 @@ namespace RNNSharp
             }
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer, double[] destErrLayer, double[] srcErrLayer)
+        public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
         {
             //error output->hidden for words from specific class    	
             RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, negativeSampleWordList, nextLayer.LayerSize);
@@ -304,7 +302,7 @@ namespace RNNSharp
             RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, negativeSampleWordList, nextLayer.LayerSize);
         }
 
-        public override void ComputeLayerErr(Matrix<double> CRFSeqOutput, State state, int timeat)
+        public override void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)
         {
             if (CRFSeqOutput != null)
             {
@@ -313,7 +311,7 @@ namespace RNNSharp
                 {
                     er[c] = -CRFSeqOutput[timeat][c];
                 }
-                er[state.Label] = 1.0 - CRFSeqOutput[timeat][state.Label];
+                er[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
             }
             else
             {
@@ -322,7 +320,7 @@ namespace RNNSharp
                 {
                     er[c] = -cellOutput[c];
                 }
-                er[state.Label] = 1.0 - cellOutput[state.Label];
+                er[state.Label] = (float)(1.0 - cellOutput[state.Label]);
             }
 
         }

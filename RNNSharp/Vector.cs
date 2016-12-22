@@ -16,7 +16,7 @@ namespace RNNSharp
             }
         }
 
-        public virtual double this[int i]
+        public virtual float this[int i]
         {
             get
             {
@@ -28,7 +28,7 @@ namespace RNNSharp
             }
         }
 
-        public virtual double[] CopyTo()
+        public virtual float[] CopyTo()
         {
             return null;
         }
@@ -66,7 +66,7 @@ namespace RNNSharp
         }
 
 
-        public override double this[int i]
+        public override float this[int i]
         {
             get
             {
@@ -78,9 +78,9 @@ namespace RNNSharp
             }
         }
 
-        public override double[] CopyTo()
+        public override float[] CopyTo()
         {
-            double[] val = new double[m_nLen];
+            float[] val = new float[m_nLen];
             for (int i = 0; i < m_innerData.Count; i++)
             {
                 for (int j = 0; j < m_innerData[i].Length; j++)
@@ -96,7 +96,7 @@ namespace RNNSharp
 
     public class SingleVector : VectorBase
     {
-        private double[] m_innerData;
+        private float[] m_innerData;
         public override int Length { get { return m_innerData.Length; } }
 
         public SingleVector()
@@ -104,31 +104,19 @@ namespace RNNSharp
             m_innerData = null;
         }
 
-        public SingleVector(int nLen, float[] val)
+        public SingleVector(float[] val)
         {
-            m_innerData = new double[nLen];
-            for (int i = 0; i < nLen; i++)
-            {
-                m_innerData[i] = val[i];
-            }
+            m_innerData = val;
         }
 
-        public SingleVector(int nLen, double[] val)
-        {
-            m_innerData = new double[nLen];
-            for (int i = 0; i < nLen; i++)
-            {
-                m_innerData[i] = (float)val[i];
-            }
-        }
 
         public SingleVector(int nLen)
         {
-            m_innerData = new double[nLen];
+            m_innerData = new float[nLen];
         }
 
 
-        public override double this[int i]
+        public override float this[int i]
         {
             get
             {
@@ -140,7 +128,7 @@ namespace RNNSharp
             }
         }
 
-        public override double[] CopyTo()
+        public override float[] CopyTo()
         {
             return m_innerData;
         }

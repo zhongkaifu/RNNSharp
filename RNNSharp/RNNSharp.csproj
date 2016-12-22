@@ -52,7 +52,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BiRNN.cs" />
+    <Compile Include="ConfigUtils.cs" />
     <Compile Include="DropoutLayer.cs" />
+    <Compile Include="Enums.cs" />
     <Compile Include="ISequence.cs" />
     <Compile Include="NCEOutputLayer.cs" />
     <Compile Include="RNN.cs" />
@@ -63,7 +65,7 @@
     <Compile Include="BPTTLayer.cs" />
     <Compile Include="DataSet.cs" />
     <Compile Include="RNNDecoder.cs" />
-    <Compile Include="Featurizer.cs" />
+    <Compile Include="Config.cs" />
     <Compile Include="MathUtil.cs" />
     <Compile Include="Matrix.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

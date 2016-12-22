@@ -16,14 +16,14 @@ namespace RNNSharp
         //Y - wInputForgetGate
         //Z - wInputCell
         //W - wInputOutputGate
-        protected Vector4[][] input2hidden;
-        protected Vector4[][] feature2hidden;
+        protected Vector4[][] sparseFeatureWeights;
+        protected Vector4[][] denseFeatureWeights;
 
-        protected Vector4[][] Input2HiddenLearningRate;
-        protected Vector4[][] Feature2HiddenLearningRate;
+        protected Vector4[][] sparseFeatureToHiddenLearningRate;
+        protected Vector4[][] denseFeatureToHiddenLearningRate;
 
-        protected Vector3[][] input2hiddenDeri;
-        protected Vector3[][] feature2hiddenDeri;
+        protected Vector3[][] sparseFeatureToHiddenDeri;
+        protected Vector3[][] denseFeatureToHiddenDeri;
 
         private Vector4 vecNormalLearningRate;
         private Vector3 vecNormalLearningRate3;
@@ -34,12 +34,11 @@ namespace RNNSharp
         private Vector3 vecMaxGrad3;
         private Vector3 vecMinGrad3;
 
-        protected Vector3[] PeepholeLearningRate;
-        protected Vector4[] CellLearningRate;
+        protected Vector3[] peepholeLearningRate;
+        protected Vector4[] cellLearningRate;
 
-        public LSTMLayer(int layersize, ModelSetting modelsetting) : base(layersize)
+        public LSTMLayer(LSTMLayerConfig config) : base(config)
         {
-            LayerSize = layersize;
             AllocateMemoryForLSTMCells();
         }
 
@@ -54,7 +53,7 @@ namespace RNNSharp
 
         public LSTMLayer()
         {
-
+            LayerConfig = new LayerConfig();
         }
 
         public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
@@ -66,32 +65,37 @@ namespace RNNSharp
 
             if (SparseFeatureSize > 0)
             {
-                input2hiddenDeri = new Vector3[LayerSize][];
+                sparseFeatureWeights = new Vector4[LayerSize][];
+                sparseFeatureToHiddenDeri = new Vector3[LayerSize][];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    sparseFeatureWeights[i] = new Vector4[SparseFeatureSize];
+                    sparseFeatureToHiddenDeri[i] = new Vector3[SparseFeatureSize];
+                    for (int j = 0; j < SparseFeatureSize; j++)
+                    {
+                        sparseFeatureWeights[i][j] = InitializeLSTMWeight();
+                    }
+                }
             }
 
             if (DenseFeatureSize > 0)
             {
-                feature2hiddenDeri = new Vector3[LayerSize][];
-            }
-
-            for (int i = 0; i < LayerSize; i++)
-            {
-                if (SparseFeatureSize > 0)
+                denseFeatureWeights = new Vector4[LayerSize][];
+                denseFeatureToHiddenDeri = new Vector3[LayerSize][];
+                for (int i = 0; i < LayerSize; i++)
                 {
-                    input2hiddenDeri[i] = new Vector3[SparseFeatureSize];
-                }
-
-                if (DenseFeatureSize > 0)
-                {
-                    feature2hiddenDeri[i] = new Vector3[DenseFeatureSize];
+                    denseFeatureWeights[i] = new Vector4[DenseFeatureSize];
+                    denseFeatureToHiddenDeri[i] = new Vector3[DenseFeatureSize];
+                    for (int j = 0; j < DenseFeatureSize; j++)
+                    {
+                        denseFeatureWeights[i][j] = InitializeLSTMWeight();
+                    }
                 }
             }
 
             Logger.WriteLine("Initializing weights, sparse feature size: {0}, dense feature size: {1}, random value is {2}",
                 SparseFeatureSize, DenseFeatureSize, RNNHelper.rand.NextDouble());
-            initWeights();
         }
-
 
         private void CreateCell(BinaryReader br)
         {
@@ -128,38 +132,7 @@ namespace RNNSharp
             }
         }
 
-        public void initWeights()
-        {
-            //create and initialise the weights from input to hidden layer
-
-            if (SparseFeatureSize > 0)
-            {
-                input2hidden = new Vector4[LayerSize][];
-                for (int i = 0; i < LayerSize; i++)
-                {
-                    input2hidden[i] = new Vector4[SparseFeatureSize];
-                    for (int j = 0; j < SparseFeatureSize; j++)
-                    {
-                        input2hidden[i][j] = LSTMWeightInit();
-                    }
-                }
-            }
-
-            if (DenseFeatureSize > 0)
-            {
-                feature2hidden = new Vector4[LayerSize][];
-                for (int i = 0; i < LayerSize; i++)
-                {
-                    feature2hidden[i] = new Vector4[DenseFeatureSize];
-                    for (int j = 0; j < DenseFeatureSize; j++)
-                    {
-                        feature2hidden[i][j] = LSTMWeightInit();
-                    }
-                }
-            }
-        }
-
-        public Vector4 LSTMWeightInit()
+        Vector4 InitializeLSTMWeight()
         {
             Vector4 w;
 
@@ -193,13 +166,12 @@ namespace RNNSharp
             return Sigmoid(x) * (1.0 - Sigmoid(x));
         }
 
-        public void SaveHiddenLayerWeights(BinaryWriter fo)
+        void SaveHiddenLayerWeights(BinaryWriter fo)
         {
             for (int i = 0; i < LayerSize; i++)
             {
                 fo.Write(cell[i].wPeepholeIn);
                 fo.Write(cell[i].wPeepholeForget);
-                //      fo.Write(neuHidden[i].wCellState);
                 fo.Write(cell[i].wPeepholeOut);
 
                 fo.Write(cell[i].wCellIn);
@@ -209,7 +181,7 @@ namespace RNNSharp
             }
         }
 
-        private void saveLSTMWeight(Vector4[][] weight, BinaryWriter fo, bool bVQ = false)
+        void SaveLSTMWeights(Vector4[][] weight, BinaryWriter fo, bool bVQ = false)
         {
             int w = weight.Length;
             int h = weight[0].Length;
@@ -307,7 +279,7 @@ namespace RNNSharp
             }
         }
 
-        public Vector4[][] loadLSTMWeight(BinaryReader br)
+        Vector4[][] LoadLSTMWeights(BinaryReader br)
         {
             int w = br.ReadInt32();
             int h = br.ReadInt32();
@@ -331,29 +303,29 @@ namespace RNNSharp
             }
             else
             {
-                List<double> codeBookInputCell = new List<double>();
-                List<double> codeBookInputForgetGate = new List<double>();
-                List<double> codeBookInputInputGate = new List<double>();
-                List<double> codeBookInputOutputGate = new List<double>();
+                List<float> codeBookInputCell = new List<float>();
+                List<float> codeBookInputForgetGate = new List<float>();
+                List<float> codeBookInputInputGate = new List<float>();
+                List<float> codeBookInputOutputGate = new List<float>();
 
                 for (int i = 0; i < vqSize; i++)
                 {
-                    codeBookInputInputGate.Add(br.ReadDouble());
+                    codeBookInputInputGate.Add(br.ReadSingle());
                 }
 
                 for (int i = 0; i < vqSize; i++)
                 {
-                    codeBookInputForgetGate.Add(br.ReadDouble());
+                    codeBookInputForgetGate.Add(br.ReadSingle());
                 }
 
                 for (int i = 0; i < vqSize; i++)
                 {
-                    codeBookInputCell.Add(br.ReadDouble());
+                    codeBookInputCell.Add(br.ReadSingle());
                 }
 
                 for (int i = 0; i < vqSize; i++)
                 {
-                    codeBookInputOutputGate.Add(br.ReadDouble());
+                    codeBookInputOutputGate.Add(br.ReadSingle());
                 }
 
                 for (int i = 0; i < w; i++)
@@ -386,21 +358,22 @@ namespace RNNSharp
             fo.Write(DenseFeatureSize);
 
             //Save hidden layer weights
-            Logger.WriteLine("Saving hidden layer weights...");
+            Logger.WriteLine($"Saving LSTM layer, size = '{LayerSize}', sparse feature size = '{SparseFeatureSize}', dense feature size = '{DenseFeatureSize}'");
+
             SaveHiddenLayerWeights(fo);
 
             if (SparseFeatureSize > 0)
             {
                 //weight input->hidden
-                Logger.WriteLine("Saving input2hidden weights...");
-                saveLSTMWeight(input2hidden, fo);
+                Logger.WriteLine("Saving sparse feature weights...");
+                SaveLSTMWeights(sparseFeatureWeights, fo);
             }
 
             if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
-                Logger.WriteLine("Saving feature2hidden weights...");
-                saveLSTMWeight(feature2hidden, fo);
+                Logger.WriteLine("Saving dense feature weights...");
+                SaveLSTMWeights(denseFeatureWeights, fo);
             }
         }
 
@@ -420,15 +393,15 @@ namespace RNNSharp
             //weight input->hidden
             if (SparseFeatureSize > 0)
             {
-                Logger.WriteLine("Loading input2hidden weights...");
-                input2hidden = loadLSTMWeight(br);
+                Logger.WriteLine("Loading sparse feature weights...");
+                sparseFeatureWeights = LoadLSTMWeights(br);
             }
 
             if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
-                Logger.WriteLine("Loading feature2hidden weights...");
-                feature2hidden = loadLSTMWeight(br);
+                Logger.WriteLine("Loading dense feature weights...");
+                denseFeatureWeights = LoadLSTMWeights(br);
             }
         }
 
@@ -436,26 +409,26 @@ namespace RNNSharp
         {
             if (SparseFeatureSize > 0)
             {
-                Input2HiddenLearningRate = new Vector4[LayerSize][];
+                sparseFeatureToHiddenLearningRate = new Vector4[LayerSize][];
             }
 
             if (DenseFeatureSize > 0)
             {
-                Feature2HiddenLearningRate = new Vector4[LayerSize][];
+                denseFeatureToHiddenLearningRate = new Vector4[LayerSize][];
             }
 
-            PeepholeLearningRate = new Vector3[LayerSize];
-            CellLearningRate = new Vector4[LayerSize];
+            peepholeLearningRate = new Vector3[LayerSize];
+            cellLearningRate = new Vector4[LayerSize];
             Parallel.For(0, LayerSize, parallelOption, i =>
             {
                 if (SparseFeatureSize > 0)
                 {
-                    Input2HiddenLearningRate[i] = new Vector4[SparseFeatureSize];
+                    sparseFeatureToHiddenLearningRate[i] = new Vector4[SparseFeatureSize];
                 }
 
                 if (DenseFeatureSize > 0)
                 {
-                    Feature2HiddenLearningRate[i] = new Vector4[DenseFeatureSize];
+                    denseFeatureToHiddenLearningRate[i] = new Vector4[DenseFeatureSize];
                 }
 
             });
@@ -470,7 +443,7 @@ namespace RNNSharp
         }
 
         // forward process. output layer consists of tag value
-        public override void computeLayer(SparseVector sparseFeature, double[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
@@ -490,20 +463,20 @@ namespace RNNSharp
                 if (SparseFeatureSize > 0)
                 {
                     //Apply sparse weights
-                    Vector4[] weights = input2hidden[j];
+                    Vector4[] weights = sparseFeatureWeights[j];
                     foreach (KeyValuePair<int, float> pair in SparseFeature)
                     {
                         vecCell_j += weights[pair.Key] * pair.Value;
                     }
                 }
 
-                //Apply dense weights
                 if (DenseFeatureSize > 0)
                 {
-                    Vector4[] weights = feature2hidden[j];
+                    //Apply dense weights
+                    Vector4[] weights = denseFeatureWeights[j];
                     for (int i = 0; i < DenseFeatureSize; i++)
                     {
-                        vecCell_j += weights[i] * (float)DenseFeature[i];
+                        vecCell_j += weights[i] * DenseFeature[i];
                     }
                 }
 
@@ -515,7 +488,7 @@ namespace RNNSharp
                 //reset each netOut to zero
                 cell_j.netOut = vecCell_j.W;
 
-                double cell_j_previousCellOutput = previousCellOutput[j];
+                float cell_j_previousCellOutput = previousCellOutput[j];
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netIn += cell_j.previousCellState * cell_j.wPeepholeIn + cell_j_previousCellOutput * cell_j.wCellIn;
@@ -538,14 +511,14 @@ namespace RNNSharp
                 //squash output gate 
                 cell_j.yOut = Sigmoid(cell_j.netOut);
 
-                cellOutput[j] = TanH(cell_j.cellState) * cell_j.yOut;
+                cellOutput[j] = (float)(TanH(cell_j.cellState) * cell_j.yOut);
 
                 cell[j] = cell_j;
             });
         }
 
 
-        public override void LearnFeatureWeights(int numStates, int curState)
+        public override void BackwardPass(int numStates, int curState)
         {
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, LayerSize, parallelOption, i =>
@@ -573,9 +546,9 @@ namespace RNNSharp
                 if (SparseFeatureSize > 0)
                 {
                     //Get sparse feature and apply it into hidden layer
-                    Vector4[] w_i = input2hidden[i];
-                    Vector3[] wd_i = input2hiddenDeri[i];
-                    Vector4[] wlr_i = Input2HiddenLearningRate[i];
+                    Vector4[] w_i = sparseFeatureWeights[i];
+                    Vector3[] wd_i = sparseFeatureToHiddenDeri[i];
+                    Vector4[] wlr_i = sparseFeatureToHiddenLearningRate[i];
 
                     foreach (KeyValuePair<int, float> entry in SparseFeature)
                     {
@@ -600,12 +573,12 @@ namespace RNNSharp
 
                 if (DenseFeatureSize > 0)
                 {
-                    Vector4[] w_i = feature2hidden[i];
-                    Vector3[] wd_i = feature2hiddenDeri[i];
-                    Vector4[] wlr_i = Feature2HiddenLearningRate[i];
+                    Vector4[] w_i = denseFeatureWeights[i];
+                    Vector3[] wd_i = denseFeatureToHiddenDeri[i];
+                    Vector4[] wlr_i = denseFeatureToHiddenLearningRate[i];
                     for (int j = 0; j < DenseFeatureSize; j++)
                     {
-                        float feature = (float)DenseFeature[j];
+                        float feature = DenseFeature[j];
 
                         Vector3 wd = vecDerivate * feature;
                         if (curState > 0)
@@ -642,7 +615,7 @@ namespace RNNSharp
                 vecCellDelta = Vector3.Clamp(vecCellDelta, vecMinGrad3, vecMaxGrad3);
 
                 //Computing actual learning rate
-                Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref PeepholeLearningRate[i]);
+                Vector3 vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref peepholeLearningRate[i]);
 
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
@@ -651,7 +624,7 @@ namespace RNNSharp
                 c.wPeepholeOut += vecCellDelta.Z;
 
                 //Update cells weights
-                double c_previousCellOutput = previousCellOutput[i];
+                float c_previousCellOutput = previousCellOutput[i];
                 //partial derivatives for internal connections
                 c.dSWCellIn = c.dSWCellIn * c.yForget + Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c_previousCellOutput;
 
@@ -667,7 +640,7 @@ namespace RNNSharp
                 vecCellDelta4 = Vector4.Clamp(vecCellDelta4, vecMinGrad, vecMaxGrad);
 
                 //Computing actual learning rate
-                Vector4 vecCellLearningRate4 = ComputeLearningRate(vecCellDelta4, ref CellLearningRate[i]);
+                Vector4 vecCellLearningRate4 = ComputeLearningRate(vecCellDelta4, ref cellLearningRate[i]);
 
                 vecCellDelta4 = vecCellLearningRate4 * vecCellDelta4;
 
@@ -676,12 +649,11 @@ namespace RNNSharp
                 c.wCellState += vecCellDelta4.Z;
                 c.wCellOut += vecCellDelta4.W;
 
-
                 cell[i] = c;
             });
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer, double[] destErrLayer, double[] srcErrLayer)
+        public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
         {
             LSTMLayer layer = nextLayer as LSTMLayer;
 
@@ -689,11 +661,12 @@ namespace RNNSharp
             {
                 Parallel.For(0, LayerSize, parallelOption, i =>
                 {
-                    destErrLayer[i] = 0.0;
+                    float err = 0.0f;
                     for (int k = 0; k < nextLayer.LayerSize; k++)
                     {
-                        destErrLayer[i] += srcErrLayer[k] * layer.feature2hidden[k][i].W;
+                        err += srcErrLayer[k] * layer.denseFeatureWeights[k][i].W;
                     }
+                    destErrLayer[i] = RNNHelper.NormalizeGradient(err);
                 });
             }
             else
@@ -710,11 +683,12 @@ namespace RNNSharp
             {
                 Parallel.For(0, LayerSize, parallelOption, i =>
                 {
-                    er[i] = 0.0;
+                    float err = 0.0f;
                     for (int k = 0; k < nextLayer.LayerSize; k++)
                     {
-                        er[i] += layer.er[k] * layer.feature2hidden[k][i].W;
+                        err += layer.er[k] * layer.denseFeatureWeights[k][i].W;
                     }
+                    er[i] = RNNHelper.NormalizeGradient(err);
                 });
             }
             else
@@ -723,16 +697,16 @@ namespace RNNSharp
             }
         }
 
-        public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
+        public override void Reset(bool updateNet = false)
         {
             for (int i = 0; i < LayerSize; i++)
             {
                 cellOutput[i] = 0;
-                LSTMCellInit(cell[i]);
+                InitializeLSTMCell(cell[i]);
             }
         }
 
-        public void LSTMCellInit(LSTMCell c)
+        void InitializeLSTMCell(LSTMCell c)
         {
             c.previousCellState = 0;
             c.cellState = 0;
@@ -740,7 +714,6 @@ namespace RNNSharp
             //partial derivatives
             c.dSWPeepholeIn = 0;
             c.dSWPeepholeForget = 0;
-            //  c.dSWCellState = 0;
 
             c.dSWCellIn = 0;
             c.dSWCellForget = 0;

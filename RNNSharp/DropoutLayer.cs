@@ -9,13 +9,14 @@ namespace RNNSharp
     class DropoutLayer : SimpleLayer
     {
         bool[] mask;
-        ModelSetting m_modelSetting;
         Random rnd;
+        float dropoutRatio;
 
-        public DropoutLayer(int hiddenLayerSize, ModelSetting modelSetting) : base(hiddenLayerSize)
+        public DropoutLayer(DropoutLayerConfig config) : base(config)
         {
+            dropoutRatio = config.DropoutRatio;
             rnd = new Random();
-            m_modelSetting = modelSetting;
+
         }
 
         public DropoutLayer()
@@ -23,7 +24,7 @@ namespace RNNSharp
             rnd = new Random();
         }
 
-        public override void computeLayer(SparseVector sparseFeature, double[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             if (LayerSize != denseFeature.Length)
             {
@@ -35,8 +36,8 @@ namespace RNNSharp
                 mask = new bool[LayerSize];
                 for (int i = 0; i < LayerSize; i++)
                 {
-                    double val = rnd.NextDouble();
-                    if (val < m_modelSetting.Dropout)
+                    float val = (float)rnd.NextDouble();
+                    if (val < dropoutRatio)
                     {
                         mask[i] = true;
                         cellOutput[i] = 0;
@@ -52,17 +53,17 @@ namespace RNNSharp
             {
                 for (int i = 0; i < LayerSize; i++)
                 {
-                    cellOutput[i] = (1.0 - m_modelSetting.Dropout) * denseFeature[i];
+                    cellOutput[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
                 }
             }
         }
 
-        public override void LearnFeatureWeights(int numStates, int curState)
+        public override void BackwardPass(int numStates, int curState)
         {
 
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer, double[] destErrLayer, double[] srcErrLayer)
+        public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
         {
             //error output->hidden for words from specific class    	
             RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);

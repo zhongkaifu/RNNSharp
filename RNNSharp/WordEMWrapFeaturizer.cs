@@ -28,7 +28,7 @@ namespace RNNSharp
 
                 if (vector != null)
                 {
-                    SingleVector spVector = new SingleVector(vectorSize, vector);
+                    SingleVector spVector = new SingleVector(vector);
                     m_WordEmbedding.Add(term, spVector);
                 }
             }

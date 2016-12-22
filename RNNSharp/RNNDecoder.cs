@@ -10,16 +10,13 @@ namespace RNNSharp
     public class RNNDecoder
     {
         RNN<Sequence> rnn;
-        public Featurizer Featurizer;
-        public MODELTYPE ModelType { get; set; }
+        public Config Featurizer;
+        public MODELTYPE ModelType { get { return Featurizer.ModelType; } }
 
-        public RNNDecoder(string strModelFileName)
+        public RNNDecoder(Config featurizer)
         {
-            MODELDIRECTION modelDir = MODELDIRECTION.FORWARD;
-            MODELTYPE modelType;
-
-            RNNHelper.CheckModelFileType(strModelFileName, out modelDir, out modelType);
-            if (modelDir == MODELDIRECTION.BI_DIRECTIONAL)
+            Featurizer = featurizer;
+            if (Featurizer.ModelDirection == MODELDIRECTION.BiDirectional)
             {
                 Logger.WriteLine("Model Structure: Bi-directional RNN");
                 rnn = new BiRNN<Sequence>();
@@ -29,15 +26,9 @@ namespace RNNSharp
                 Logger.WriteLine("Model Structure: Simple RNN");
                 rnn = new ForwardRNN<Sequence>();
             }
-            ModelType = modelType;
 
-            rnn.LoadModel(strModelFileName);
+            rnn.LoadModel(featurizer.ModelFilePath);
             Logger.WriteLine("CRF Model: {0}", rnn.IsCRFTraining);
-        }
-
-        public void SetFeaturizer(Featurizer featurizer)
-        {
-            Featurizer = featurizer;
         }
 
         public int[][] ProcessNBest(Sentence sent, int nbest)
@@ -77,13 +68,13 @@ namespace RNNSharp
             return predicted;
         }
 
-        public List<double[]> ComputeTopHiddenLayerOutput(Sentence sent)
+        public List<float[]> ComputeTopHiddenLayerOutput(Sentence sent)
         {
             Sequence seq = Featurizer.ExtractFeatures(sent);
             return rnn.ComputeTopHiddenLayerOutput(seq);
         }
 
-        public List<double[]> ComputeTopHiddenLayerOutput(Sequence seq)
+        public List<float[]> ComputeTopHiddenLayerOutput(Sequence seq)
         {
             return rnn.ComputeTopHiddenLayerOutput(seq);
         }

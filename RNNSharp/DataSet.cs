@@ -82,7 +82,7 @@ namespace RNNSharp
 
             for (int i = 0; i < TagSize; i++)
             {
-                double sum = 0;
+                float sum = 0;
                 for (int j = 0; j < TagSize; j++)
                 {
                     sum += CRFLabelBigramTransition[i][j];

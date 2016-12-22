@@ -9,23 +9,31 @@ namespace RNNSharp
     public class RNNEncoder<T> where T: ISequence
     {
         ModelSetting ModelSettings;
+        Config featurizer;
+        MODELDIRECTION modelDirection { get { return featurizer.ModelDirection; } }
+        string modelFilePath { get { return featurizer.ModelFilePath; } }
+        List<LayerConfig> hiddenLayersConfig { get { return featurizer.HiddenLayersConfig; } }
+        LayerConfig outputLayerConfig { get { return featurizer.OutputLayerConfig; } }
+
+        public bool IsCRFTraining { get { return featurizer.IsCRFTraining; } }
+        public MODELTYPE ModelType { get { return featurizer.ModelType; } }
+
         public DataSet<T> TrainingSet { get; set; }
         public DataSet<T> ValidationSet { get; set; }
-        public Featurizer Featurizer { get; set; }
 
-        public RNNEncoder(ModelSetting modelSetting)
+        public RNNEncoder(ModelSetting modelSetting, Config featurizer)
         {
             ModelSettings = modelSetting;
+            this.featurizer = featurizer;
         }
-
 
         private int GetCurrentLayerDenseFeatureSize(int inputDenseFeatureSize)
         {
             //If current training is for sequence-to-sequence, we append features from source sequence to standard features.
-            if (ModelSettings.IsSeq2SeqTraining)
+            if (ModelType == MODELTYPE.Seq2Seq)
             {
                 //[Dense feature set of each state in target sequence][Dense feature set of entire source sequence]
-                inputDenseFeatureSize += Featurizer.AutoEncoder.GetTopHiddenLayerSize();
+                inputDenseFeatureSize += featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
             }
 
             return inputDenseFeatureSize;
@@ -35,88 +43,73 @@ namespace RNNSharp
         {
             RNN<T> rnn;
 
-            if (ModelSettings.ModelDirection == 0)
+            if (modelDirection == MODELDIRECTION.Forward)
             {
                 int sparseFeatureSize = TrainingSet.SparseFeatureSize;
-                if (ModelSettings.IsSeq2SeqTraining)
+                if (ModelType == MODELTYPE.Seq2Seq)
                 {
                     //[Sparse feature set of each state in target sequence][Sparse feature set of entire source sequence]
-                    sparseFeatureSize += Featurizer.AutoEncoder.Featurizer.SparseFeatureSize;
+                    sparseFeatureSize += featurizer.Seq2SeqAutoEncoder.Featurizer.SparseFeatureSize;
                     Logger.WriteLine("Sparse Feature Format: [{0}][{1}] = {2}",
-                        TrainingSet.SparseFeatureSize, Featurizer.AutoEncoder.Featurizer.SparseFeatureSize, sparseFeatureSize);
+                        TrainingSet.SparseFeatureSize, featurizer.Seq2SeqAutoEncoder.Featurizer.SparseFeatureSize, sparseFeatureSize);
                 }
 
 
                 List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
-                for (int i = 0; i < ModelSettings.HiddenLayerSizeList.Count; i++)
+                for (int i = 0; i < hiddenLayersConfig.Count; i++)
                 {
                     SimpleLayer layer = null;
-                    if (ModelSettings.ModelType == LayerType.BPTT)
+                    if (hiddenLayersConfig[i].LayerType == LayerType.BPTT)
                     {
-                        BPTTLayer bpttLayer = new BPTTLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        BPTTLayer bpttLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
                         layer = bpttLayer;
+                        Logger.WriteLine($"Create BPTT layer.");
                     }
-                    else if (ModelSettings.ModelType == LayerType.LSTM)
+                    else if (hiddenLayersConfig[i].LayerType == LayerType.LSTM)
                     {
-                        LSTMLayer lstmLayer = new LSTMLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        LSTMLayer lstmLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
                         layer = lstmLayer;
+                        Logger.WriteLine($"Create LSTM layer.");
                     }
-                    else
+                    else if (hiddenLayersConfig[i].LayerType == LayerType.DropOut)
                     {
-                        throw new System.Exception(string.Format("Invalidate hidden layer type: {0}", ModelSettings.ModelType.ToString()));
+                        DropoutLayer dropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                        layer = dropoutLayer;
+                        Logger.WriteLine($"Create Dropout layer.");
                     }
 
                     if (i == 0)
                     {
-                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, ModelSettings.HiddenLayerSizeList[i], sparseFeatureSize, TrainingSet.DenseFeatureSize);
-
-                        if (ModelSettings.IsSeq2SeqTraining)
-                        {
-                            Logger.WriteLine("For seq2seq training, we have {0} sprase feature and {1} dense feature from source sequence.",
-                                Featurizer.AutoEncoder.Featurizer.SparseFeatureSize, Featurizer.AutoEncoder.GetTopHiddenLayerSize());
-                        }
-
                         layer.InitializeWeights(sparseFeatureSize, GetCurrentLayerDenseFeatureSize(TrainingSet.DenseFeatureSize));
                     }
                     else
                     {
-                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, ModelSettings.HiddenLayerSizeList[i], sparseFeatureSize, hiddenLayers[i - 1].LayerSize);
-
                         layer.InitializeWeights(sparseFeatureSize, GetCurrentLayerDenseFeatureSize(hiddenLayers[i - 1].LayerSize));
                     }
+
+                    Logger.WriteLine($"Create hidden layer {i}: size = {layer.LayerSize}, sparse feature size = {layer.SparseFeatureSize}, dense feature size = {layer.DenseFeatureSize}");
                     hiddenLayers.Add(layer);
                 }
 
-                if (ModelSettings.Dropout > 0)
-                {
-                    Logger.WriteLine("Adding dropout layer");
 
-                    DropoutLayer dropoutLayer = new DropoutLayer(hiddenLayers[hiddenLayers.Count - 1].LayerSize, ModelSettings);
-                    dropoutLayer.InitializeWeights(0, GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
-                    hiddenLayers.Add(dropoutLayer);
-                }
+                SimpleLayer outputLayer = null;
+                outputLayerConfig.LayerSize = TrainingSet.TagSize;
 
-                SimpleLayer outputLayer;
-                if (ModelSettings.OutputLayerType == LayerType.NCESoftmax)
+                if (outputLayerConfig.LayerType == LayerType.NCESoftmax)
                 {
                     Logger.WriteLine("Create NCESoftmax layer as output layer");
-                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(TrainingSet.TagSize, ModelSettings);
+                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(outputLayerConfig as NCELayerConfig);
                     nceOutputLayer.BuildStatisticData<T>(TrainingSet);
                     nceOutputLayer.InitializeWeights(0, GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
                     outputLayer = nceOutputLayer;
                 }
-                else if (ModelSettings.OutputLayerType == LayerType.Softmax)
+                else if (outputLayerConfig.LayerType == LayerType.Softmax)
                 {
                     Logger.WriteLine("Create Softmax layer as output layer.");
-                    outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                    outputLayer = new SimpleLayer(outputLayerConfig);
                     outputLayer.InitializeWeights(sparseFeatureSize, GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
                 }
-                else
-                {
-                    throw new System.Exception(string.Format("Invalidate output layer type: {0}", ModelSettings.OutputLayerType.ToString()));
-                }
+
 
                 rnn = new ForwardRNN<T>(hiddenLayers, outputLayer);
             }
@@ -124,110 +117,92 @@ namespace RNNSharp
             {
                 List<SimpleLayer> forwardHiddenLayers = new List<SimpleLayer>();
                 List<SimpleLayer> backwardHiddenLayers = new List<SimpleLayer>();
-                for (int i = 0; i < ModelSettings.HiddenLayerSizeList.Count; i++)
+                for (int i = 0; i < hiddenLayersConfig.Count; i++)
                 {
                     SimpleLayer forwardLayer = null;
                     SimpleLayer backwardLayer = null;
-                    if (ModelSettings.ModelType == LayerType.BPTT)
+                    if (hiddenLayersConfig[i].LayerType == LayerType.BPTT)
                     {
                         //For BPTT layer
-                        BPTTLayer forwardBPTTLayer = new BPTTLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        BPTTLayer forwardBPTTLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
                         forwardLayer = forwardBPTTLayer;
 
-                        BPTTLayer backwardBPTTLayer = new BPTTLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        BPTTLayer backwardBPTTLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
                         backwardLayer = backwardBPTTLayer;
+
+                        Logger.WriteLine($"Create BPTT layer.");
                     }
-                    else if (ModelSettings.ModelType == LayerType.LSTM)
+                    else if (hiddenLayersConfig[i].LayerType == LayerType.LSTM)
                     {
                         //For LSTM layer
-                        LSTMLayer forwardLSTMLayer = new LSTMLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        LSTMLayer forwardLSTMLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
                         forwardLayer = forwardLSTMLayer;
 
-                        LSTMLayer backwardLSTMLayer = new LSTMLayer(ModelSettings.HiddenLayerSizeList[i], ModelSettings);
+                        LSTMLayer backwardLSTMLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
                         backwardLayer = backwardLSTMLayer;
+
+                        Logger.WriteLine($"Create LSTM layer.");
                     }
-                    else
+                    else if (hiddenLayersConfig[i].LayerType == LayerType.DropOut)
                     {
-                        throw new System.Exception(string.Format("Invalidate hidden layer type: {0}", ModelSettings.ModelType.ToString()));
+                        DropoutLayer forwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                        DropoutLayer backwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+
+                        Logger.WriteLine($"Create Dropout layer.");
                     }
 
                     if (i == 0)
                     {
-                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, ModelSettings.HiddenLayerSizeList[i], TrainingSet.SparseFeatureSize, TrainingSet.DenseFeatureSize);
-
                         forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, TrainingSet.DenseFeatureSize);
                         backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, TrainingSet.DenseFeatureSize);
                     }
                     else
                     {
-                        Logger.WriteLine("Create hidden layer {0}: size = {1}, sparse feature size = {2}, dense feature size = {3}",
-                            i, ModelSettings.HiddenLayerSizeList[i], TrainingSet.SparseFeatureSize, forwardHiddenLayers[i - 1].LayerSize);
-
                         forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, forwardHiddenLayers[i - 1].LayerSize);
                         backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, backwardHiddenLayers[i - 1].LayerSize);
                     }
+
+                    Logger.WriteLine($"Create hidden layer {i}: size = {forwardLayer.LayerSize}, sparse feature size = {forwardLayer.SparseFeatureSize}, dense feature size = {forwardLayer.DenseFeatureSize}");
 
                     forwardHiddenLayers.Add(forwardLayer);
                     backwardHiddenLayers.Add(backwardLayer);
                 }
 
-                if (ModelSettings.Dropout > 0)
-                {
-                    Logger.WriteLine("Adding dropout layers");
-                    DropoutLayer forwardDropoutLayer = new DropoutLayer(forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize, ModelSettings);
-                    DropoutLayer backwardDropoutLayer = new DropoutLayer(backwardHiddenLayers[backwardHiddenLayers.Count - 1].LayerSize, ModelSettings);
-
-                    forwardDropoutLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
-                    backwardDropoutLayer.InitializeWeights(0, backwardHiddenLayers[backwardHiddenLayers.Count - 1].LayerSize);
-
-                    forwardHiddenLayers.Add(forwardDropoutLayer);
-                    backwardHiddenLayers.Add(backwardDropoutLayer);
-                }
-
-                SimpleLayer outputLayer;
-                if (ModelSettings.OutputLayerType == LayerType.NCESoftmax)
+                SimpleLayer outputLayer = null;
+                outputLayerConfig.LayerSize = TrainingSet.TagSize;
+                if (outputLayerConfig.LayerType == LayerType.NCESoftmax)
                 {
                     Logger.WriteLine("Create NCESoftmax layer as output layer.");
-                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(TrainingSet.TagSize, ModelSettings);
+                    NCEOutputLayer nceOutputLayer = new NCEOutputLayer(outputLayerConfig as NCELayerConfig);
                     nceOutputLayer.BuildStatisticData<T>(TrainingSet);
                     nceOutputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
                     outputLayer = nceOutputLayer;
                 }
-                else if (ModelSettings.OutputLayerType == LayerType.Softmax)
+                else if (outputLayerConfig.LayerType == LayerType.Softmax)
                 {
                     Logger.WriteLine("Create Softmax layer as output layer.");
-                    outputLayer = new SimpleLayer(TrainingSet.TagSize);
+                    outputLayer = new SimpleLayer(outputLayerConfig);
                     outputLayer.InitializeWeights(TrainingSet.SparseFeatureSize, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
-                }
-                else
-                {
-                    throw new System.Exception(string.Format("Invalidate output layer type: {0}", ModelSettings.OutputLayerType.ToString()));
                 }
 
                 rnn = new BiRNN<T>(forwardHiddenLayers, backwardHiddenLayers, outputLayer);
             }
 
-            rnn.ModelDirection = (MODELDIRECTION)ModelSettings.ModelDirection;
             rnn.bVQ = (ModelSettings.VQ != 0) ? true : false;
-            rnn.ModelFile = ModelSettings.ModelFile;
             rnn.SaveStep = ModelSettings.SaveStep;
             rnn.MaxIter = ModelSettings.MaxIteration;
-            rnn.IsCRFTraining = ModelSettings.IsCRFTraining;
-            rnn.ModelType = ModelSettings.IsSeq2SeqTraining ? MODELTYPE.SEQ2SEQ : MODELTYPE.SEQLABEL;
+            rnn.IsCRFTraining = IsCRFTraining;
+            rnn.ModelType = ModelType;
 
-            if (rnn.ModelDirection == MODELDIRECTION.BI_DIRECTIONAL && rnn.ModelType == MODELTYPE.SEQ2SEQ)
-            {
-                throw new System.Exception("Bi-directional RNN model doesn't support sequence-to-sequence model.");
-            }
 
             RNNHelper.LearningRate = ModelSettings.LearningRate;
             RNNHelper.GradientCutoff = ModelSettings.GradientCutoff;
             RNNHelper.IsConstAlpha = ModelSettings.IsConstAlpha;
             
             //Create tag-bigram transition probability matrix only for sequence RNN mode
-            if (ModelSettings.IsCRFTraining)
+            if (IsCRFTraining)
             {
+                Logger.WriteLine("Initialize bigram transition for CRF output layer.");
                 rnn.setTagBigramTransition(TrainingSet.CRFLabelBigramTransition);
             }
 
@@ -235,7 +210,7 @@ namespace RNNSharp
 
             Logger.WriteLine("Iterative training begins ...");
             double lastPPL = double.MaxValue;
-            double lastAlpha = RNNHelper.LearningRate;
+            float lastAlpha = RNNHelper.LearningRate;
             int iter = 0;
             while (true)
             {
@@ -266,16 +241,16 @@ namespace RNNSharp
                     if (rnn.ValidateNet(ValidationSet, iter) == true)
                     {
                         //We got better result on validated corpus, save this model
-                        Logger.WriteLine("Saving better model into file {0}...", ModelSettings.ModelFile);
-                        rnn.SaveModel(ModelSettings.ModelFile);
+                        Logger.WriteLine("Saving better model into file {0}...", modelFilePath);
+                        rnn.SaveModel(modelFilePath);
                     }
                 }
                 else if (ppl < lastPPL)
                 {
                     //We don't have validate corpus, but we get a better result on training corpus
                     //We got better result on validated corpus, save this model
-                    Logger.WriteLine("Saving better model into file {0}...", ModelSettings.ModelFile);
-                    rnn.SaveModel(ModelSettings.ModelFile);
+                    Logger.WriteLine("Saving better model into file {0}...", modelFilePath);
+                    rnn.SaveModel(modelFilePath);
                 }
                 
                 if (ppl >= lastPPL)

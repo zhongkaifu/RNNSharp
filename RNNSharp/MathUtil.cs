@@ -7,10 +7,10 @@ namespace RNNSharp
 {
     class MathUtil
     {
-        public static int GetMaxProbIndex(double [] array)
+        public static int GetMaxProbIndex(float [] array)
         {
             int dim = array.Length;
-            double maxValue = array[0];
+            float maxValue = array[0];
             int maxIdx = 0;
             for (int i = 1; i < dim; i++)
             {

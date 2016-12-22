@@ -18,19 +18,19 @@ namespace RNNSharp
         public int bptt;
         public int bptt_block;
         protected SimpleLayer[] bptt_hidden;
-        protected double[][] bptt_fea;
+        protected float[][] bptt_fea;
         protected SparseVector[] bptt_inputs = new SparseVector[MAX_RNN_HIST];
 
         //Feature weights
-        protected Matrix<double> BpttWeights { get; set; }
-        protected Matrix<double> BpttWeightsDelta { get; set; }
-        protected Matrix<double> BpttWeightsLearningRate { get; set; }
+        protected Matrix<float> BpttWeights { get; set; }
+        protected Matrix<float> BpttWeightsDelta { get; set; }
+        protected Matrix<float> BpttWeightsLearningRate { get; set; }
 
-        public BPTTLayer(int hiddenLayerSize, ModelSetting modelsetting) : base(hiddenLayerSize)
+        public BPTTLayer(BPTTLayerConfig config) : base(config)
         {
             Logger.WriteLine("Initializing BPTT Layer...");
-            Logger.WriteLine("Layer Size: {0}", hiddenLayerSize);
-            bptt = modelsetting.Bptt + 1;
+            Logger.WriteLine("Layer Size: {0}", config.LayerSize);
+            bptt = config.Bptt + 1;
             bptt_block = 10;
 
             Logger.WriteLine("BPTT Size: {0}", bptt);
@@ -39,7 +39,7 @@ namespace RNNSharp
 
         public BPTTLayer()
         {
-
+            LayerConfig = new LayerConfig();
         }
 
         public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
@@ -49,42 +49,42 @@ namespace RNNSharp
 
             if (SparseFeatureSize > 0)
             {
-                SparseWeights = new Matrix<double>(LayerSize, SparseFeatureSize);
-                SparseWeightsDelta = new Matrix<double>(LayerSize, SparseFeatureSize);
+                SparseWeights = new Matrix<float>(LayerSize, SparseFeatureSize);
+                SparseWeightsDelta = new Matrix<float>(LayerSize, SparseFeatureSize);
             }
 
             if (DenseFeatureSize > 0)
             {
-                DenseWeights = new Matrix<double>(LayerSize, DenseFeatureSize);
-                DenseWeightsDelta = new Matrix<double>(LayerSize, DenseFeatureSize);
+                DenseWeights = new Matrix<float>(LayerSize, DenseFeatureSize);
+                DenseWeightsDelta = new Matrix<float>(LayerSize, DenseFeatureSize);
             }
 
-            BpttWeights = new Matrix<double>(LayerSize, LayerSize);
-            BpttWeightsDelta = new Matrix<double>(LayerSize, LayerSize);
+            BpttWeights = new Matrix<float>(LayerSize, LayerSize);
+            BpttWeightsDelta = new Matrix<float>(LayerSize, LayerSize);
 
             Logger.WriteLine("Initializing weights, sparse feature size: {0}, dense feature size: {1}, random value is {2}", 
                 SparseFeatureSize, DenseFeatureSize, RNNHelper.rand.NextDouble());
-            initWeights();
+            InitWeights();
 
             //Initialize BPTT
-            resetBpttMem();
+            ResetBpttMem();
 
         }
 
-        public void resetBpttMem()
+        void ResetBpttMem()
         {
             bptt_inputs = new SparseVector[MAX_RNN_HIST];
 
             bptt_hidden = new SimpleLayer[bptt + bptt_block + 1];
             for (int i = 0; i < bptt + bptt_block + 1; i++)
             {
-                bptt_hidden[i] = new SimpleLayer(LayerSize);
+                bptt_hidden[i] = new SimpleLayer(LayerConfig);
             }
 
-            bptt_fea = new double[bptt + bptt_block + 2][];  
+            bptt_fea = new float[bptt + bptt_block + 2][];  
         }
 
-        public void initWeights()
+        void InitWeights()
         {
             int b, a;
             for (b = 0; b < LayerSize; b++)
@@ -120,19 +120,19 @@ namespace RNNSharp
             fo.Write(SparseFeatureSize);
             fo.Write(DenseFeatureSize);
 
-            Logger.WriteLine("Saving bptt hidden weights...");
+            Logger.WriteLine($"Saving BPTT layer, size = '{LayerSize}', sparse feature size = '{SparseFeatureSize}', dense feature size = '{DenseFeatureSize}'");
             RNNHelper.SaveMatrix(BpttWeights, fo);
 
             if (SparseFeatureSize > 0)
             {
-                Logger.WriteLine("Saving input2hidden weights...");
+                Logger.WriteLine("Saving sparse feature weights...");
                 RNNHelper.SaveMatrix(SparseWeights, fo);
             }
 
             if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
-                Logger.WriteLine("Saving feature2hidden weights...");
+                Logger.WriteLine("Saving dense feature weights...");
                 RNNHelper.SaveMatrix(DenseWeights, fo);
             }
         }
@@ -151,13 +151,13 @@ namespace RNNSharp
 
             if (SparseFeatureSize > 0)
             {
-                Logger.WriteLine("Loading input2hidden weights...");
+                Logger.WriteLine("Loading sparse feature weights...");
                 SparseWeights = RNNHelper.LoadMatrix(br);
             }
 
             if (DenseFeatureSize > 0)
             {
-                Logger.WriteLine("Loading feature2hidden weights...");
+                Logger.WriteLine("Loading dense feature weights...");
                 DenseWeights = RNNHelper.LoadMatrix(br);
             }
 
@@ -165,17 +165,14 @@ namespace RNNSharp
 
         public override void CleanLearningRate()
         {      
-            SparseWeightsLearningRate = new Matrix<double>(LayerSize, SparseFeatureSize);
-            DenseWeightsLearningRate = new Matrix<double>(LayerSize, DenseFeatureSize);
-            BpttWeightsLearningRate = new Matrix<double>(LayerSize, LayerSize);
+            SparseWeightsLearningRate = new Matrix<float>(LayerSize, SparseFeatureSize);
+            DenseWeightsLearningRate = new Matrix<float>(LayerSize, DenseFeatureSize);
+            BpttWeightsLearningRate = new Matrix<float>(LayerSize, LayerSize);
 
-            RNNHelper.vecMaxGrad = new Vector<double>(RNNHelper.GradientCutoff);
-            RNNHelper.vecMinGrad = new Vector<double>(-RNNHelper.GradientCutoff);
-            RNNHelper.vecNormalLearningRate = new Vector<double>(RNNHelper.LearningRate);
         }
 
         // forward process. output layer consists of tag value
-        public override void computeLayer(SparseVector sparseFeature, double[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
             cellOutput.CopyTo(previousCellOutput, 0);
@@ -193,10 +190,10 @@ namespace RNNSharp
                 //Apply sparse features
                 Parallel.For(0, LayerSize, parallelOption, b =>
                 {
-                    double score = 0;
+                    float score = 0;
                     if (SparseFeatureSize > 0)
                     {
-                        double[] vector_b = SparseWeights[b];
+                        float[] vector_b = SparseWeights[b];
                         foreach (KeyValuePair<int, float> pair in SparseFeature)
                         {
                             score += pair.Value * vector_b[pair.Key];
@@ -220,7 +217,7 @@ namespace RNNSharp
         {
             Parallel.For(0, LayerSize, parallelOption, a =>
             {
-                double score = cellOutput[a];
+                float score = cellOutput[a];
                 if (score > 50)
                 {
                     score = 50;  //for numerical stability
@@ -230,12 +227,12 @@ namespace RNNSharp
                     score = -50;  //for numerical stability
                 }
 
-                score = 1.0 / (1.0 + Math.Exp(-score));
+                score = (float)(1.0 / (1.0 + Math.Exp(-score)));
                 cellOutput[a] = score;
             });
         }
 
-        public override void LearnFeatureWeights(int numStates, int curState)
+        public override void BackwardPass(int numStates, int curState)
         {
             int maxBptt = 0;
             for (maxBptt = 0; maxBptt < bptt + bptt_block - 1; maxBptt++)
@@ -258,7 +255,7 @@ namespace RNNSharp
 
             bptt_inputs[0] = SparseFeature;
             bptt_hidden[0] = last_bptt_hidden;
-            bptt_fea[0] = new double[DenseFeatureSize];
+            bptt_fea[0] = new float[DenseFeatureSize];
             for (int i = 0; i < LayerSize; i++)
             {
                 last_bptt_hidden.cellOutput[i] = cellOutput[i];
@@ -294,23 +291,23 @@ namespace RNNSharp
                     er[a] *= cellOutput[a] * (1 - cellOutput[a]);
 
                     //dense weight update fea->0
-                    double[] vector_a = null;
-                    double er2 = er[a];
-                    Vector<double> vecErr = new Vector<double>(er2);
+                    float[] vector_a = null;
+                    float er2 = er[a];
+                    Vector<float> vecErr = new Vector<float>(er2);
 
                     int i = 0;
                     if (DenseFeatureSize > 0)
                     {
                         vector_a = DenseWeightsDelta[a];
                         i = 0;
-                        while (i < DenseFeatureSize - Vector<double>.Count)
+                        while (i < DenseFeatureSize - Vector<float>.Count)
                         {
-                            Vector<double> v1 = new Vector<double>(bptt_fea_step, i);
-                            Vector<double> v2 = new Vector<double>(vector_a, i);
+                            Vector<float> v1 = new Vector<float>(bptt_fea_step, i);
+                            Vector<float> v2 = new Vector<float>(vector_a, i);
                             v2 += vecErr * v1;
                             v2.CopyTo(vector_a, i);
 
-                            i += Vector<double>.Count;
+                            i += Vector<float>.Count;
                         }
 
                         while (i < DenseFeatureSize)
@@ -333,14 +330,14 @@ namespace RNNSharp
                     //bptt weight update
                     vector_a = BpttWeightsDelta[a];
                     i = 0;
-                    while (i < LayerSize - Vector<double>.Count)
+                    while (i < LayerSize - Vector<float>.Count)
                     {
-                        Vector<double> v1 = new Vector<double>(previousCellOutput, i);
-                        Vector<double> v2 = new Vector<double>(vector_a, i);
+                        Vector<float> v1 = new Vector<float>(previousCellOutput, i);
+                        Vector<float> v2 = new Vector<float>(vector_a, i);
                         v2 += vecErr * v1;
                         v2.CopyTo(vector_a, i);
 
-                        i += Vector<double>.Count;
+                        i += Vector<float>.Count;
                     }
 
                     while (i < LayerSize)
@@ -352,7 +349,7 @@ namespace RNNSharp
                 });
 
                 //propagates errors hidden->input to the recurrent part
-                double[] previousHiddenErr = new double[LayerSize];
+                float[] previousHiddenErr = new float[LayerSize];
                 RNNHelper.matrixXvectorADDErr(previousHiddenErr, er, BpttWeights, LayerSize, LayerSize);
 
                 for (int a = 0; a < LayerSize; a++)
@@ -375,9 +372,9 @@ namespace RNNSharp
 
             Parallel.For(0, LayerSize, parallelOption, b =>
             {
-                double[] vector_b = null;
-                double[] vector_bf = null;
-                double[] vector_lr = null;
+                float[] vector_b = null;
+                float[] vector_bf = null;
+                float[] vector_lr = null;
 
                 //Update bptt feature weights
                 vector_b = BpttWeights[b];
@@ -385,17 +382,17 @@ namespace RNNSharp
                 vector_lr = BpttWeightsLearningRate[b];
 
                 int i = 0;
-                while (i < LayerSize - Vector<double>.Count)
+                while (i < LayerSize - Vector<float>.Count)
                 {
-                    Vector<double> vecDelta = new Vector<double>(vector_bf, i);
-                    Vector<double> vecLearningRateWeights = new Vector<double>(vector_lr, i);
-                    Vector<double> vecB = new Vector<double>(vector_b, i);
+                    Vector<float> vecDelta = new Vector<float>(vector_bf, i);
+                    Vector<float> vecLearningRateWeights = new Vector<float>(vector_lr, i);
+                    Vector<float> vecB = new Vector<float>(vector_b, i);
 
                     //Normalize delta
                     vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                     //Computing learning rate and update its weights
-                    Vector<double> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
+                    Vector<float> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
                     vecLearningRateWeights.CopyTo(vector_lr, i);
 
                     //Update weights
@@ -403,15 +400,15 @@ namespace RNNSharp
                     vecB.CopyTo(vector_b, i);
 
                     //Clean weights
-                    Vector<double>.Zero.CopyTo(vector_bf, i);
+                    Vector<float>.Zero.CopyTo(vector_bf, i);
 
-                    i += Vector<double>.Count;
+                    i += Vector<float>.Count;
                 }
 
                 while (i < LayerSize)
                 {
-                    double delta = RNNHelper.NormalizeGradient(vector_bf[i]);
-                    double newLearningRate = RNNHelper.UpdateLearningRate(BpttWeightsLearningRate, b, i, delta);
+                    float delta = RNNHelper.NormalizeGradient(vector_bf[i]);
+                    float newLearningRate = RNNHelper.UpdateLearningRate(BpttWeightsLearningRate, b, i, delta);
 
                     vector_b[i] += newLearningRate * delta;
                     //Clean bptt weight error
@@ -428,17 +425,17 @@ namespace RNNSharp
                     vector_lr = DenseWeightsLearningRate[b];
 
                     i = 0;
-                    while (i < DenseFeatureSize - Vector<double>.Count)
+                    while (i < DenseFeatureSize - Vector<float>.Count)
                     {
-                        Vector<double> vecDelta = new Vector<double>(vector_bf, i);
-                        Vector<double> vecLearningRateWeights = new Vector<double>(vector_lr, i);
-                        Vector<double> vecB = new Vector<double>(vector_b, i);
+                        Vector<float> vecDelta = new Vector<float>(vector_bf, i);
+                        Vector<float> vecLearningRateWeights = new Vector<float>(vector_lr, i);
+                        Vector<float> vecB = new Vector<float>(vector_b, i);
 
                         //Normalize delta
                         vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                         //Computing learning rate and update its weights
-                        Vector<double> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
+                        Vector<float> vecLearningRate = RNNHelper.UpdateLearningRate(vecDelta, ref vecLearningRateWeights);
                         vecLearningRateWeights.CopyTo(vector_lr, i);
 
                         //Update weights
@@ -446,16 +443,16 @@ namespace RNNSharp
                         vecB.CopyTo(vector_b, i);
 
                         //Clean weights
-                        vecDelta = Vector<double>.Zero;
+                        vecDelta = Vector<float>.Zero;
                         vecDelta.CopyTo(vector_bf, i);
 
-                        i += Vector<double>.Count;
+                        i += Vector<float>.Count;
                     }
 
                     while (i < DenseFeatureSize)
                     {
-                        double delta = RNNHelper.NormalizeGradient(vector_bf[i]);
-                        double newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, b, i, delta);
+                        float delta = RNNHelper.NormalizeGradient(vector_bf[i]);
+                        float newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, b, i, delta);
 
                         vector_b[i] += newLearningRate * delta;
                         //Clean dense feature weights error
@@ -480,8 +477,8 @@ namespace RNNSharp
                         {
                             int pos = pair.Key;
 
-                            double delta = RNNHelper.NormalizeGradient(vector_bf[pos]);
-                            double newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, b, pos, delta);
+                            float delta = RNNHelper.NormalizeGradient(vector_bf[pos]);
+                            float newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, b, pos, delta);
 
                             vector_b[pos] += newLearningRate * delta;
 
@@ -493,11 +490,11 @@ namespace RNNSharp
             });
         }
 
-        public override void netReset(bool updateNet = false)   //cleans hidden layer activation + bptt history
+        public override void Reset(bool updateNet = false)   //cleans hidden layer activation + bptt history
         {
             for (int a = 0; a < LayerSize; a++)
             {
-                cellOutput[a] = 0.1;
+                cellOutput[a] = 0.1f;
             }
 
             if (updateNet == true)
@@ -511,7 +508,7 @@ namespace RNNSharp
                 }
 
                 Array.Clear(bptt_inputs, 0, MAX_RNN_HIST);
-                bptt_fea = new double[bptt + bptt_block + 2][];
+                bptt_fea = new float[bptt + bptt_block + 2][];
             }
         }
     }

@@ -11,30 +11,7 @@ using System.Runtime.CompilerServices;
 /// </summary>
 namespace RNNSharp
 {
-    public enum MODELDIRECTION
-    {
-        FORWARD = 0,
-        BI_DIRECTIONAL
-    }
-
-    public enum MODELTYPE
-    {
-        SEQLABEL = 0,
-        SEQ2SEQ
-    }
-
-    public enum LAYERTYPE
-    {
-        BPTT = 0,
-        LSTM
-    }
-
-    public enum RunningMode
-    {
-        Training = 0,
-        Validate = 1,
-        Test = 2
-    }
+   
 
     public class PAIR<T, K>
     {
@@ -68,7 +45,7 @@ namespace RNNSharp
             return HiddenLayerList[HiddenLayerList.Count - 1].LayerSize;
         }
 
-        public override List<double[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
+        public override List<float[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
         {
             int numStates = pSequence.States.Length;
             int numLayers = HiddenLayerList.Count;
@@ -76,25 +53,25 @@ namespace RNNSharp
             //reset all layers
             foreach (SimpleLayer layer in HiddenLayerList)
             {
-                layer.netReset(false);
+                layer.Reset(false);
             }
 
-            List<double[]> outputs = new List<double[]>();
+            List<float[]> outputs = new List<float[]>();
             for (int curState = 0; curState < numStates; curState++)
             {
                 //Compute first layer
                 State state = pSequence.States[curState];
                 SetRuntimeFeatures(state, curState, numStates, null);
-                HiddenLayerList[0].computeLayer(state.SparseFeature, state.DenseFeature.CopyTo(), false);
+                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo(), false);
 
                 //Compute each layer
                 for (int i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].computeLayer(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, false);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, false);
                 }
 
-                double[] tmpOutput = new double[HiddenLayerList[numLayers - 1].cellOutput.Length];
+                float[] tmpOutput = new float[HiddenLayerList[numLayers - 1].cellOutput.Length];
                 for (int i = 0; i < HiddenLayerList[numLayers - 1].cellOutput.Length; i++)
                 {
                     tmpOutput[i] = HiddenLayerList[numLayers - 1].cellOutput[i];
@@ -105,7 +82,7 @@ namespace RNNSharp
             return outputs;
         }
 
-        public override int[] TestSeq2Seq(Sentence srcSentence, Featurizer featurizer)
+        public override int[] TestSeq2Seq(Sentence srcSentence, Config featurizer)
         {
             State curState = featurizer.ExtractFeatures(new string[] { "<s>" });
             curState.Label = featurizer.TagSet.GetIndex("<s>");
@@ -113,14 +90,14 @@ namespace RNNSharp
             //Reset all layers
             foreach (SimpleLayer layer in HiddenLayerList)
             {
-                layer.netReset(false);
+                layer.Reset(false);
             }
 
             //Extract features from source sentence
-            Sequence srcSequence = featurizer.AutoEncoder.Featurizer.ExtractFeatures(srcSentence);
-            double[] srcHiddenAvgOutput;
+            Sequence srcSequence = featurizer.Seq2SeqAutoEncoder.Featurizer.ExtractFeatures(srcSentence);
+            float[] srcHiddenAvgOutput;
             Dictionary<int, float> srcSparseFeatures;
-            ExtractSourceSentenceFeature(featurizer.AutoEncoder, srcSequence, curState.SparseFeature.Length, out srcHiddenAvgOutput, out srcSparseFeatures);
+            ExtractSourceSentenceFeature(featurizer.Seq2SeqAutoEncoder, srcSequence, curState.SparseFeature.Length, out srcHiddenAvgOutput, out srcSparseFeatures);
 
             int numLayers = HiddenLayerList.Count;
             List<int> predicted = new List<int>();
@@ -134,20 +111,20 @@ namespace RNNSharp
                 sparseVector.AddKeyValuePairData(srcSparseFeatures);
 
                 //Compute first layer
-                double[] denseFeatures = RNNHelper.ConcatenateVector(curState.DenseFeature, srcHiddenAvgOutput);
-                HiddenLayerList[0].computeLayer(sparseVector, denseFeatures, false);
+                float[] denseFeatures = RNNHelper.ConcatenateVector(curState.DenseFeature, srcHiddenAvgOutput);
+                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures, false);
 
                 //Compute middle layers
                 for (int i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
                     denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].cellOutput, srcHiddenAvgOutput);
-                    HiddenLayerList[i].computeLayer(sparseVector, denseFeatures, false);
+                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, false);
                 }
 
                 //Compute output layer
                 denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].cellOutput, srcHiddenAvgOutput);
-                OutputLayer.computeLayer(sparseVector, denseFeatures, false);
+                OutputLayer.ForwardPass(sparseVector, denseFeatures, false);
 
                 OutputLayer.Softmax(false);
 
@@ -169,14 +146,19 @@ namespace RNNSharp
         }
 
 
-        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize, out double[] srcHiddenAvgOutput, out Dictionary<int, float> srcSparseFeatures)
+        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize, out float[] srcHiddenAvgOutput, out Dictionary<int, float> srcSparseFeatures)
         {
-            List<double[]> srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
-            srcHiddenAvgOutput = new double[srcOutputs[0].Length];
+            List<float[]> srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
+            srcHiddenAvgOutput = new float[srcOutputs[0].Length * 2];
             for (int i = 0; i < srcOutputs[0].Length; i++)
             {
-                srcHiddenAvgOutput[i] = (srcOutputs[0][i] + srcOutputs[srcOutputs.Count - 1][i]) / 2.0;
+                srcHiddenAvgOutput[i] = srcOutputs[0][i];
             }
+            for (int i = 0; i < srcOutputs[srcOutputs.Count - 1].Length; i++)
+            {
+                srcHiddenAvgOutput[srcOutputs[0].Length + i] = srcOutputs[srcOutputs.Count - 1][i];
+            }
+
 
             srcSparseFeatures = new Dictionary<int, float>();
             for (int i = 0; i < srcSequence.States.Length; i++)
@@ -213,12 +195,12 @@ namespace RNNSharp
             //Reset all layers
             foreach (SimpleLayer layer in HiddenLayerList)
             {
-                layer.netReset(isTraining);
+                layer.Reset(isTraining);
             }
 
             //Extract features from source sentences
             Sequence srcSequence = pSequence.autoEncoder.Featurizer.ExtractFeatures(pSequence.srcSentence);
-            double[] srcHiddenAvgOutput;
+            float[] srcHiddenAvgOutput;
             Dictionary<int, float> srcSparseFeatures;
             ExtractSourceSentenceFeature(pSequence.autoEncoder, srcSequence, tgtSequence.SparseFeatureSize, out srcHiddenAvgOutput, out srcSparseFeatures);
 
@@ -246,20 +228,20 @@ namespace RNNSharp
                 sparseVector.AddKeyValuePairData(srcSparseFeatures);
 
                 //Compute first layer
-                double[] denseFeatures = RNNHelper.ConcatenateVector(state.DenseFeature, srcHiddenAvgOutput);
-                HiddenLayerList[0].computeLayer(sparseVector, denseFeatures, isTraining);
+                float[] denseFeatures = RNNHelper.ConcatenateVector(state.DenseFeature, srcHiddenAvgOutput);
+                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures, isTraining);
 
                 //Compute middle layers
                 for (int i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
                     denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].cellOutput, srcHiddenAvgOutput);
-                    HiddenLayerList[i].computeLayer(sparseVector, denseFeatures, isTraining);
+                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, isTraining);
                 }
 
                 //Compute output layer
                 denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].cellOutput, srcHiddenAvgOutput);
-                OutputLayer.computeLayer(sparseVector, denseFeatures, isTraining);
+                OutputLayer.ForwardPass(sparseVector, denseFeatures, isTraining);
 
                 OutputLayer.Softmax(isTraining);
 
@@ -285,13 +267,13 @@ namespace RNNSharp
                     //Update net weights
                     Parallel.Invoke(() =>
                     {
-                        OutputLayer.LearnFeatureWeights(numStates, curState);
+                        OutputLayer.BackwardPass(numStates, curState);
                     },
                     () =>
                     {
                         Parallel.For(0, numLayers, parallelOption, i =>
                         {
-                            HiddenLayerList[i].LearnFeatureWeights(numStates, curState);
+                            HiddenLayerList[i].BackwardPass(numStates, curState);
                         });
                     });
                 }
@@ -301,14 +283,14 @@ namespace RNNSharp
 
         }
 
-        public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<double> m)
+        public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m)
         {
             int numStates = pSequence.States.Length;
             int numLayers = HiddenLayerList.Count;
 
             if (outputRawScore == true)
             {
-                m = new Matrix<double>(numStates, OutputLayer.LayerSize);
+                m = new Matrix<float>(numStates, OutputLayer.LayerSize);
             }
             else
             {
@@ -329,7 +311,7 @@ namespace RNNSharp
             //reset all layers
             foreach (SimpleLayer layer in HiddenLayerList)
             {
-                layer.netReset(isTraining);
+                layer.Reset(isTraining);
             }
 
             //Set current sentence labels into short list in output layer
@@ -344,17 +326,17 @@ namespace RNNSharp
                 //Compute first layer
                 State state = pSequence.States[curState];
                 SetRuntimeFeatures(state, curState, numStates, predicted);
-                HiddenLayerList[0].computeLayer(state.SparseFeature, state.DenseFeature.CopyTo(), isTraining);
+                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo(), isTraining);
 
                 //Compute each layer
                 for (int i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].computeLayer(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, isTraining);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, isTraining);
                 }
 
                 //Compute output layer
-                OutputLayer.computeLayer(state.SparseFeature, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
+                OutputLayer.ForwardPass(state.SparseFeature, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
 
                 if (m != null)
                 {
@@ -385,13 +367,13 @@ namespace RNNSharp
                     //Update net weights
                     Parallel.Invoke(() =>
                     {
-                        OutputLayer.LearnFeatureWeights(numStates, curState);
+                        OutputLayer.BackwardPass(numStates, curState);
                     },
                     () =>
                     {
                         Parallel.For(0, numLayers, parallelOption, i =>
                         {
-                            HiddenLayerList[i].LearnFeatureWeights(numStates, curState);
+                            HiddenLayerList[i].BackwardPass(numStates, curState);
                         });
                     });
                 }
@@ -406,7 +388,7 @@ namespace RNNSharp
             int numLayers = HiddenLayerList.Count;
 
             //Get network output without CRF
-            Matrix<double> nnOutput;
+            Matrix<float> nnOutput;
             ProcessSequence(pSequence, RunningMode.Test, true, out nnOutput);
 
             //Compute CRF result
@@ -432,7 +414,7 @@ namespace RNNSharp
                 //Reset all layer states
                 foreach (SimpleLayer layer in HiddenLayerList)
                 {
-                    layer.netReset(true);
+                    layer.Reset(true);
                 }
 
                 for (int curState = 0; curState < numStates; curState++)
@@ -440,11 +422,11 @@ namespace RNNSharp
                     // error propogation
                     State state = pSequence.States[curState];
                     SetRuntimeFeatures(state, curState, numStates, null);
-                    HiddenLayerList[0].computeLayer(state.SparseFeature, state.DenseFeature.CopyTo());
+                    HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
 
                     for (int i = 1; i < numLayers; i++)
                     {
-                        HiddenLayerList[i].computeLayer(state.SparseFeature, HiddenLayerList[i - 1].cellOutput);
+                        HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput);
                     }
 
                     OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
@@ -458,13 +440,13 @@ namespace RNNSharp
                     //Update net weights
                     Parallel.Invoke(() =>
                     {
-                        OutputLayer.LearnFeatureWeights(numStates, curState);
+                        OutputLayer.BackwardPass(numStates, curState);
                     },
                     () =>
                     {
                         Parallel.For(0, numLayers, parallelOption, i =>
                         {
-                            HiddenLayerList[i].LearnFeatureWeights(numStates, curState);
+                            HiddenLayerList[i].BackwardPass(numStates, curState);
                         });
                     });
                 }
@@ -488,8 +470,6 @@ namespace RNNSharp
                 fo.Write((int)LAYERTYPE.LSTM);
             }
 
-            fo.Write((int)ModelDirection);
-            fo.Write((int)ModelType);
             fo.Write(IsCRFTraining);
 
             fo.Write(HiddenLayerList.Count);
@@ -516,8 +496,6 @@ namespace RNNSharp
             BinaryReader br = new BinaryReader(sr.BaseStream);
 
             LAYERTYPE layerType = (LAYERTYPE)br.ReadInt32();
-            ModelDirection = (MODELDIRECTION)br.ReadInt32();
-            ModelType = (MODELTYPE)br.ReadInt32();
             IsCRFTraining = br.ReadBoolean();
 
             //Create cells of each layer
@@ -561,6 +539,10 @@ namespace RNNSharp
             }
 
             OutputLayer.CleanLearningRate();
+
+            RNNHelper.vecMaxGrad = new Vector<float>(RNNHelper.GradientCutoff);
+            RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
+            RNNHelper.vecNormalLearningRate = new Vector<float>(RNNHelper.LearningRate);
         }    
     }
 }

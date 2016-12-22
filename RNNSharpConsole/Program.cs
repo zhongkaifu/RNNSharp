@@ -13,28 +13,18 @@ namespace RNNSharpConsole
     /// </summary>
     class Program
     {
-        static string strModelFile = "";
         static string strTestFile = "";
         static string strOutputFile = "";
         static string strTagFile = "";
-        static string strFeatureConfigFile = "";
+        static string configFile = "";
         static string strTrainFile = "";
         static string strValidFile = "";
         static int maxIter = 20;
-        static List<int> hiddenLayerSizeList = null;
-        static int iCRF = 0;
         static long savestep = 0;
         static float alpha = 0.1f;
-        static float dropout = 0;
-        static int bptt = 4;
-        static string hiddenLayerType = "BPTT";
-        static string outputLayerType = "Softmax";
         static int nBest = 1;
-        static int iDir = 0;
         static int iVQ = 0;
         static float gradientCutoff = 15.0f;
-        static int nceSampleSize = 15;
-        static bool Seq2Seq = false;
         static bool constAlpha = false;
 
         static void UsageTitle()
@@ -61,23 +51,8 @@ namespace RNNSharpConsole
             Console.WriteLine(" -validfile <string>");
             Console.WriteLine("\tValidated corpus file for training");
 
-            Console.WriteLine(" -modelfile <string>");
-            Console.WriteLine("\tEncoded model file");
-
-            Console.WriteLine(" -hiddenlayertype <string>");
-            Console.WriteLine("\tSupported type: BPTT and LSTM. Default is BPTT");
-
-            Console.WriteLine(" -outputlayertype <string>");
-            Console.WriteLine("\tSupported type: Softmax and NCESoftmax. Default is Softmax");
-
-            Console.WriteLine(" -ncesamplesize <int>");
-            Console.WriteLine("\tNoise contrastive estimation(NCE) sample size. Default is 15");
-
-            Console.WriteLine(" -dir <int>");
-            Console.WriteLine("\tRecurrent direction: 0 - Forward RNN, 1 - Bi-directional RNN. Default is 0");
-
-            Console.WriteLine(" -ftrfile <string>");
-            Console.WriteLine("\tFeature configuration file");
+            Console.WriteLine(" -cfgfile <string>");
+            Console.WriteLine("\tConfiguration file");
 
             Console.WriteLine(" -tagfile <string>");
             Console.WriteLine("\tSupported output tagid-name list file");
@@ -87,18 +62,6 @@ namespace RNNSharpConsole
 
             Console.WriteLine(" -constalpha <boolean>");
             Console.WriteLine("\tUse const learning rat. Default is false");
-
-            Console.WriteLine(" -dropout <float>");
-            Console.WriteLine("\tDropout ratio [0, 1.0). Default is 0");
-
-            Console.WriteLine(" -layersize <int>");
-            Console.WriteLine("\tHidden layer size. The size of different layer is separated by comma. Default is one layer which size is 200");
-
-            Console.WriteLine(" -bptt <int>");
-            Console.WriteLine("\tStep for back-propagation through time for BPTT-RNN. Default is 4");
-
-            Console.WriteLine(" -crf <int>");
-            Console.WriteLine("\tEnable CRF model at output, 0 is disable, 1 is enable. Default is 0");
 
             Console.WriteLine(" -maxiter <int>");
             Console.WriteLine("\tMaximum iteration for training, 0 is unlimited. Default is 20");
@@ -112,14 +75,8 @@ namespace RNNSharpConsole
             Console.WriteLine(" -grad <float>");
             Console.WriteLine("\tGradient cut-off. Default is 15.0f");
 
-            Console.WriteLine(" -seq2seq <boolean>");
-            Console.WriteLine("\tTrain a sequence-to-sequence model if it's true, otherwise, train a sequence labeling model. Default is false");
-
             Console.WriteLine();
-            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -modelfile model.bin -ftrfile features.txt -tagfile tags.txt -hiddenlayertype BPTT -outputlayertype softmax -layersize 200,100 -alpha 0.1 -crf 1 -maxiter 20 -savestep 200K -dir 1 -vq 0 -grad 15.0");
-            Console.WriteLine();
-            Console.WriteLine("This command trains a bi-directional recurrent neural network with CRF output. The network has two BPTT hidden layers and one softmax output layer. The first hidden layer size is 200 and the second hidden layer size is 100");
-
+            Console.WriteLine("Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K -vq 0 -grad 15.0");
         }
 
         static void UsageTest()
@@ -128,16 +85,13 @@ namespace RNNSharpConsole
             Console.WriteLine("RNNSharpConsole.exe -mode test <parameters>");
             Console.WriteLine("Parameters to predict tags from given corpus by using trained model");
             Console.WriteLine(" -testfile <string>");
-            Console.WriteLine("\tTraining corpus file");
-
-            Console.WriteLine(" -modelfile <string>");
-            Console.WriteLine("\tEncoded model file");
+            Console.WriteLine("\tInput file for testing");
 
             Console.WriteLine(" -tagfile <string>");
             Console.WriteLine("\tSupported output tagid-name list file");
 
-            Console.WriteLine(" -ftrfile <string>");
-            Console.WriteLine("\tFeature configuration file");
+            Console.WriteLine(" -cfgfile <string>");
+            Console.WriteLine("\tConfiguration file");
 
             Console.WriteLine(" -outfile <string>");
             Console.WriteLine("\tResult output file");
@@ -152,42 +106,17 @@ namespace RNNSharpConsole
         static void InitParameters(string[] args)
         {
             int i;
-            if ((i = ArgPos("-modelfile", args)) >= 0) strModelFile = args[i + 1];
             if ((i = ArgPos("-trainfile", args)) >= 0) strTrainFile = args[i + 1];
             if ((i = ArgPos("-validfile", args)) >= 0) strValidFile = args[i + 1];
             if ((i = ArgPos("-testfile", args)) >= 0) strTestFile = args[i + 1];
             if ((i = ArgPos("-outfile", args)) >= 0) strOutputFile = args[i + 1];
             if ((i = ArgPos("-tagfile", args)) >= 0) strTagFile = args[i + 1];
-            if ((i = ArgPos("-ftrfile", args)) >= 0) strFeatureConfigFile = args[i + 1];
-
-            hiddenLayerSizeList = new List<int>();
-            if ((i = ArgPos("-layersize", args)) >= 0)
-            {
-                string[] layers = args[i + 1].Split(',');
-                foreach (string layer in layers)
-                {
-                    hiddenLayerSizeList.Add(int.Parse(layer, CultureInfo.InvariantCulture));
-                }
-            }
-            else
-            {
-                hiddenLayerSizeList.Add(200);
-            }
-
-            if ((i = ArgPos("-ncesamplesize", args)) >= 0) nceSampleSize = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
-            if ((i = ArgPos("-hiddenlayertype", args)) >= 0) hiddenLayerType = args[i + 1].ToLower().Trim();
-            if ((i = ArgPos("-outputlayertype", args)) >= 0) outputLayerType = args[i + 1].ToLower().Trim();
-            if ((i = ArgPos("-crf", args)) >= 0) iCRF = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-cfgfile", args)) >= 0) configFile = args[i + 1];
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
-            if ((i = ArgPos("-dropout", args)) >= 0) dropout = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
-            if ((i = ArgPos("-bptt", args)) >= 0) bptt = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
-            if ((i = ArgPos("-dir", args)) >= 0) iDir = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
-
-            if ((i = ArgPos("-seq2seq", args)) >= 0) Seq2Seq = bool.Parse(args[i + 1]);
             if ((i = ArgPos("-constalpha", args)) >= 0) constAlpha = bool.Parse(args[i + 1]);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
@@ -260,7 +189,7 @@ namespace RNNSharpConsole
 
         }
 
-        static void LoadSeq2SeqDataSet(string strFileName, Featurizer featurizer, DataSet<SequencePair> dataSet)
+        static void LoadSeq2SeqDataSet(string strFileName, Config featurizer, DataSet<SequencePair> dataSet)
         {
             Logger.WriteLine("Loading data set for seq2seq2 training...");
             StreamReader sr = new StreamReader(strFileName);
@@ -299,7 +228,7 @@ namespace RNNSharpConsole
 
 
 
-        static void LoadDataset(string strFileName, Featurizer featurizer, DataSet<Sequence> dataSet)
+        static void LoadDataset(string strFileName, Config featurizer, DataSet<Sequence> dataSet)
         {
             Logger.WriteLine("Loading data set...");
             CheckCorpus(strFileName);
@@ -359,15 +288,7 @@ namespace RNNSharpConsole
                 strMode = args[i + 1].ToLower();
                 if (strMode == "train")
                 {
-                    if (Seq2Seq)
-                    {
-                        Logger.WriteLine("Start to train seq2seq model.");
-                        TrainSeq2Seq();
-                    }
-                    else
-                    {
-                        Train();
-                    }
+                    Train();
                 }
                 else if (strMode == "test")
                 {
@@ -415,16 +336,9 @@ namespace RNNSharpConsole
             Logger.WriteLine($"Loading tag file '{strTagFile}'");
             TagSet tagSet = new TagSet(strTagFile);
 
-            if (String.IsNullOrEmpty(strModelFile) == true)
+            if (String.IsNullOrEmpty(configFile) == true)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The model file {0} isn't specified.", strModelFile);
-                UsageTest();
-                return;
-            }
-
-            if (String.IsNullOrEmpty(strFeatureConfigFile) == true)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} isn't specified.", strFeatureConfigFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The configuration file {0} isn't specified.", configFile);
                 UsageTest();
                 return;
             }
@@ -436,19 +350,18 @@ namespace RNNSharpConsole
                 return;
             }
 
-            //Create instance for decoder
-            Logger.WriteLine($"Loading model from {strModelFile} and creating decoder instance...");
-            RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(strModelFile);
-
             //Create feature extractors and load word embedding data from file
-            Logger.WriteLine($"Initializing featurizer. Feature config file = '{strFeatureConfigFile}'");
-            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet, (decoder.ModelType == MODELTYPE.SEQ2SEQ));
-            decoder.SetFeaturizer(featurizer);
-            featurizer.ShowFeatureSize();
+            Logger.WriteLine($"Initializing config file = '{configFile}'");
+            Config config = new Config(configFile, tagSet);
+            config.ShowFeatureSize();
+
+            //Create instance for decoder
+            Logger.WriteLine($"Loading model from {config.ModelFilePath} and creating decoder instance...");
+            RNNSharp.RNNDecoder decoder = new RNNSharp.RNNDecoder(config);
 
             if (File.Exists(strTestFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The test corpus {0} isn't existed.", strTestFile);
+                Logger.WriteLine(Logger.Level.err, $"FAILED: The test corpus {strTestFile} doesn't exist.");
                 UsageTest();
                 return;
             }
@@ -468,7 +381,7 @@ namespace RNNSharpConsole
                 if (nBest == 1)
                 {
                     //Output decoded result
-                    if (decoder.ModelType == MODELTYPE.SEQLABEL)
+                    if (decoder.ModelType == MODELTYPE.SeqLabel)
                     {
                         //Append the decoded result into the end of feature set of each token
                         int[] output = decoder.Process(sent);
@@ -545,112 +458,13 @@ namespace RNNSharpConsole
             throw new ArgumentException(String.Format("Invalidated layer type: {0}", layerType));
         }
 
-
-        private static void TrainSeq2Seq()
-        {
-            Logger.LogFile = "RNNSharpConsole.log";
-
-            if (File.Exists(strTagFile) == false)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't existed.", strTagFile);
-                UsageTrain();
-                return;
-            }
-
-            //Load tag id and its name from file
-            TagSet tagSet = new TagSet(strTagFile);
-
-            //Create configuration instance and set parameters
-            ModelSetting RNNConfig = new ModelSetting();
-            RNNConfig.TagFile = strTagFile;
-            RNNConfig.Tags = tagSet;
-            RNNConfig.ModelFile = strModelFile;
-            RNNConfig.HiddenLayerSizeList = hiddenLayerSizeList;
-            RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
-            RNNConfig.ModelDirection = iDir;
-            RNNConfig.VQ = iVQ;
-            RNNConfig.ModelType = ParseLayerType(hiddenLayerType);
-            RNNConfig.OutputLayerType = ParseLayerType(outputLayerType);
-            RNNConfig.MaxIteration = maxIter;
-            RNNConfig.SaveStep = savestep;
-            RNNConfig.LearningRate = alpha;
-            RNNConfig.Dropout = dropout;
-            RNNConfig.Bptt = bptt;
-            RNNConfig.GradientCutoff = gradientCutoff;
-            RNNConfig.NCESampleSize = nceSampleSize;
-            RNNConfig.IsSeq2SeqTraining = true;
-            RNNConfig.IsConstAlpha = constAlpha;
-
-            //Dump RNN setting on console
-            RNNConfig.DumpSetting();
-
-            if (File.Exists(strFeatureConfigFile) == false)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.", strFeatureConfigFile);
-                UsageTrain();
-                return;
-            }
-            //Create feature extractors and load word embedding data from file
-            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet, true);
-            featurizer.ShowFeatureSize();
-
-            if (featurizer.IsRunTimeFeatureUsed() == true && iDir == 1)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: Run time feature is not available for bi-directional RNN model.");
-                UsageTrain();
-                return;
-            }
-
-            if (File.Exists(strTrainFile) == false)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus doesn't exist.");
-                UsageTrain();
-                return;
-            }
-
-            //Create RNN encoder and save necessary parameters
-            RNNEncoder<SequencePair> encoder = new RNNEncoder<SequencePair>(RNNConfig);
-            encoder.Featurizer = featurizer;
-
-            //LoadFeatureConfig training corpus and extract feature set
-            encoder.TrainingSet = new DataSet<SequencePair>(tagSet.GetSize());
-
-            LoadSeq2SeqDataSet(strTrainFile, featurizer, encoder.TrainingSet);
-
-            if (String.IsNullOrEmpty(strValidFile) == false)
-            {
-                //LoadFeatureConfig validated corpus and extract feature set
-                Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
-                encoder.ValidationSet = new DataSet<SequencePair>(tagSet.GetSize());
-                LoadSeq2SeqDataSet(strValidFile, featurizer, encoder.ValidationSet);
-            }
-            else
-            {
-                Logger.WriteLine("Validated corpus isn't specified.");
-                encoder.ValidationSet = null;
-            }
-
-            if (iCRF == 1)
-            {
-                Logger.WriteLine("Initialize output tag bigram transition probability...");
-                //Build tag bigram transition matrix
-                encoder.TrainingSet.BuildLabelBigramTransition();
-            }
-
-            //Start to train the model
-            encoder.Train();
-
-
-
-        }
-
         private static void Train()
         {
             Logger.LogFile = "RNNSharpConsole.log";
 
             if (File.Exists(strTagFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't existed.", strTagFile);
+                Logger.WriteLine(Logger.Level.err, $"FAILED: The tag mapping file {strTagFile} doesn't exist.");
                 UsageTrain();
                 return;
             }
@@ -662,41 +476,25 @@ namespace RNNSharpConsole
             ModelSetting RNNConfig = new ModelSetting();
             RNNConfig.TagFile = strTagFile;
             RNNConfig.Tags = tagSet;
-            RNNConfig.ModelFile = strModelFile;
-            RNNConfig.HiddenLayerSizeList = hiddenLayerSizeList;
-            RNNConfig.IsCRFTraining = (iCRF == 1) ? true : false;
-            RNNConfig.ModelDirection = iDir;
             RNNConfig.VQ = iVQ;
-            RNNConfig.ModelType = ParseLayerType(hiddenLayerType);
-            RNNConfig.OutputLayerType = ParseLayerType(outputLayerType);
             RNNConfig.MaxIteration = maxIter;
             RNNConfig.SaveStep = savestep;
             RNNConfig.LearningRate = alpha;
-            RNNConfig.Dropout = dropout;
-            RNNConfig.Bptt = bptt;
             RNNConfig.GradientCutoff = gradientCutoff;
-            RNNConfig.NCESampleSize = nceSampleSize;
             RNNConfig.IsConstAlpha = constAlpha;
 
             //Dump RNN setting on console
             RNNConfig.DumpSetting();
 
-            if (File.Exists(strFeatureConfigFile) == false)
+            if (File.Exists(configFile) == false)
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.", strFeatureConfigFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.", configFile);
                 UsageTrain();
                 return;
             }
             //Create feature extractors and load word embedding data from file
-            Featurizer featurizer = new Featurizer(strFeatureConfigFile, tagSet);
-            featurizer.ShowFeatureSize();
-
-            if (featurizer.IsRunTimeFeatureUsed() == true && iDir == 1)
-            {
-                Logger.WriteLine(Logger.Level.err, "FAILED: Run time feature is not available for bi-directional RNN model.");
-                UsageTrain();
-                return;
-            }
+            Config config = new Config(configFile, tagSet);
+            config.ShowFeatureSize();
 
             if (File.Exists(strTrainFile) == false)
             {
@@ -705,37 +503,71 @@ namespace RNNSharpConsole
                 return;
             }
 
-            //Create RNN encoder and save necessary parameters
-            RNNEncoder<Sequence> encoder = new RNNEncoder<Sequence>(RNNConfig);
-            encoder.Featurizer = featurizer;
-
-            //LoadFeatureConfig training corpus and extract feature set
-            encoder.TrainingSet = new DataSet<Sequence>(tagSet.GetSize());
-            LoadDataset(strTrainFile, featurizer, encoder.TrainingSet);
-
-            if (String.IsNullOrEmpty(strValidFile) == false)
+            if (config.ModelType == MODELTYPE.SeqLabel)
             {
-                //LoadFeatureConfig validated corpus and extract feature set
-                Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
-                encoder.ValidationSet = new DataSet<Sequence>(tagSet.GetSize());
-                LoadDataset(strValidFile, featurizer, encoder.ValidationSet);
+                //Create RNN encoder and save necessary parameters
+                RNNEncoder<Sequence> encoder = new RNNEncoder<Sequence>(RNNConfig, config);
+
+                //LoadFeatureConfig training corpus and extract feature set
+                encoder.TrainingSet = new DataSet<Sequence>(tagSet.GetSize());
+                LoadDataset(strTrainFile, config, encoder.TrainingSet);
+
+                if (String.IsNullOrEmpty(strValidFile) == false)
+                {
+                    //LoadFeatureConfig validated corpus and extract feature set
+                    Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                    encoder.ValidationSet = new DataSet<Sequence>(tagSet.GetSize());
+                    LoadDataset(strValidFile, config, encoder.ValidationSet);
+                }
+                else
+                {
+                    Logger.WriteLine("Validated corpus isn't specified.");
+                    encoder.ValidationSet = null;
+                }
+
+                if (encoder.IsCRFTraining)
+                {
+                    Logger.WriteLine("Initialize output tag bigram transition probability...");
+                    //Build tag bigram transition matrix
+                    encoder.TrainingSet.BuildLabelBigramTransition();
+                }
+
+                //Start to train the model
+                encoder.Train();
             }
             else
             {
-                Logger.WriteLine("Validated corpus isn't specified.");
-                encoder.ValidationSet = null;
+                //Create RNN encoder and save necessary parameters
+                RNNEncoder<SequencePair> encoder = new RNNEncoder<SequencePair>(RNNConfig, config);
+
+                //LoadFeatureConfig training corpus and extract feature set
+                encoder.TrainingSet = new DataSet<SequencePair>(tagSet.GetSize());
+
+                LoadSeq2SeqDataSet(strTrainFile, config, encoder.TrainingSet);
+
+                if (String.IsNullOrEmpty(strValidFile) == false)
+                {
+                    //LoadFeatureConfig validated corpus and extract feature set
+                    Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                    encoder.ValidationSet = new DataSet<SequencePair>(tagSet.GetSize());
+                    LoadSeq2SeqDataSet(strValidFile, config, encoder.ValidationSet);
+                }
+                else
+                {
+                    Logger.WriteLine("Validated corpus isn't specified.");
+                    encoder.ValidationSet = null;
+                }
+
+                if (encoder.IsCRFTraining)
+                {
+                    Logger.WriteLine("Initialize output tag bigram transition probability...");
+                    //Build tag bigram transition matrix
+                    encoder.TrainingSet.BuildLabelBigramTransition();
+                }
+
+                //Start to train the model
+                encoder.Train();
             }
-
-            if (iCRF == 1)
-            {
-                Logger.WriteLine("Initialize output tag bigram transition probability...");
-                //Build tag bigram transition matrix
-                encoder.TrainingSet.BuildLabelBigramTransition();
-            }
-
-            //Start to train the model
-            encoder.Train();
-
         }
     }
 }

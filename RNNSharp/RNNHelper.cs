@@ -12,26 +12,26 @@ namespace RNNSharp
 {
     public class RNNHelper
     {
-        public static double GradientCutoff { get; set; }
+        public static float GradientCutoff { get; set; }
         public static float LearningRate { get; set; }
         public static bool IsConstAlpha { get; set; }
 
-        public static Vector<double> vecMaxGrad;
-        public static Vector<double> vecMinGrad;
-        public static Vector<double> vecNormalLearningRate;
+        public static Vector<float> vecMaxGrad;
+        public static Vector<float> vecMinGrad;
+        public static Vector<float> vecNormalLearningRate;
         public static Random rand = new Random(DateTime.Now.Millisecond);
 
-        public static double random(double min, double max)
+        public static float random(float min, float max)
         {
-            return rand.NextDouble() * (max - min) + min;
+            return (float)(rand.NextDouble() * (max - min) + min);
         }
 
         public static float RandInitWeight()
         {
-            return (float)(random(-0.1, 0.1) + random(-0.1, 0.1) + random(-0.1, 0.1));
+            return (float)(random(-0.1f, 0.1f) + random(-0.1f, 0.1f) + random(-0.1f, 0.1f));
         }
 
-        public static double NormalizeGradient(double err)
+        public static float NormalizeGradient(float err)
         {
             if (err > GradientCutoff)
             {
@@ -46,16 +46,37 @@ namespace RNNSharp
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector<double> NormalizeGradient(Vector<double> v)
+        public static Vector<float> NormalizeGradient(Vector<float> v)
         {
-            v = Vector.Min<double>(v, vecMaxGrad);
-            v = Vector.Max<double>(v, vecMinGrad);
+            v = Vector.Min<float>(v, vecMaxGrad);
+            v = Vector.Max<float>(v, vecMinGrad);
 
             return v;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector<double> UpdateLearningRate(Vector<double> vecDelta, ref Vector<double> vecLearningRateWeights)
+        public static void UpdateFeatureWeights(float[] feature, float[] featureWeight, float[] learningRateWeight, float err, int idx)
+        {
+            //Computing error delta
+            Vector<float> vecDenseFeature = new Vector<float>(feature, idx);
+            Vector<float> vecDelta = vecDenseFeature * err;
+ 
+            vecDelta = NormalizeGradient(vecDelta);
+
+            //Computing learning rate
+            Vector<float> vecDenseWeightLearningRateCol = new Vector<float>(learningRateWeight, idx);
+            vecDenseWeightLearningRateCol += vecDelta * vecDelta;
+            vecDenseWeightLearningRateCol.CopyTo(learningRateWeight, idx);
+
+            Vector<float> vecNewLearningRate = vecNormalLearningRate / (Vector<float>.One + Vector.SquareRoot<float>(vecDenseWeightLearningRateCol));
+
+            Vector<float> vecVector_C = new Vector<float>(featureWeight, idx);
+            vecVector_C += vecNewLearningRate * vecDelta;
+            vecVector_C.CopyTo(featureWeight, idx);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector<float> UpdateLearningRate(Vector<float> vecDelta, ref Vector<float> vecLearningRateWeights)
         {
             if (IsConstAlpha)
             {
@@ -64,11 +85,11 @@ namespace RNNSharp
             else
             {
                 vecLearningRateWeights += (vecDelta * vecDelta);
-                return vecNormalLearningRate / (Vector<double>.One + Vector.SquareRoot<double>(vecLearningRateWeights));
+                return vecNormalLearningRate / (Vector<float>.One + Vector.SquareRoot<float>(vecLearningRateWeights));
             }
         }
 
-        public static double UpdateLearningRate(Matrix<double> m, int i, int j, double delta)
+        public static float UpdateLearningRate(Matrix<float> m, int i, int j, float delta)
         {
             if (IsConstAlpha)
             {
@@ -76,15 +97,15 @@ namespace RNNSharp
             }
             else
             {
-                double dg = m[i][j] + delta * delta;
+                float dg = m[i][j] + delta * delta;
                 m[i][j] = dg;
 
-                return LearningRate / (1.0 + Math.Sqrt(dg));
+                return (float)(LearningRate / (1.0 + Math.Sqrt(dg)));
             }
         }
 
         //Save matrix into file as binary format
-        public static void SaveMatrix(Matrix<double> mat, BinaryWriter fo, bool bVQ = false)
+        public static void SaveMatrix(Matrix<float> mat, BinaryWriter fo, bool bVQ = false)
         {
             //Save the width and height of the matrix
             fo.Write(mat.Width);
@@ -146,9 +167,9 @@ namespace RNNSharp
                 }
             }
         }
-        public static double[] ConcatenateVector(VectorBase src1, double[] src2)
+        public static float[] ConcatenateVector(VectorBase src1, float[] src2)
         {
-            double[] dest = new double[src1.Length + src2.Length];
+            float[] dest = new float[src1.Length + src2.Length];
             Parallel.Invoke(() =>
             {
                 src1.CopyTo().CopyTo(dest, 0);
@@ -162,9 +183,9 @@ namespace RNNSharp
             return dest;
         }
 
-        public static double[] ConcatenateVector(double[] src1, double[] src2)
+        public static float[] ConcatenateVector(float[] src1, float[] src2)
         {
-            double[] dest = new double[src1.Length + src2.Length];
+            float[] dest = new float[src1.Length + src2.Length];
             Parallel.Invoke(() =>
             {
                 src1.CopyTo(dest, 0);
@@ -178,21 +199,21 @@ namespace RNNSharp
             return dest;
         }
 
-        public static void matrixXvectorADD(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize, bool cleanDest = true)
+        public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, int SrcSize, bool cleanDest = true)
         {
             Parallel.For(0, DestSize, i =>
             {
-                double[] vector_i = srcmatrix[i];
-                double cellOutput = 0;
+                float[] vector_i = srcmatrix[i];
+                float cellOutput = 0;
                 int j = 0;
 
-                while (j < SrcSize - Vector<double>.Count)
+                while (j < SrcSize - Vector<float>.Count)
                 {
-                    Vector<double> v1 = new Vector<double>(srcvec, j);
-                    Vector<double> v2 = new Vector<double>(vector_i, j);
-                    cellOutput += Vector.Dot<double>(v1, v2);
+                    Vector<float> v1 = new Vector<float>(srcvec, j);
+                    Vector<float> v2 = new Vector<float>(vector_i, j);
+                    cellOutput += Vector.Dot<float>(v1, v2);
 
-                    j += Vector<double>.Count;
+                    j += Vector<float>.Count;
                 }
 
                 while (j < SrcSize)
@@ -213,11 +234,11 @@ namespace RNNSharp
         }
 
 
-        public static void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, int SrcSize)
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, int SrcSize)
         {
             Parallel.For(0, DestSize, i =>
             {
-                double er = 0;
+                float er = 0;
                 for (int j = 0; j < SrcSize; j++)
                 {
                     er += srcvec[j] * srcmatrix[j][i];
@@ -227,48 +248,31 @@ namespace RNNSharp
             });
         }
 
-        public static void CheckModelFileType(string filename, out MODELDIRECTION modelDir, out MODELTYPE modelType)
-        {
-            using (StreamReader sr = new StreamReader(filename))
-            {
-                BinaryReader br = new BinaryReader(sr.BaseStream);
-                LAYERTYPE layerType = (LAYERTYPE)br.ReadInt32();
-                modelDir = (MODELDIRECTION)br.ReadInt32();
-                modelType = (MODELTYPE)br.ReadInt32();
-
-                Logger.WriteLine("Model information:");
-                Logger.WriteLine("File name : '{0}'", filename);
-                Logger.WriteLine("Direction: '{0}'", modelDir);
-                Logger.WriteLine("Model type: '{0}'", modelType);
-                Logger.WriteLine("Layer type: '{0}'", layerType);
-            }
-        }
-
-        public static Matrix<double> LoadMatrix(BinaryReader br)
+        public static Matrix<float> LoadMatrix(BinaryReader br)
         {
             int width = br.ReadInt32();
             int height = br.ReadInt32();
             int vqSize = br.ReadInt32();
             Logger.WriteLine("Loading matrix. width: {0}, height: {1}, vqSize: {2}", width, height, vqSize);
 
-            Matrix<double> m = new Matrix<double>(height, width);
+            Matrix<float> m = new Matrix<float>(height, width);
             if (vqSize == 0)
             {
                 for (int r = 0; r < height; r++)
                 {
                     for (int c = 0; c < width; c++)
                     {
-                        m[r][c] = br.ReadDouble();
+                        m[r][c] = br.ReadSingle();
                     }
                 }
             }
             else
             {
-                List<double> codeBook = new List<double>();
+                List<float> codeBook = new List<float>();
 
                 for (int i = 0; i < vqSize; i++)
                 {
-                    codeBook.Add(br.ReadDouble());
+                    codeBook.Add(br.ReadSingle());
                 }
 
 
@@ -285,20 +289,20 @@ namespace RNNSharp
             return m;
         }
 
-        public static void matrixXvectorADD(double[] dest, double[] srcvec, Matrix<double> srcmatrix, HashSet<int> setSkipSampling, int SrcSize, bool cleanDest = true)
+        public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, HashSet<int> setSkipSampling, int SrcSize, bool cleanDest = true)
         {
             Parallel.ForEach(setSkipSampling, i =>
             {
-                double cellOutput = 0;
-                double[] vector_i = srcmatrix[i];
+                float cellOutput = 0;
+                float[] vector_i = srcmatrix[i];
                 int j = 0;
-                while (j < SrcSize - Vector<double>.Count)
+                while (j < SrcSize - Vector<float>.Count)
                 {
-                    Vector<double> v1 = new Vector<double>(srcvec, j);
-                    Vector<double> v2 = new Vector<double>(vector_i, j);
-                    cellOutput += Vector.Dot<double>(v1, v2);
+                    Vector<float> v1 = new Vector<float>(srcvec, j);
+                    Vector<float> v2 = new Vector<float>(vector_i, j);
+                    cellOutput += Vector.Dot<float>(v1, v2);
 
-                    j += Vector<double>.Count;
+                    j += Vector<float>.Count;
                 }
 
                 while (j < SrcSize)
@@ -319,11 +323,11 @@ namespace RNNSharp
 
         }
 
-        public static void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, HashSet<int> setSkipSampling, int SrcSize)
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, HashSet<int> setSkipSampling, int SrcSize)
         {
             Parallel.ForEach(setSkipSampling, i =>
             {
-                double er = 0;
+                float er = 0;
                 for (int j = 0; j < SrcSize; j++)
                 {
                     er += srcvec[j] * srcmatrix[j][i];
@@ -333,11 +337,11 @@ namespace RNNSharp
             });
         }
 
-        public static void matrixXvectorADDErr(double[] dest, double[] srcvec, Matrix<double> srcmatrix, int DestSize, HashSet<int> setSkipSampling)
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, HashSet<int> setSkipSampling)
         {
             Parallel.For(0, DestSize, i =>
             {
-                double er = 0;
+                float er = 0;
                 foreach (int j in setSkipSampling)
                 {
                     er += srcvec[j] * srcmatrix[j][i];
