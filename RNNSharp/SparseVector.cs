@@ -3,27 +3,24 @@
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     public class SparseVector : SingleVector
     {
-        List<KeyValuePair<int, float>> kvData;
-        int length;
-
-        public override int Length { get { return length; } }
-
-        public IEnumerator<KeyValuePair<int, float>> GetEnumerator()
-        {
-            foreach (KeyValuePair<int, float> pair in kvData)
-            {
-                yield return pair;
-            }
-        }
-
+        private readonly List<KeyValuePair<int, float>> kvData;
+        private int length;
 
         public SparseVector()
         {
             kvData = new List<KeyValuePair<int, float>>();
+        }
+
+        public override int Length => length;
+
+        public IEnumerator<KeyValuePair<int, float>> GetEnumerator()
+        {
+            return ((IEnumerable<KeyValuePair<int, float>>)kvData).GetEnumerator();
         }
 
         public void ChangeValue(int positionInSparseVector, int dimension, float value)
@@ -31,11 +28,14 @@ namespace RNNSharp
             kvData[positionInSparseVector] = new KeyValuePair<int, float>(dimension, value);
         }
 
-        public void SetLength(int len) { length = len; }
+        public void SetLength(int len)
+        {
+            length = len;
+        }
 
         public void AddKeyValuePairData(Dictionary<int, float> kv)
         {
-            foreach (KeyValuePair<int, float> pair in kv)
+            foreach (var pair in kv)
             {
                 kvData.Add(pair);
             }
@@ -43,7 +43,7 @@ namespace RNNSharp
 
         public void AddKeyValuePairData(SparseVector sparseVector)
         {
-            foreach (KeyValuePair<int, float> pair in sparseVector)
+            foreach (var pair in sparseVector)
             {
                 kvData.Add(pair);
             }

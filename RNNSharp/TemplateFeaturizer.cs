@@ -1,25 +1,26 @@
-﻿using System;
+﻿using AdvUtils;
+using System;
 using System.Collections.Generic;
-using System.Text;
 using System.IO;
-using AdvUtils;
+using System.Linq;
+using System.Text;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     //Template feature processor
     public class TemplateFeaturizer
     {
-        List<string> m_Templates;
-        DoubleArrayTrieSearch daSearch;
-        
-        public int m_maxFeatureId = 0;
+        private DoubleArrayTrieSearch daSearch;
+
+        public int m_maxFeatureId;
+        private List<string> m_Templates;
 
         public TemplateFeaturizer()
         {
-
         }
 
         public TemplateFeaturizer(string strFileName)
@@ -37,56 +38,42 @@ namespace RNNSharp
         public List<int> GetFeatureIds(List<string[]> record, int startX)
         {
             //Get the feature string
-            List<string> featureList = GenerateFeature(record, startX);
-            List<int> featureIdList = new List<int>();
+            var featureList = GenerateFeature(record, startX);
 
-            //Check if the feature string has already built into feature set, 
+            //Check if the feature string has already built into feature set,
             //If yes, save the feature id, otherwise, ignore the feature
-            foreach (string strFeature in featureList)
-            {
-                int id = daSearch.SearchByPerfectMatch(strFeature);
-                if (id >= 0)
-                {
-                    featureIdList.Add(id);
-                }
-            }
 
-            return featureIdList;
+            return
+                featureList.Select(strFeature => daSearch.SearchByPerfectMatch(strFeature))
+                    .Where(id => id >= 0)
+                    .ToList();
         }
 
         //Generate feature in string by given record, start position and saved templates
         public List<string> GenerateFeature(List<string[]> record, int startX)
         {
-            List<string> featureList = new List<string>();
-            foreach (string strTemplate in m_Templates)
-            {
-                //Generate feature by template
-                string strFeature = GenerateFeature(strTemplate, record, startX);
-                featureList.Add(strFeature);
-            }
-
-            return featureList;
+            return m_Templates.Select(strTemplate => GenerateFeature(strTemplate, record, startX)).ToList();
         }
 
         //U22:%x[-4,0]/%x[-3,0]/%x[-2,0]
         private string GenerateFeature(string strTemplate, List<string[]> record, int startX)
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
 
-            string[] keyvalue = strTemplate.Split(':');
-            string tId = keyvalue[0];
+            var keyvalue = strTemplate.Split(':');
+            var tId = keyvalue[0];
             sb.Append(tId);
             sb.Append(":");
 
-            string[] items = keyvalue[1].Split('/');
-            foreach (string item in items)
+            var items = keyvalue[1].Split('/');
+            foreach (var item in items)
             {
-                int bpos = item.LastIndexOf('[');
-                int enpos = item.LastIndexOf(']');
-                string strPos = item.Substring(bpos + 1, enpos - bpos - 1);
-                string[] xy = strPos.Split(',');
-                int x = int.Parse(xy[0]) + startX;
-                int y = int.Parse(xy[1]);
+                var bpos = item.LastIndexOf('[');
+                var enpos = item.LastIndexOf(']');
+                var strPos = item.Substring(bpos + 1, enpos - bpos - 1);
+                var xy = strPos.Split(',');
+                var x = int.Parse(xy[0]) + startX;
+                var y = int.Parse(xy[1]);
 
                 if (x >= 0 && x < record.Count &&
                     y >= 0 && y < record[x].Length)
@@ -97,11 +84,11 @@ namespace RNNSharp
                 {
                     if (x < 0)
                     {
-                        sb.Append("B_" + x.ToString() + "_" + xy[1]);
+                        sb.Append("B_" + x + "_" + xy[1]);
                     }
                     else
                     {
-                        sb.Append("B_" + (x - record.Count + 1).ToString() + "_" + xy[1]);
+                        sb.Append("B_" + (x - record.Count + 1) + "_" + xy[1]);
                     }
                 }
                 sb.Append("/");
@@ -117,23 +104,23 @@ namespace RNNSharp
         {
             m_Templates = new List<string>();
 
-            StreamReader sr = new StreamReader(strFileName);
-            string strLine = null;
+            var sr = new StreamReader(strFileName);
+            string strLine;
             while ((strLine = sr.ReadLine()) != null)
             {
                 strLine = strLine.Trim();
-                if (strLine.StartsWith("#") == true)
+                if (strLine.StartsWith("#"))
                 {
                     //Ignore comment line
                     continue;
                 }
 
                 //Only load U templates
-                if (strLine.StartsWith("U") == true)
+                if (strLine.StartsWith("U"))
                 {
                     m_Templates.Add(strLine);
                 }
-                else if (strLine.StartsWith("MaxTemplateFeatureId:") == true)
+                else if (strLine.StartsWith("MaxTemplateFeatureId:"))
                 {
                     strLine = strLine.Replace("MaxTemplateFeatureId:", "");
                     m_maxFeatureId = int.Parse(strLine);
@@ -151,9 +138,9 @@ namespace RNNSharp
         public void BuildIndexedFeatureIntoFile(string strFileName, List<string> features)
         {
             //Assign id for each feature
-            SortedDictionary<string, int> feature2Id = new SortedDictionary<string, int>(StringComparer.Ordinal);
-            int maxId = 0;
-            foreach (string strFeature in features)
+            var feature2Id = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var maxId = 0;
+            foreach (var strFeature in features)
             {
                 if (strFeature.StartsWith("U") == false)
                 {
@@ -165,14 +152,13 @@ namespace RNNSharp
                 maxId++;
             }
 
-            DoubleArrayTrieBuilder da = new DoubleArrayTrieBuilder(4);
+            var da = new DoubleArrayTrieBuilder(4);
             da.build(feature2Id);
             da.save(strFileName + ".dart");
 
-
-            StreamWriter swTemplate = new StreamWriter(strFileName + ".template");
+            var swTemplate = new StreamWriter(strFileName + ".template");
             swTemplate.WriteLine("MaxTemplateFeatureId:{0}", maxId);
-            foreach (string strTemplate in m_Templates)
+            foreach (var strTemplate in m_Templates)
             {
                 swTemplate.WriteLine(strTemplate);
             }

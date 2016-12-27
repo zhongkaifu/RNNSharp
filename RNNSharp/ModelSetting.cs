@@ -1,16 +1,21 @@
 ﻿using AdvUtils;
-using System.Collections.Generic;
 using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
-
-
     public class ModelSetting
     {
+        public ModelSetting()
+        {
+            MaxIteration = 20;
+            LearningRate = 0.1f;
+            GradientCutoff = 15.0f;
+        }
+
         public string TagFile { get; set; }
         public TagSet Tags { get; set; }
         public float LearningRate { get; set; }
@@ -25,20 +30,13 @@ namespace RNNSharp
             Logger.WriteLine("Use const learning rate: {0}", IsConstAlpha);
             Logger.WriteLine("Starting learning rate: {0}", LearningRate);
             Logger.WriteLine("Max Iteration: {0}", MaxIteration);
-            Logger.WriteLine("SIMD: {0}, Size: {1}bits", System.Numerics.Vector.IsHardwareAccelerated, 
+            Logger.WriteLine("SIMD: {0}, Size: {1}bits", Vector.IsHardwareAccelerated,
                 Vector<float>.Count * sizeof(double) * 8);
             Logger.WriteLine("Gradient cut-off: {0}", GradientCutoff);
             if (SaveStep > 0)
             {
                 Logger.WriteLine("Save temporary model after every {0} sentences", SaveStep);
             }
-        }
-
-        public ModelSetting()
-        {
-            MaxIteration = 20;
-            LearningRate = 0.1f;
-            GradientCutoff = 15.0f;
         }
     }
 }

@@ -1,23 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 
 namespace RNNSharp
 {
     public class ConfigUtils
     {
-        string configFilePath;
-        Dictionary<string, string> items;
+        private string configFilePath;
+        private Dictionary<string, string> items;
+
         public void LoadFile(string configFile)
         {
             configFilePath = configFile;
             items = new Dictionary<string, string>();
-            using (StreamReader sr = new StreamReader(configFile))
+            using (var sr = new StreamReader(configFile))
             {
-                string line = String.Empty;
+                string line;
                 while ((line = sr.ReadLine()) != null)
                 {
                     line = line.Trim().ToLower();
@@ -27,15 +25,15 @@ namespace RNNSharp
                         continue;
                     }
 
-                    if (line.StartsWith("#") == true)
+                    if (line.StartsWith("#"))
                     {
                         //Comments line, ignore it
                         continue;
                     }
 
-                    int pos = line.IndexOf('=');
-                    string key = line.Substring(0, pos).Trim();
-                    string value = line.Substring(pos + 1).Trim();
+                    var pos = line.IndexOf('=');
+                    var key = line.Substring(0, pos).Trim();
+                    var value = line.Substring(pos + 1).Trim();
 
                     items.Add(key, value);
                 }
@@ -44,26 +42,18 @@ namespace RNNSharp
 
         public string GetValueOptional(string key)
         {
-            string value = String.Empty;
-            if (items.TryGetValue(key.ToLower().Trim(), out value))
-            {
-                return value;
-            }
-
-            return null;
+            string value;
+            return items.TryGetValue(key.ToLower().Trim(), out value) ? value : null;
         }
 
         public string GetValueRequired(string key)
         {
-            string value = String.Empty;
+            string value;
             if (items.TryGetValue(key.ToLower().Trim(), out value))
             {
                 return value;
             }
-            else
-            {
-                throw new ArgumentNullException($"Fail to get '{key}' value from '{configFilePath}'.");
-            }
+            throw new ArgumentNullException($"Fail to get '{key}' value from '{configFilePath}'.");
         }
     }
 }

@@ -1,33 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace RNNSharp
+﻿namespace RNNSharp
 {
     public class SequencePair : ISequence
     {
-   //     public Sequence srcSequence;
-        public Sequence tgtSequence;
+        public RNNDecoder autoEncoder = null;
 
         public Sentence srcSentence;
-        public RNNSharp.RNNDecoder autoEncoder = null;
 
-        int ISequence.DenseFeatureSize
-        {
-            get
-            {
-                return tgtSequence.DenseFeatureSize;
-            }
-        }
+        //     public Sequence srcSequence;
+        public Sequence tgtSequence;
 
-        int ISequence.SparseFeatureSize
-        {
-            get
-            {
-                return tgtSequence.SparseFeatureSize;
-            }
-        }
+        int ISequence.DenseFeatureSize => tgtSequence.DenseFeatureSize;
+
+        int ISequence.SparseFeatureSize => tgtSequence.SparseFeatureSize;
     }
 }

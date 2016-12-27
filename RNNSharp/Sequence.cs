@@ -1,15 +1,23 @@
 ﻿using AdvUtils;
-using System;
-using System.Collections.Generic;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     public class Sequence : ISequence
     {
-        public State[] States { get;}
+        public Sequence(int numStates)
+        {
+            States = new State[numStates];
+            for (var i = 0; i < numStates; i++)
+            {
+                States[i] = new State();
+            }
+        }
+
+        public State[] States { get; }
 
         public int DenseFeatureSize
         {
@@ -19,40 +27,29 @@ namespace RNNSharp
                 {
                     return 0;
                 }
-                else
-                {
-                    return States[0].DenseFeature.Length;
-                }
+                return States[0].DenseFeature.Length;
             }
         }
 
-        public int SparseFeatureSize
-        {
-            get
-            {
-                if (0 == States.Length) return 0;
-                else return States[0].SparseFeature.Length;
-            }
-        }
+        public int SparseFeatureSize => 0 == States.Length ? 0 : States[0].SparseFeature.Length;
 
         public bool SetLabel(Sentence sent, TagSet tagSet)
         {
-            List<string[]> tokensList = sent.TokensList;
+            var tokensList = sent.TokensList;
             if (tokensList.Count != States.Length)
             {
-                Logger.WriteLine(Logger.Level.warn,String.Format("Error: Inconsistent token({0}) and state({1}) size. Tokens list: {2}",
-                    tokensList.Count, States.Length, sent.ToString()));
+                Logger.WriteLine(Logger.Level.warn,
+                    $"Error: Inconsistent token({tokensList.Count}) and state({States.Length}) size. Tokens list: {sent}");
                 return false;
             }
 
-            for (int i = 0; i < tokensList.Count; i++)
+            for (var i = 0; i < tokensList.Count; i++)
             {
-                string strTagName = tokensList[i][tokensList[i].Length - 1];
-                int tagId = tagSet.GetIndex(strTagName);
+                var strTagName = tokensList[i][tokensList[i].Length - 1];
+                var tagId = tagSet.GetIndex(strTagName);
                 if (tagId < 0)
                 {
-                    Logger.WriteLine(Logger.Level.warn, String.Format("Error: tag {0} is unknown. Tokens list: {1}", 
-                        strTagName, sent.ToString()));
+                    Logger.WriteLine(Logger.Level.warn, $"Error: tag {strTagName} is unknown. Tokens list: {sent}");
                     return false;
                 }
 
@@ -61,15 +58,5 @@ namespace RNNSharp
 
             return true;
         }
-
-        public Sequence(int numStates)
-        {
-            States = new State[numStates];
-            for (int i = 0; i < numStates; i++)
-            {
-                States[i] = new State();
-            }
-        }
-
     }
 }

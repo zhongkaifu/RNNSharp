@@ -1,17 +1,18 @@
 ﻿using AdvUtils;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace RNNSharp
 {
-    abstract public class RNN<T> where T: ISequence
+    public abstract class RNN<T> where T : ISequence
     {
+        protected Matrix<float> CRFSeqOutput;
         public double logp;
         protected double minTknErrRatio = double.MaxValue;
+
+        protected ParallelOptions parallelOption = new ParallelOptions();
         public virtual bool IsCRFTraining { get; set; }
         public virtual MODELTYPE ModelType { get; set; }
         public virtual bool bVQ { get; set; }
@@ -23,37 +24,38 @@ namespace RNNSharp
         public SimpleLayer OutputLayer { get; set; }
 
         public abstract int[] ProcessSequenceCRF(Sequence pSequence, RunningMode runningMode);
-        public abstract int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m);
+
+        public abstract int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore,
+            out Matrix<float> m);
 
         public abstract int[] ProcessSeq2Seq(SequencePair pSequence, RunningMode runningMode);
 
         public abstract int[] TestSeq2Seq(Sentence srcSentence, Config featurizer);
 
         public abstract void CleanStatus();
+
         public abstract void SaveModel(string filename);
+
         public abstract void LoadModel(string filename);
 
         public abstract List<float[]> ComputeTopHiddenLayerOutput(Sequence pSequence);
+
         public abstract int GetTopHiddenLayerSize();
-
-
-        protected ParallelOptions parallelOption = new ParallelOptions();
-        protected Matrix<float> CRFSeqOutput;
 
         public void SetRuntimeFeatures(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
             if (predicted != null && state.RuntimeFeatures != null)
             {
                 // set runtime feature
-                for (int i = 0; i < state.RuntimeFeatures.Length; i++)
+                for (var i = 0; i < state.RuntimeFeatures.Length; i++)
                 {
-                    for (int j = 0; j < OutputLayer.LayerSize; j++)
+                    for (var j = 0; j < OutputLayer.LayerSize; j++)
                     {
                         //Clean up run time feature value and then set a new one
                         state.SetRuntimeFeature(i, j, 0);
                     }
 
-                    int pos = curState + ((forward == true) ? 1 : -1) * state.RuntimeFeatures[i].OffsetToCurrentState;
+                    var pos = curState + (forward ? 1 : -1) * state.RuntimeFeatures[i].OffsetToCurrentState;
                     if (pos >= 0 && pos < numStates)
                     {
                         state.SetRuntimeFeature(i, predicted[pos], 1);
@@ -65,116 +67,110 @@ namespace RNNSharp
         public void ForwardBackward(int numStates, Matrix<float> m_RawOutput)
         {
             //forward
-            double[][] alphaSet = new double[numStates][];
-            double[][] betaSet = new double[numStates][];
-            int OutputLayerSize = OutputLayer.LayerSize;
+            var alphaSet = new double[numStates][];
+            var betaSet = new double[numStates][];
+            var OutputLayerSize = OutputLayer.LayerSize;
 
             Parallel.Invoke(() =>
             {
-                for (int i = 0; i < numStates; i++)
+                for (var i = 0; i < numStates; i++)
                 {
                     alphaSet[i] = new double[OutputLayerSize];
-                    for (int j = 0; j < OutputLayerSize; j++)
+                    for (var j = 0; j < OutputLayerSize; j++)
                     {
                         double dscore0 = 0;
                         if (i > 0)
                         {
-                            for (int k = 0; k < OutputLayerSize; k++)
+                            for (var k = 0; k < OutputLayerSize; k++)
                             {
-                                float fbgm = CRFTagTransWeights[j][k];
-                                double finit = alphaSet[i - 1][k];
-                                double ftmp = fbgm + finit;
+                                var fbgm = CRFTagTransWeights[j][k];
+                                var finit = alphaSet[i - 1][k];
+                                var ftmp = fbgm + finit;
 
-                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
+                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
                             }
                         }
                         alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
-
                     }
                 }
             },
-            () =>
-            {
-                //backward
-                for (int i = numStates - 1; i >= 0; i--)
+                () =>
                 {
-                    betaSet[i] = new double[OutputLayerSize];
-                    for (int j = 0; j < OutputLayerSize; j++)
+                    //backward
+                    for (var i = numStates - 1; i >= 0; i--)
                     {
-                        double dscore0 = 0;
-                        if (i < numStates - 1)
+                        betaSet[i] = new double[OutputLayerSize];
+                        for (var j = 0; j < OutputLayerSize; j++)
                         {
-                            for (int k = 0; k < OutputLayerSize; k++)
+                            double dscore0 = 0;
+                            if (i < numStates - 1)
                             {
-                                float fbgm = CRFTagTransWeights[k][j];
-                                double finit = betaSet[i + 1][k];
-                                double ftmp = fbgm + finit;
+                                for (var k = 0; k < OutputLayerSize; k++)
+                                {
+                                    var fbgm = CRFTagTransWeights[k][j];
+                                    var finit = betaSet[i + 1][k];
+                                    var ftmp = fbgm + finit;
 
-                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, (k == 0));
+                                    dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
+                                }
                             }
-
+                            betaSet[i][j] = dscore0 + m_RawOutput[i][j];
                         }
-                        betaSet[i][j] = dscore0 + m_RawOutput[i][j];
-
                     }
-                }
-            });
+                });
 
             //Z_
             double Z_ = 0.0f;
-            double[] betaSet_0 = betaSet[0];
-            for (int i = 0; i < OutputLayerSize; i++)
+            var betaSet_0 = betaSet[0];
+            for (var i = 0; i < OutputLayerSize; i++)
             {
                 Z_ = MathUtil.logsumexp(Z_, betaSet_0[i], i == 0);
-
             }
 
             //Calculate the output probability of each node
             CRFSeqOutput = new Matrix<float>(numStates, OutputLayerSize);
-            for (int i = 0; i < numStates; i++)
+            for (var i = 0; i < numStates; i++)
             {
-                float[] CRFSeqOutput_i = CRFSeqOutput[i];
-                double[] alphaSet_i = alphaSet[i];
-                double[] betaSet_i = betaSet[i];
-                float[] m_RawOutput_i = m_RawOutput[i];
-                for (int j = 0; j < OutputLayerSize; j++)
+                var CRFSeqOutput_i = CRFSeqOutput[i];
+                var alphaSet_i = alphaSet[i];
+                var betaSet_i = betaSet[i];
+                var m_RawOutput_i = m_RawOutput[i];
+                for (var j = 0; j < OutputLayerSize; j++)
                 {
                     CRFSeqOutput_i[j] = (float)Math.Exp(alphaSet_i[j] + betaSet_i[j] - m_RawOutput_i[j] - Z_);
                 }
             }
-
         }
 
         public int[] Viterbi(Matrix<float> ys, int seqLen)
         {
-            int OutputLayerSize = OutputLayer.LayerSize;
+            var OutputLayerSize = OutputLayer.LayerSize;
 
-            int[,] vPath = new int[seqLen, OutputLayerSize];
+            var vPath = new int[seqLen, OutputLayerSize];
 
-            float[] vPreAlpha = new float[OutputLayerSize];
-            float[] vAlpha = new float[OutputLayerSize];
+            var vPreAlpha = new float[OutputLayerSize];
+            var vAlpha = new float[OutputLayerSize];
 
-
-            int nStartTagIndex = 0;
+            var nStartTagIndex = 0;
             //viterbi algorithm
-            for (int i = 0; i < OutputLayerSize; i++)
+            for (var i = 0; i < OutputLayerSize; i++)
             {
                 vPreAlpha[i] = ys[0][i];
                 if (i != nStartTagIndex)
                     vPreAlpha[i] += float.MinValue;
                 vPath[0, i] = nStartTagIndex;
             }
-            for (int t = 0; t < seqLen; t++)
+            for (var t = 0; t < seqLen; t++)
             {
-                for (int j = 0; j < OutputLayerSize; j++)
+                for (var j = 0; j < OutputLayerSize; j++)
                 {
                     vPath[t, j] = 0;
-                    float[] CRFTagTransWeights_j = CRFTagTransWeights[j];
-                    float[] ys_t = ys[t];
-                    float maxScore = float.MinValue;
-                    for (int i = 0; i < OutputLayerSize; i++)
+                    var CRFTagTransWeights_j = CRFTagTransWeights[j];
+                    var ys_t = ys[t];
+                    var maxScore = float.MinValue;
+                    for (var i = 0; i < OutputLayerSize; i++)
                     {
-                        float score = vPreAlpha[i] + CRFTagTransWeights_j[i] + ys_t[j];
+                        var score = vPreAlpha[i] + CRFTagTransWeights_j[i] + ys_t[j];
                         if (score > maxScore)
                         {
                             maxScore = score;
@@ -189,10 +185,10 @@ namespace RNNSharp
             }
 
             //backtrace to get the best result path
-            int[] tagOutputs = new int[seqLen];
+            var tagOutputs = new int[seqLen];
             tagOutputs[seqLen - 1] = nStartTagIndex;
-            int nNextTag = tagOutputs[seqLen - 1];
-            for (int t = seqLen - 2; t >= 0; t--)
+            var nNextTag = tagOutputs[seqLen - 1];
+            for (var t = seqLen - 2; t >= 0; t--)
             {
                 tagOutputs[t] = vPath[t + 1, nNextTag];
                 nNextTag = tagOutputs[t];
@@ -203,11 +199,11 @@ namespace RNNSharp
 
         public virtual void setTagBigramTransition(List<List<float>> m)
         {
-            int OutputLayerSize = OutputLayer.LayerSize;
+            var OutputLayerSize = OutputLayer.LayerSize;
             CRFTagTransWeights = new Matrix<float>(OutputLayerSize, OutputLayerSize);
-            for (int i = 0; i < OutputLayerSize; i++)
+            for (var i = 0; i < OutputLayerSize; i++)
             {
-                for (int j = 0; j < OutputLayerSize; j++)
+                for (var j = 0; j < OutputLayerSize; j++)
                 {
                     CRFTagTransWeights[i][j] = m[i][j];
                 }
@@ -216,29 +212,29 @@ namespace RNNSharp
 
         public void UpdateBigramTransition(Sequence seq)
         {
-            int OutputLayerSize = OutputLayer.LayerSize;
-            int numStates = seq.States.Length;
-            Matrix<float> m_DeltaBigramLM = new Matrix<float>(OutputLayerSize, OutputLayerSize);
+            var OutputLayerSize = OutputLayer.LayerSize;
+            var numStates = seq.States.Length;
+            var m_DeltaBigramLM = new Matrix<float>(OutputLayerSize, OutputLayerSize);
 
-            for (int timeat = 1; timeat < numStates; timeat++)
+            for (var timeat = 1; timeat < numStates; timeat++)
             {
-                float[] CRFSeqOutput_timeat = CRFSeqOutput[timeat];
-                float[] CRFSeqOutput_pre_timeat = CRFSeqOutput[timeat - 1];
-                for (int i = 0; i < OutputLayerSize; i++)
+                var CRFSeqOutput_timeat = CRFSeqOutput[timeat];
+                var CRFSeqOutput_pre_timeat = CRFSeqOutput[timeat - 1];
+                for (var i = 0; i < OutputLayerSize; i++)
                 {
-                    float CRFSeqOutput_timeat_i = CRFSeqOutput_timeat[i];
-                    float[] CRFTagTransWeights_i = CRFTagTransWeights[i];
-                    float[] m_DeltaBigramLM_i = m_DeltaBigramLM[i];
-                    int j = 0;
+                    var CRFSeqOutput_timeat_i = CRFSeqOutput_timeat[i];
+                    var CRFTagTransWeights_i = CRFTagTransWeights[i];
+                    var m_DeltaBigramLM_i = m_DeltaBigramLM[i];
+                    var j = 0;
 
-                    Vector<float> vecCRFSeqOutput_timeat_i = new Vector<float>(CRFSeqOutput_timeat_i);
+                    var vecCRFSeqOutput_timeat_i = new Vector<float>(CRFSeqOutput_timeat_i);
                     while (j < OutputLayerSize - Vector<float>.Count)
                     {
-                        Vector<float> v1 = new Vector<float>(CRFTagTransWeights_i, j);
-                        Vector<float> v2 = new Vector<float>(CRFSeqOutput_pre_timeat, j);
-                        Vector<float> v = new Vector<float>(m_DeltaBigramLM_i, j);
+                        var v1 = new Vector<float>(CRFTagTransWeights_i, j);
+                        var v2 = new Vector<float>(CRFSeqOutput_pre_timeat, j);
+                        var v = new Vector<float>(m_DeltaBigramLM_i, j);
 
-                        v -= (v1 * vecCRFSeqOutput_timeat_i * v2);
+                        v -= v1 * vecCRFSeqOutput_timeat_i * v2;
                         v.CopyTo(m_DeltaBigramLM_i, j);
 
                         j += Vector<float>.Count;
@@ -246,27 +242,27 @@ namespace RNNSharp
 
                     while (j < OutputLayerSize)
                     {
-                        m_DeltaBigramLM_i[j] -= (CRFTagTransWeights_i[j] * CRFSeqOutput_timeat_i * CRFSeqOutput_pre_timeat[j]);
+                        m_DeltaBigramLM_i[j] -= CRFTagTransWeights_i[j] * CRFSeqOutput_timeat_i * CRFSeqOutput_pre_timeat[j];
                         j++;
                     }
                 }
 
-                int iTagId = seq.States[timeat].Label;
-                int iLastTagId = seq.States[timeat - 1].Label;
+                var iTagId = seq.States[timeat].Label;
+                var iLastTagId = seq.States[timeat - 1].Label;
                 m_DeltaBigramLM[iTagId][iLastTagId] += 1;
             }
 
             //Update tag Bigram LM
-            for (int b = 0; b < OutputLayerSize; b++)
+            for (var b = 0; b < OutputLayerSize; b++)
             {
-                float[] vector_b = CRFTagTransWeights[b];
-                float[] vector_delta_b = m_DeltaBigramLM[b];
-                int a = 0;
+                var vector_b = CRFTagTransWeights[b];
+                var vector_delta_b = m_DeltaBigramLM[b];
+                var a = 0;
 
                 while (a < OutputLayerSize - Vector<float>.Count)
                 {
-                    Vector<float> v1 = new Vector<float>(vector_delta_b, a);
-                    Vector<float> v = new Vector<float>(vector_b, a);
+                    var v1 = new Vector<float>(vector_delta_b, a);
+                    var v = new Vector<float>(vector_b, a);
 
                     //Normalize delta
                     v1 = RNNHelper.NormalizeGradient(v1);
@@ -288,7 +284,7 @@ namespace RNNSharp
 
         public double TrainNet(DataSet<T> trainingSet, int iter)
         {
-            DateTime start = DateTime.Now;
+            var start = DateTime.Now;
             Logger.WriteLine("Iter " + iter + " begins with learning rate alpha = " + RNNHelper.LearningRate + " ...");
 
             //Initialize varibles
@@ -297,14 +293,14 @@ namespace RNNSharp
             //Shffle training corpus
             trainingSet.Shuffle();
 
-            int numSequence = trainingSet.SequenceList.Count;
-            int wordCnt = 0;
-            int tknErrCnt = 0;
-            int sentErrCnt = 0;
+            var numSequence = trainingSet.SequenceList.Count;
+            var wordCnt = 0;
+            var tknErrCnt = 0;
+            var sentErrCnt = 0;
             Logger.WriteLine("Progress = 0/" + numSequence / 1000.0 + "K\r");
-            for (int curSequence = 0; curSequence < numSequence; curSequence++)
+            for (var curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                T pSequence = trainingSet.SequenceList[curSequence];
+                var pSequence = trainingSet.SequenceList[curSequence];
 
                 if (pSequence is Sequence)
                 {
@@ -316,7 +312,7 @@ namespace RNNSharp
                 }
 
                 int[] predicted;
-                if (IsCRFTraining == true)
+                if (IsCRFTraining)
                 {
                     predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Training);
                 }
@@ -330,18 +326,16 @@ namespace RNNSharp
                     predicted = ProcessSequence(pSequence as Sequence, RunningMode.Training, false, out m);
                 }
 
-                int newTknErrCnt = 0;
+                int newTknErrCnt;
 
                 if (pSequence is Sequence)
                 {
                     newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
-
                 }
                 else
                 {
                     newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
                 }
-
 
                 tknErrCnt += newTknErrCnt;
                 if (newTknErrCnt > 0)
@@ -365,33 +359,38 @@ namespace RNNSharp
                 }
             }
 
-            DateTime now = DateTime.Now;
-            TimeSpan duration = now.Subtract(start);
+            var now = DateTime.Now;
+            var duration = now.Subtract(start);
 
-            double entropy = -logp / Math.Log10(2.0) / wordCnt;
-            double ppl = exp_10(-logp / wordCnt);
+            var entropy = -logp / Math.Log10(2.0) / wordCnt;
+            var ppl = exp_10(-logp / wordCnt);
             Logger.WriteLine("Iter " + iter + " completed");
-            Logger.WriteLine("Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " + numSequence / duration.TotalSeconds);
-            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+            Logger.WriteLine("Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " +
+                             numSequence / duration.TotalSeconds);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy +
+                             ", perplexity = " + ppl);
 
             return ppl;
         }
 
-        public double exp_10(double num) { return Math.Exp(num * 2.302585093); }
+        public double exp_10(double num)
+        {
+            return Math.Exp(num * 2.302585093);
+        }
 
         public bool ValidateNet(DataSet<T> validationSet, int iter)
         {
             Logger.WriteLine("Start validation ...");
-            int wordcn = 0;
-            int tknErrCnt = 0;
-            int sentErrCnt = 0;
+            var wordcn = 0;
+            var tknErrCnt = 0;
+            var sentErrCnt = 0;
 
             //Initialize varibles
             logp = 0;
-            int numSequence = validationSet.SequenceList.Count;
-            for (int curSequence = 0; curSequence < numSequence; curSequence++)
+            var numSequence = validationSet.SequenceList.Count;
+            for (var curSequence = 0; curSequence < numSequence; curSequence++)
             {
-                T pSequence = validationSet.SequenceList[curSequence];
+                var pSequence = validationSet.SequenceList[curSequence];
                 if (pSequence is Sequence)
                 {
                     wordcn += (pSequence as Sequence).States.Length;
@@ -402,7 +401,7 @@ namespace RNNSharp
                 }
 
                 int[] predicted;
-                if (IsCRFTraining == true)
+                if (IsCRFTraining)
                 {
                     predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Validate);
                 }
@@ -416,11 +415,10 @@ namespace RNNSharp
                     predicted = ProcessSequence(pSequence as Sequence, RunningMode.Validate, false, out m);
                 }
 
-                int newTknErrCnt = 0;
+                int newTknErrCnt;
                 if (pSequence is Sequence)
                 {
                     newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
-
                 }
                 else
                 {
@@ -434,16 +432,18 @@ namespace RNNSharp
                 }
             }
 
-            double entropy = -logp / Math.Log10(2.0) / wordcn;
-            double ppl = exp_10(-logp / wordcn);
-            double tknErrRatio = (double)tknErrCnt / (double)wordcn * 100.0;
-            double sentErrRatio = (double)sentErrCnt / (double)numSequence * 100.0;
+            var entropy = -logp / Math.Log10(2.0) / wordcn;
+            var ppl = exp_10(-logp / wordcn);
+            var tknErrRatio = tknErrCnt / (double)wordcn * 100.0;
+            var sentErrRatio = sentErrCnt / (double)numSequence * 100.0;
 
-            Logger.WriteLine("In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio, sentErrRatio);
-            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy + ", perplexity = " + ppl);
+            Logger.WriteLine("In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio,
+                sentErrRatio);
+            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy +
+                             ", perplexity = " + ppl);
             Logger.WriteLine("");
 
-            bool bUpdate = false;
+            var bUpdate = false;
             if (tknErrRatio < minTknErrRatio)
             {
                 //We have better result on validated set, save this model
@@ -456,9 +456,9 @@ namespace RNNSharp
 
         private int GetErrorTokenNum(Sequence seq, int[] predicted)
         {
-            int tknErrCnt = 0;
-            int numStates = seq.States.Length;
-            for (int curState = 0; curState < numStates; curState++)
+            var tknErrCnt = 0;
+            var numStates = seq.States.Length;
+            for (var curState = 0; curState < numStates; curState++)
             {
                 if (predicted[curState] != seq.States[curState].Label)
                 {
@@ -469,30 +469,28 @@ namespace RNNSharp
             return tknErrCnt;
         }
 
-
         public int[][] DecodeNBestCRF(Sequence seq, int N)
         {
             //ys contains the output of RNN for each word
             Matrix<float> ys;
             ProcessSequence(seq, RunningMode.Test, true, out ys);
 
-            int n = seq.States.Length;
-            int K = OutputLayer.LayerSize;
-            Matrix<float> STP = CRFTagTransWeights;
-            PAIR<int, int>[,,] vPath = new PAIR<int, int>[n, K, N];
-            int DUMP_LABEL = -1;
-            float[,] vPreAlpha = new float[K, N];
-            float[,] vAlpha = new float[K, N];
+            var n = seq.States.Length;
+            var K = OutputLayer.LayerSize;
+            var STP = CRFTagTransWeights;
+            var vPath = new PAIR<int, int>[n, K, N];
+            var DUMP_LABEL = -1;
+            var vPreAlpha = new float[K, N];
+            var vAlpha = new float[K, N];
 
-
-            int nStartTagIndex = 0;
-            int nEndTagIndex = 0;
-            float MIN_VALUE = float.MinValue;
+            var nStartTagIndex = 0;
+            var nEndTagIndex = 0;
+            var MIN_VALUE = float.MinValue;
 
             //viterbi algorithm
-            for (int i = 0; i < K; i++)
+            for (var i = 0; i < K; i++)
             {
-                for (int j = 0; j < N; j++)
+                for (var j = 0; j < N; j++)
                 {
                     vPreAlpha[i, j] = MIN_VALUE;
                     vPath[0, i, j] = new PAIR<int, int>(DUMP_LABEL, 0);
@@ -501,34 +499,34 @@ namespace RNNSharp
             vPreAlpha[nStartTagIndex, 0] = ys[0][nStartTagIndex];
             vPath[0, nStartTagIndex, 0].first = nStartTagIndex;
 
-            AdvUtils.PriorityQueue<float, PAIR<int, int>> q = new AdvUtils.PriorityQueue<float, PAIR<int, int>>();
+            var q = new PriorityQueue<float, PAIR<int, int>>();
 
-            for (int t = 1; t < n; t++)
+            for (var t = 1; t < n; t++)
             {
-                for (int j = 0; j < K; j++)
+                for (var j = 0; j < K; j++)
                 {
                     while (q.Count() > 0)
                         q.Dequeue();
-                    float _stp = STP[j][0];
-                    float _y = ys[t][j];
-                    for (int k = 0; k < N; k++)
+                    var _stp = STP[j][0];
+                    var _y = ys[t][j];
+                    for (var k = 0; k < N; k++)
                     {
-                        float score = vPreAlpha[0, k] + _stp + _y;
+                        var score = vPreAlpha[0, k] + _stp + _y;
                         q.Enqueue(score, new PAIR<int, int>(0, k));
                     }
-                    for (int i = 1; i < K; i++)
+                    for (var i = 1; i < K; i++)
                     {
                         _stp = STP[j][i];
-                        for (int k = 0; k < N; k++)
+                        for (var k = 0; k < N; k++)
                         {
-                            float score = vPreAlpha[i, k] + _stp + _y;
+                            var score = vPreAlpha[i, k] + _stp + _y;
                             if (score <= q.Peek().Key)
                                 break;
                             q.Dequeue();
                             q.Enqueue(score, new PAIR<int, int>(i, k));
                         }
                     }
-                    int idx = N - 1;
+                    var idx = N - 1;
                     while (q.Count() > 0)
                     {
                         vAlpha[j, idx] = q.Peek().Key;
@@ -541,19 +539,18 @@ namespace RNNSharp
                 vAlpha = new float[K, N];
             }
 
-
             //backtrace to get the n-best result path
-            int[][] vTagOutput = new int[N][];
-            for (int i = 0; i < N; i++)
+            var vTagOutput = new int[N][];
+            for (var i = 0; i < N; i++)
             {
                 vTagOutput[i] = new int[n];
             }
 
-            for (int k = 0; k < N; k++)
+            for (var k = 0; k < N; k++)
             {
                 vTagOutput[k][n - 1] = nEndTagIndex;
-                PAIR<int, int> decision = new PAIR<int, int>(nEndTagIndex, k);
-                for (int t = n - 2; t >= 0; t--)
+                var decision = new PAIR<int, int>(nEndTagIndex, k);
+                for (var t = n - 2; t >= 0; t--)
                 {
                     vTagOutput[k][t] = vPath[t + 1, decision.first, decision.second].first;
                     decision = vPath[t + 1, decision.first, decision.second];
@@ -565,7 +562,7 @@ namespace RNNSharp
 
         public int[] DecodeNN(Sequence seq)
         {
-            Matrix<float> ys; 
+            Matrix<float> ys;
             return ProcessSequence(seq, RunningMode.Test, false, out ys);
         }
 

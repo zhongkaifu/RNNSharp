@@ -3,16 +3,19 @@
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
-    class MathUtil
+    internal class MathUtil
     {
-        public static int GetMaxProbIndex(float [] array)
+        public const int MINUS_LOG_EPSILON = 13;
+
+        public static int GetMaxProbIndex(float[] array)
         {
-            int dim = array.Length;
-            float maxValue = array[0];
-            int maxIdx = 0;
-            for (int i = 1; i < dim; i++)
+            var dim = array.Length;
+            var maxValue = array[0];
+            var maxIdx = 0;
+            for (var i = 1; i < dim; i++)
             {
                 if (array[i] > maxValue)
                 {
@@ -24,20 +27,16 @@ namespace RNNSharp
             return maxIdx;
         }
 
-         public const int MINUS_LOG_EPSILON = 13;
-         public static double logsumexp(double x, double y, bool flg)
-         {
-             if (flg) return y;  // init mode
-             double vmin = Math.Min(x, y);
-             double vmax = Math.Max(x, y);
-             if (vmax > vmin + MINUS_LOG_EPSILON)
-             {
-                 return vmax;
-             }
-             else
-             {
-                 return vmax + Math.Log(Math.Exp(vmin - vmax) + 1.0);
-             }
-         }
+        public static double logsumexp(double x, double y, bool flg)
+        {
+            if (flg) return y; // init mode
+            var vmin = Math.Min(x, y);
+            var vmax = Math.Max(x, y);
+            if (vmax > vmin + MINUS_LOG_EPSILON)
+            {
+                return vmax;
+            }
+            return vmax + Math.Log(Math.Exp(vmin - vmax) + 1.0);
+        }
     }
 }

@@ -1,22 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RNNSharp
 {
-    class DropoutLayer : SimpleLayer
+    internal class DropoutLayer : SimpleLayer
     {
-        bool[] mask;
-        Random rnd;
-        float dropoutRatio;
+        private readonly float dropoutRatio;
+        private readonly Random rnd;
+        private bool[] mask;
 
         public DropoutLayer(DropoutLayerConfig config) : base(config)
         {
             dropoutRatio = config.DropoutRatio;
             rnd = new Random();
-
         }
 
         public DropoutLayer()
@@ -31,12 +26,12 @@ namespace RNNSharp
                 throw new Exception("The layer size of dropout layer must be equal to its denseFeature size.");
             }
 
-            if (isTrain == true)
+            if (isTrain)
             {
                 mask = new bool[LayerSize];
-                for (int i = 0; i < LayerSize; i++)
+                for (var i = 0; i < LayerSize; i++)
                 {
-                    float val = (float)rnd.NextDouble();
+                    var val = (float)rnd.NextDouble();
                     if (val < dropoutRatio)
                     {
                         mask[i] = true;
@@ -51,7 +46,7 @@ namespace RNNSharp
             }
             else
             {
-                for (int i = 0; i < LayerSize; i++)
+                for (var i = 0; i < LayerSize; i++)
                 {
                     cellOutput[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
                 }
@@ -60,17 +55,17 @@ namespace RNNSharp
 
         public override void BackwardPass(int numStates, int curState)
         {
-
         }
 
         public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
         {
-            //error output->hidden for words from specific class    	
-            RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            //error output->hidden for words from specific class
+            RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize,
+                nextLayer.LayerSize);
 
-            for (int i = 0; i < LayerSize; i++)
+            for (var i = 0; i < LayerSize; i++)
             {
-                if (mask[i] == true)
+                if (mask[i])
                 {
                     destErrLayer[i] = 0;
                 }
@@ -79,13 +74,13 @@ namespace RNNSharp
 
         public override void ComputeLayerErr(SimpleLayer nextLayer)
         {
-            //error output->hidden for words from specific class    	
+            //error output->hidden for words from specific class
             RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
 
             //Apply drop out on error in hidden layer
-            for (int i = 0; i < LayerSize; i++)
+            for (var i = 0; i < LayerSize; i++)
             {
-                if (mask[i] == true)
+                if (mask[i])
                 {
                     er[i] = 0;
                 }
