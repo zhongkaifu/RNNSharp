@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace RNNSharp
+﻿namespace RNNSharp
 {
     public enum TFEATURE_WEIGHT_TYPE_ENUM
     {

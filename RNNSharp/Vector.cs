@@ -4,28 +4,17 @@ using System.Collections.Generic;
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     public class VectorBase
     {
-        public virtual int Length
-        {
-            get
-            {
-                return 0;
-            }
-        }
+        public virtual int Length => 0;
 
         public virtual float this[int i]
         {
-            get
-            {
-                return 0;
-            }
-            set
-            {
-                value = 0;
-            }
+            get { return 0; }
+            set { value = 0; }
         }
 
         public virtual float[] CopyTo()
@@ -34,20 +23,25 @@ namespace RNNSharp
         }
     }
 
-
     public class CombinedVector : VectorBase
     {
-        private List<SingleVector> m_innerData;
-        int m_nLenPerBlock;
-        int m_nLen;
-
-        public override int Length { get { return m_nLen; } }
+        private readonly List<SingleVector> m_innerData;
+        private int m_nLen;
+        private int m_nLenPerBlock;
 
         public CombinedVector()
         {
             m_innerData = new List<SingleVector>();
             m_nLen = 0;
             m_nLenPerBlock = 0;
+        }
+
+        public override int Length => m_nLen;
+
+        public override float this[int i]
+        {
+            get { return m_innerData[i / m_nLenPerBlock][i % m_nLenPerBlock]; }
+            set { m_innerData[i / m_nLenPerBlock][i % m_nLenPerBlock] = value; }
         }
 
         public void Append(SingleVector vector)
@@ -65,25 +59,12 @@ namespace RNNSharp
             m_nLen += m_nLenPerBlock;
         }
 
-
-        public override float this[int i]
-        {
-            get
-            {
-                return m_innerData[i / m_nLenPerBlock][i % m_nLenPerBlock];
-            }
-            set
-            {
-                m_innerData[i / m_nLenPerBlock][i % m_nLenPerBlock] = value;
-            }
-        }
-
         public override float[] CopyTo()
         {
-            float[] val = new float[m_nLen];
-            for (int i = 0; i < m_innerData.Count; i++)
+            var val = new float[m_nLen];
+            for (var i = 0; i < m_innerData.Count; i++)
             {
-                for (int j = 0; j < m_innerData[i].Length; j++)
+                for (var j = 0; j < m_innerData[i].Length; j++)
                 {
                     val[i * m_nLenPerBlock + j] = m_innerData[i][j];
                 }
@@ -93,11 +74,9 @@ namespace RNNSharp
         }
     }
 
-
     public class SingleVector : VectorBase
     {
-        private float[] m_innerData;
-        public override int Length { get { return m_innerData.Length; } }
+        private readonly float[] m_innerData;
 
         public SingleVector()
         {
@@ -109,23 +88,17 @@ namespace RNNSharp
             m_innerData = val;
         }
 
-
         public SingleVector(int nLen)
         {
             m_innerData = new float[nLen];
         }
 
+        public override int Length => m_innerData.Length;
 
         public override float this[int i]
         {
-            get
-            {
-                return m_innerData[i];
-            }
-            set
-            {
-                m_innerData[i] = value;
-            }
+            get { return m_innerData[i]; }
+            set { m_innerData[i] = value; }
         }
 
         public override float[] CopyTo()

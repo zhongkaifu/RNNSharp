@@ -1,11 +1,13 @@
-﻿using System;
+﻿using AdvUtils;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using AdvUtils;
+using System.Linq;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     public class LayerConfig
@@ -62,85 +64,90 @@ namespace RNNSharp
 
     public class Config
     {
-        public TagSet TagSet { get; set; }
-        public int SparseFeatureSize;
-
-        //Feature context offset for sparse and dense feature set
-        Dictionary<string, List<int>> featureContext;
-
         //Settings for model type
-        static string MODEL_TYPE = "MODEL_TYPE";
-        public MODELTYPE ModelType { get; set; }
+        private static readonly string MODEL_TYPE = "MODEL_TYPE";
 
         //Settings for current directory
-        static string CURRENT_DIRECTORY = "CURRENT_DIRECTORY";
-        string currentDirectory { get; set; }
+        private static readonly string CURRENT_DIRECTORY = "CURRENT_DIRECTORY";
 
         //Settings for hidden layers
         //Format: [Type:Size], example:
         //HIDDEN_LAYER = 300:LSTM,200:BPTT
-        static string HIDDEN_LAYER = "HIDDEN_LAYER";
-        public List<LayerConfig> HiddenLayersConfig { get; set; }
+        private static readonly string HIDDEN_LAYER = "HIDDEN_LAYER";
 
         //Settings for output layer
         //Example: OUTPUT_LAYER = Softmax
-        static string OUTPUT_LAYER = "OUTPUT_LAYER";
-        public LayerConfig OutputLayerConfig;
+        private static readonly string OUTPUT_LAYER = "OUTPUT_LAYER";
 
-        static string CRF_LAYER = "CRF_LAYER";
-        public bool IsCRFTraining;
+        private static readonly string CRF_LAYER = "CRF_LAYER";
 
         //Settings for model file path
-        static string MODEL_FILEPATH = "MODEL_FILEPATH";
-        public string ModelFilePath { get; set; }
+        private static readonly string MODEL_FILEPATH = "MODEL_FILEPATH";
 
         //Settings for sparse feature
-        static string TFEATURE_CONTEXT = "TFEATURE_CONTEXT";
-        static string TFEATURE_FILENAME = "TFEATURE_FILENAME";
-        TemplateFeaturizer tFeaturizer;
+        private static readonly string TFEATURE_CONTEXT = "TFEATURE_CONTEXT";
 
-        static string RT_FEATURE_CONTEXT = "RTFEATURE_CONTEXT";
+        private static readonly string TFEATURE_FILENAME = "TFEATURE_FILENAME";
+
+        private static readonly string RT_FEATURE_CONTEXT = "RTFEATURE_CONTEXT";
 
         //Settings for sparse feature weight type
-        static string TFEATURE_WEIGHT_TYPE = "TFEATURE_WEIGHT_TYPE";
-        TFEATURE_WEIGHT_TYPE_ENUM tFeatureWeightType;
+        private static readonly string TFEATURE_WEIGHT_TYPE = "TFEATURE_WEIGHT_TYPE";
 
         //Settings for pretrained model type
-        static string PRETRAIN_TYPE = "PRETRAIN_TYPE";
-        PRETRAIN_TYPE preTrainType;
+        private static readonly string PRETRAIN_TYPE = "PRETRAIN_TYPE";
 
         //Settings for word embedding model
-        static string WORDEMBEDDING_CONTEXT = "WORDEMBEDDING_CONTEXT";
-        static string PRETRAINEDMODEL_FILENAME = "WORDEMBEDDING_FILENAME";
-        static string PRETRAINEDMODEL_RAW_FILENAME = "WORDEMBEDDING_RAW_FILENAME";
-        static string PRETRAINEDMODEL_COLUMN = "WORDEMBEDDING_COLUMN";
-        int preTrainedModelColumn;
-        WordEMWrapFeaturizer preTrainedModel;
+        private static readonly string WORDEMBEDDING_CONTEXT = "WORDEMBEDDING_CONTEXT";
+
+        private static readonly string PRETRAINEDMODEL_FILENAME = "WORDEMBEDDING_FILENAME";
+        private static readonly string PRETRAINEDMODEL_RAW_FILENAME = "WORDEMBEDDING_RAW_FILENAME";
+        private static readonly string PRETRAINEDMODEL_COLUMN = "WORDEMBEDDING_COLUMN";
 
         //Settings for auto encoder model
-        static string AUTOENCODER_CONFIG = "AUTOENCODER_CONFIG";
-        RNNDecoder autoEncoder;
+        private static readonly string AUTOENCODER_CONFIG = "AUTOENCODER_CONFIG";
 
         //Settings for auto encoder model in sequence-to-sequence task
-        static string SEQ2SEQ_AUTOENCODER_CONFIG = "SEQ2SEQ_AUTOENCODER_CONFIG";
-        public RNNDecoder Seq2SeqAutoEncoder;
+        private static readonly string SEQ2SEQ_AUTOENCODER_CONFIG = "SEQ2SEQ_AUTOENCODER_CONFIG";
 
         //Settings for model direction type
-        static string MODEL_DIRECTION = "MODEL_DIRECTION";
-        public MODELDIRECTION ModelDirection { get; set; }
+        private static readonly string MODEL_DIRECTION = "MODEL_DIRECTION";
 
         //Raw configuration
-        static ConfigUtils config;
+        private static ConfigUtils config;
 
+        private RNNDecoder autoEncoder;
+
+        //Feature context offset for sparse and dense feature set
+        private Dictionary<string, List<int>> featureContext;
+
+        public bool IsCRFTraining;
+        public LayerConfig OutputLayerConfig;
+        private WordEMWrapFeaturizer preTrainedModel;
+        private int preTrainedModelColumn;
+        private PRETRAIN_TYPE preTrainType;
+        public RNNDecoder Seq2SeqAutoEncoder;
+        public int SparseFeatureSize;
+        private TFEATURE_WEIGHT_TYPE_ENUM tFeatureWeightType;
+        private TemplateFeaturizer tFeaturizer;
+
+        public Config(string strFeatureConfigFileName, TagSet tagSet)
+        {
+            LoadFeatureConfigFromFile(strFeatureConfigFileName);
+            TagSet = tagSet;
+            ComputingFeatureSize();
+        }
+
+        public TagSet TagSet { get; set; }
+        public MODELTYPE ModelType { get; set; }
+        private string currentDirectory { get; set; }
+        public List<LayerConfig> HiddenLayersConfig { get; set; }
+        public string ModelFilePath { get; set; }
+        public MODELDIRECTION ModelDirection { get; set; }
 
         private string GetFilePath(string currentDirectory, string filePath)
         {
-            if (Path.IsPathRooted(filePath))
-            {
-                return filePath;
-            }
-
-            return Path.Combine(currentDirectory, filePath);
+            return Path.IsPathRooted(filePath) ? filePath : Path.Combine(currentDirectory, filePath);
         }
 
         //The format of configuration file
@@ -152,7 +159,7 @@ namespace RNNSharp
 
             //Get current directory from configuration file
             currentDirectory = config.GetValueOptional(CURRENT_DIRECTORY);
-            if (String.IsNullOrEmpty(currentDirectory))
+            if (string.IsNullOrEmpty(currentDirectory))
             {
                 currentDirectory = Environment.CurrentDirectory;
             }
@@ -169,39 +176,33 @@ namespace RNNSharp
             SetPretrainedModel();
             SetTFeatures();
 
-            string isCRFTraining = config.GetValueOptional(CRF_LAYER);
+            var isCRFTraining = config.GetValueOptional(CRF_LAYER);
             IsCRFTraining = false;
-            if (String.IsNullOrEmpty(isCRFTraining) == false)
+            if (string.IsNullOrEmpty(isCRFTraining) == false)
             {
                 IsCRFTraining = bool.Parse(isCRFTraining);
             }
 
             //Load model type
-            if (config.GetValueRequired(MODEL_TYPE).Equals(MODELTYPE.SeqLabel.ToString(), StringComparison.InvariantCultureIgnoreCase))
-            {
-                ModelType = MODELTYPE.SeqLabel;
-            }
-            else
-            {
-                ModelType = MODELTYPE.Seq2Seq;
-            }
+            ModelType = config.GetValueRequired(MODEL_TYPE)
+                .Equals(MODELTYPE.SeqLabel.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                ? MODELTYPE.SeqLabel
+                : MODELTYPE.Seq2Seq;
             Logger.WriteLine($"Model type: {ModelType}");
 
-            if (config.GetValueRequired(MODEL_DIRECTION).Equals(MODELDIRECTION.Forward.ToString(), StringComparison.InvariantCultureIgnoreCase))
-            {
-                ModelDirection = MODELDIRECTION.Forward;
-            }
-            else
-            {
-                ModelDirection = MODELDIRECTION.BiDirectional;
-            }
+            ModelDirection = config.GetValueRequired(MODEL_DIRECTION)
+                .Equals(MODELDIRECTION.Forward.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                ? MODELDIRECTION.Forward
+                : MODELDIRECTION.BiDirectional;
             Logger.WriteLine($"Model direction: {ModelDirection}");
 
             //Load auto-encoder model for sequence-to-sequence. This model is used to encode source sequence
             if (ModelType == MODELTYPE.Seq2Seq)
             {
-                string seqAutoEncoderConfigFilePath = GetFilePath(currentDirectory, config.GetValueRequired(SEQ2SEQ_AUTOENCODER_CONFIG));
-                Logger.WriteLine($"Loading auto encoder model for sequnce-to-sequence task. Config file = '{seqAutoEncoderConfigFilePath}'");
+                var seqAutoEncoderConfigFilePath = GetFilePath(currentDirectory,
+                    config.GetValueRequired(SEQ2SEQ_AUTOENCODER_CONFIG));
+                Logger.WriteLine(
+                    $"Loading auto encoder model for sequnce-to-sequence task. Config file = '{seqAutoEncoderConfigFilePath}'");
 
                 Seq2SeqAutoEncoder = InitializeAutoEncoder(seqAutoEncoderConfigFilePath);
             }
@@ -214,36 +215,31 @@ namespace RNNSharp
         {
             if (ModelDirection == MODELDIRECTION.BiDirectional && ModelType == MODELTYPE.Seq2Seq)
             {
-                throw new System.Exception("Bi-directional RNN model doesn't support sequence-to-sequence model.");
+                throw new Exception("Bi-directional RNN model doesn't support sequence-to-sequence model.");
             }
 
-            if (IsRunTimeFeatureUsed() == true && ModelDirection == MODELDIRECTION.BiDirectional)
+            if (IsRunTimeFeatureUsed() && ModelDirection == MODELDIRECTION.BiDirectional)
             {
-                throw new System.Exception("Run time feature is not available for bi-directional model.");
+                throw new Exception("Run time feature is not available for bi-directional model.");
             }
         }
 
         private void SetTFeatures()
         {
             //Load template feature set
-            string tfeatureFilePath = GetFilePath(currentDirectory, config.GetValueRequired(TFEATURE_FILENAME));
+            var tfeatureFilePath = GetFilePath(currentDirectory, config.GetValueRequired(TFEATURE_FILENAME));
             Logger.WriteLine($"Loading template feature set from {tfeatureFilePath}");
             tFeaturizer = new TemplateFeaturizer(tfeatureFilePath);
 
-            string tfeatureWeightType = config.GetValueRequired(TFEATURE_WEIGHT_TYPE);
-            if (tfeatureWeightType.Equals("binary", StringComparison.InvariantCultureIgnoreCase))
-            {
-                tFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.BINARY;
-            }
-            else
-            {
-                tFeatureWeightType = TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
-            }
+            var tfeatureWeightType = config.GetValueRequired(TFEATURE_WEIGHT_TYPE);
+            tFeatureWeightType = tfeatureWeightType.Equals("binary", StringComparison.InvariantCultureIgnoreCase)
+                ? TFEATURE_WEIGHT_TYPE_ENUM.BINARY
+                : TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
             Logger.WriteLine($"TFeature weight type: {tfeatureWeightType}");
 
-            string tfeatureContext = config.GetValueRequired(TFEATURE_CONTEXT);
+            var tfeatureContext = config.GetValueRequired(TFEATURE_CONTEXT);
             featureContext.Add(TFEATURE_CONTEXT, new List<int>());
-            foreach (string contextOffset in tfeatureContext.Split(','))
+            foreach (var contextOffset in tfeatureContext.Split(','))
             {
                 featureContext[TFEATURE_CONTEXT].Add(int.Parse(contextOffset));
             }
@@ -253,38 +249,42 @@ namespace RNNSharp
         private void SetPretrainedModel()
         {
             //Load pre-trained model. It supports embedding model and auto-encoder model
-            string preTrainTypeValue = config.GetValueRequired(PRETRAIN_TYPE);
+            var preTrainTypeValue = config.GetValueRequired(PRETRAIN_TYPE);
             Logger.WriteLine("Pretrain type: {0}", preTrainTypeValue);
 
-            if (preTrainTypeValue.Equals(RNNSharp.PRETRAIN_TYPE.AutoEncoder.ToString(), StringComparison.InvariantCultureIgnoreCase))
+            if (preTrainTypeValue.Equals(RNNSharp.PRETRAIN_TYPE.AutoEncoder.ToString(),
+                StringComparison.InvariantCultureIgnoreCase))
             {
                 preTrainType = RNNSharp.PRETRAIN_TYPE.AutoEncoder;
-                string autoEncoderConfigFilePath = GetFilePath(currentDirectory, config.GetValueRequired(AUTOENCODER_CONFIG));
+                var autoEncoderConfigFilePath = GetFilePath(currentDirectory,
+                    config.GetValueRequired(AUTOENCODER_CONFIG));
                 Logger.WriteLine($"Loading auto encoder model. Config file = '{autoEncoderConfigFilePath}'");
                 autoEncoder = InitializeAutoEncoder(autoEncoderConfigFilePath);
             }
             else
             {
                 preTrainType = RNNSharp.PRETRAIN_TYPE.Embedding;
-                string preTrainedModelFilePath = config.GetValueOptional(PRETRAINEDMODEL_FILENAME);
-                if (String.IsNullOrEmpty(preTrainedModelFilePath) == false)
+                var preTrainedModelFilePath = config.GetValueOptional(PRETRAINEDMODEL_FILENAME);
+                if (string.IsNullOrEmpty(preTrainedModelFilePath) == false)
                 {
                     preTrainedModelFilePath = GetFilePath(currentDirectory, preTrainedModelFilePath);
                     if (preTrainedModel != null)
                     {
-                        throw new ArgumentException("Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
+                        throw new ArgumentException(
+                            "Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
                     }
                     Logger.WriteLine($"Loading pretrained embedding model: {preTrainedModelFilePath}");
                     preTrainedModel = new WordEMWrapFeaturizer(preTrainedModelFilePath);
                 }
 
-                string preTrainedRawModelFilePath = config.GetValueOptional(PRETRAINEDMODEL_RAW_FILENAME);
-                if (String.IsNullOrEmpty(preTrainedRawModelFilePath) == false)
+                var preTrainedRawModelFilePath = config.GetValueOptional(PRETRAINEDMODEL_RAW_FILENAME);
+                if (string.IsNullOrEmpty(preTrainedRawModelFilePath) == false)
                 {
                     preTrainedRawModelFilePath = GetFilePath(currentDirectory, preTrainedRawModelFilePath);
                     if (preTrainedModel != null)
                     {
-                        throw new ArgumentException("Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
+                        throw new ArgumentException(
+                            "Static pretrained model has already been loaded. Please check if settings is duplicated in configuration file.");
                     }
                     Logger.WriteLine($"Loading pretrained embedding model {preTrainedRawModelFilePath} in text format");
                     preTrainedModel = new WordEMWrapFeaturizer(preTrainedRawModelFilePath, true);
@@ -293,9 +293,9 @@ namespace RNNSharp
                 preTrainedModelColumn = int.Parse(config.GetValueRequired(PRETRAINEDMODEL_COLUMN));
                 Logger.WriteLine("Pretrained model feature column: {0}", preTrainedModelColumn);
 
-                string preTrainedModelContext = config.GetValueRequired(WORDEMBEDDING_CONTEXT);
+                var preTrainedModelContext = config.GetValueRequired(WORDEMBEDDING_CONTEXT);
                 featureContext.Add(WORDEMBEDDING_CONTEXT, new List<int>());
-                foreach (string contextOffset in preTrainedModelContext.Split(','))
+                foreach (var contextOffset in preTrainedModelContext.Split(','))
                 {
                     featureContext[WORDEMBEDDING_CONTEXT].Add(int.Parse(contextOffset));
                 }
@@ -306,33 +306,36 @@ namespace RNNSharp
         private void SetOutputLayers()
         {
             //Settings for output layer
-            string outputLayer = config.GetValueRequired(OUTPUT_LAYER);
-            string[] items = outputLayer.Split(':');
-            string sLayerType = items[0];
-            LayerType outputLayerType = LayerType.None;
-            foreach (LayerType type in Enum.GetValues(typeof(LayerType)))
+            var outputLayer = config.GetValueRequired(OUTPUT_LAYER);
+            var items = outputLayer.Split(':');
+            var sLayerType = items[0];
+            var outputLayerType = LayerType.None;
+            foreach (
+                var type in
+                    Enum.GetValues(typeof(LayerType))
+                        .Cast<LayerType>()
+                        .Where(type => sLayerType.Equals(type.ToString(), StringComparison.InvariantCultureIgnoreCase)))
             {
-                if (sLayerType.Equals(type.ToString(), StringComparison.InvariantCultureIgnoreCase))
-                {
-                    outputLayerType = type;
+                outputLayerType = type;
+                break;
+            }
+
+            switch (outputLayerType)
+            {
+                case LayerType.Softmax:
+                    var softmaxLayerConfig = new SoftmaxLayerConfig();
+                    OutputLayerConfig = softmaxLayerConfig;
+
+                    Logger.WriteLine("Initialize configuration for softmax layer.");
                     break;
-                }
-            }
 
-            if (outputLayerType == LayerType.Softmax)
-            {
-                SoftmaxLayerConfig softmaxLayerConfig = new SoftmaxLayerConfig();
-                OutputLayerConfig = softmaxLayerConfig;
+                case LayerType.NCESoftmax:
+                    var nceLayerConfig = new NCELayerConfig { NegativeSampleSize = int.Parse(items[1]) };
+                    OutputLayerConfig = nceLayerConfig;
 
-                Logger.WriteLine($"Initialize configuration for softmax layer.");
-            }
-            else if (outputLayerType == LayerType.NCESoftmax)
-            {
-                NCELayerConfig nceLayerConfig = new NCELayerConfig();
-                nceLayerConfig.NegativeSampleSize = int.Parse(items[1]);
-                OutputLayerConfig = nceLayerConfig;
-
-                Logger.WriteLine($"Initialize configuration for NCESoftmax layer. Negative sample size = '{nceLayerConfig.NegativeSampleSize}'");
+                    Logger.WriteLine(
+                        $"Initialize configuration for NCESoftmax layer. Negative sample size = '{nceLayerConfig.NegativeSampleSize}'");
+                    break;
             }
         }
 
@@ -340,57 +343,66 @@ namespace RNNSharp
         {
             //Get hidden layer settings
             HiddenLayersConfig = new List<LayerConfig>();
-            string hiddenLayers = config.GetValueRequired(HIDDEN_LAYER);
-            foreach (string layer in hiddenLayers.Split(','))
+            var hiddenLayers = config.GetValueRequired(HIDDEN_LAYER);
+            foreach (var layer in hiddenLayers.Split(','))
             {
-                string[] items = layer.Split(':');
-                string sLayerSize = items[0].Trim();
-                string sLayerType = items[1].Trim();
+                var items = layer.Split(':');
+                var sLayerSize = items[0].Trim();
+                var sLayerType = items[1].Trim();
 
                 //Parse layer size and type
-                int layerSize = int.Parse(sLayerSize);
-                LayerType layerType = LayerType.None;
+                var layerSize = int.Parse(sLayerSize);
+                var layerType = LayerType.None;
 
-                foreach (LayerType type in Enum.GetValues(typeof(LayerType)))
+                foreach (
+                    var type in
+                        Enum.GetValues(typeof(LayerType))
+                            .Cast<LayerType>()
+                            .Where(
+                                type => sLayerType.Equals(type.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                    )
                 {
-                    if (sLayerType.Equals(type.ToString(), StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        layerType = type;
+                    layerType = type;
+                    break;
+                }
+
+                LayerConfig baseLayerConfig;
+                switch (layerType)
+                {
+                    case LayerType.LSTM:
+                        {
+                            var layerConfig = new LSTMLayerConfig();
+                            baseLayerConfig = layerConfig;
+                            Logger.WriteLine("Initialize configuration for LSTM layer.");
+                        }
                         break;
-                    }
-                }
 
-                LayerConfig baseLayerConfig = null;
-                if (layerType == LayerType.LSTM)
-                {
-                    LSTMLayerConfig layerConfig = new LSTMLayerConfig();
-                    baseLayerConfig = layerConfig;
-                    Logger.WriteLine("Initialize configuration for LSTM layer.");
-                }
-                else if (layerType == LayerType.BPTT)
-                {
-                    if (items.Length != 3)
-                    {
-                        throw new ArgumentException($"Invalidated settings for BPTT: {layer}, it should be [size:BPTT:bptt_value], such as [200:BPTT:5] .");
-                    }
+                    case LayerType.BPTT:
+                        {
+                            if (items.Length != 3)
+                            {
+                                throw new ArgumentException(
+                                    $"Invalidated settings for BPTT: {layer}, it should be [size:BPTT:bptt_value], such as [200:BPTT:5] .");
+                            }
 
-                    BPTTLayerConfig layerConfig = new BPTTLayerConfig();
-                    layerConfig.Bptt = int.Parse(items[2]);
-                    baseLayerConfig = layerConfig;
-                    Logger.WriteLine($"Initialize configuration for BPTT layer. BPTT = '{layerConfig.Bptt}'");
-                }
-                else if (layerType == LayerType.DropOut)
-                {
-                    DropoutLayerConfig layerConfig = new DropoutLayerConfig();
-                    layerConfig.DropoutRatio = float.Parse(items[2]);
-                    baseLayerConfig = layerConfig;
-                    Logger.WriteLine($"Initialize configuration for Dropout layer. Dropout ratio = '{layerConfig.DropoutRatio}'");
-                }
-                else
-                {
-                    throw new ArgumentException($"Invalidated layer type: {sLayerType}");
-                }
+                            var layerConfig = new BPTTLayerConfig { Bptt = int.Parse(items[2]) };
+                            baseLayerConfig = layerConfig;
+                            Logger.WriteLine($"Initialize configuration for BPTT layer. BPTT = '{layerConfig.Bptt}'");
+                        }
+                        break;
 
+                    case LayerType.DropOut:
+                        {
+                            var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[2]) };
+                            baseLayerConfig = layerConfig;
+                            Logger.WriteLine(
+                                $"Initialize configuration for Dropout layer. Dropout ratio = '{layerConfig.DropoutRatio}'");
+                        }
+                        break;
+
+                    default:
+                        throw new ArgumentException($"Invalidated layer type: {sLayerType}");
+                }
 
                 baseLayerConfig.LayerType = layerType;
                 baseLayerConfig.LayerSize = layerSize;
@@ -407,48 +419,38 @@ namespace RNNSharp
 
             //Create feature extractors and load word embedding data from file
             Logger.WriteLine("Initializing feature set for auto-encoder model...");
-            Config featurizer = new Config(autoEncoderFeatureConfigFile, null);
+            var featurizer = new Config(autoEncoderFeatureConfigFile, null);
 
             //Create instance for decoder
             Logger.WriteLine("Initializing auto-encoder model...");
             return new RNNDecoder(featurizer);
-
         }
-
 
         // truncate current to range [lower, upper)
         public int TruncPosition(int current, int lower, int upper)
         {
-            return (current < lower) ? lower : ((current >= upper) ? upper - 1 : current);
+            return current < lower ? lower : (current >= upper ? upper - 1 : current);
         }
 
-        public Config(string strFeatureConfigFileName, TagSet tagSet)
-        {
-            LoadFeatureConfigFromFile(strFeatureConfigFileName);
-            TagSet = tagSet;
-            ComputingFeatureSize();
-        }
-
-        void ComputingFeatureSize()
+        private void ComputingFeatureSize()
         {
             var fc = featureContext;
             SparseFeatureSize = 0;
             if (tFeaturizer != null)
             {
-                if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
+                if (fc.ContainsKey(TFEATURE_CONTEXT))
                 {
                     SparseFeatureSize += tFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count;
                 }
             }
 
-            if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
+            if (fc.ContainsKey(RT_FEATURE_CONTEXT))
             {
                 SparseFeatureSize += TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count;
             }
-
         }
 
-        bool IsRunTimeFeatureUsed()
+        private bool IsRunTimeFeatureUsed()
         {
             var fc = featureContext;
             return fc.ContainsKey(RT_FEATURE_CONTEXT);
@@ -461,34 +463,36 @@ namespace RNNSharp
             if (tFeaturizer != null)
                 Logger.WriteLine("Template feature size: {0}", tFeaturizer.GetFeatureSize());
 
-            if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
-                Logger.WriteLine("Template feature context size: {0}", tFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
+            if (fc.ContainsKey(TFEATURE_CONTEXT))
+                Logger.WriteLine("Template feature context size: {0}",
+                    tFeaturizer.GetFeatureSize() * fc[TFEATURE_CONTEXT].Count);
 
-            if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
+            if (fc.ContainsKey(RT_FEATURE_CONTEXT))
                 Logger.WriteLine("Run time feature size: {0}", TagSet.GetSize() * fc[RT_FEATURE_CONTEXT].Count);
 
-            if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
-                Logger.WriteLine("Pretrained dense feature size: {0}", preTrainedModel.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
+            if (fc.ContainsKey(WORDEMBEDDING_CONTEXT))
+                Logger.WriteLine("Pretrained dense feature size: {0}",
+                    preTrainedModel.GetDimension() * fc[WORDEMBEDDING_CONTEXT].Count);
         }
 
-        void ExtractSparseFeature(int currentState, int numStates, List<string[]> features, State pState)
+        private void ExtractSparseFeature(int currentState, int numStates, List<string[]> features, State pState)
         {
-            Dictionary<int, float> sparseFeature = new Dictionary<int, float>();
-            int start = 0;
+            var sparseFeature = new Dictionary<int, float>();
+            var start = 0;
             var fc = featureContext;
 
             //Extract TFeatures in given context window
             if (tFeaturizer != null)
             {
-                if (fc.ContainsKey(TFEATURE_CONTEXT) == true)
+                if (fc.ContainsKey(TFEATURE_CONTEXT))
                 {
-                    List<int> v = fc[TFEATURE_CONTEXT];
-                    for (int j = 0; j < v.Count; j++)
+                    var v = fc[TFEATURE_CONTEXT];
+                    for (var j = 0; j < v.Count; j++)
                     {
-                        int offset = TruncPosition(currentState + v[j], 0, numStates);
+                        var offset = TruncPosition(currentState + v[j], 0, numStates);
 
-                        List<int> tfeatureList = tFeaturizer.GetFeatureIds(features, offset);
-                        foreach (int featureId in tfeatureList)
+                        var tfeatureList = tFeaturizer.GetFeatureIds(features, offset);
+                        foreach (var featureId in tfeatureList)
                         {
                             if (tFeatureWeightType == TFEATURE_WEIGHT_TYPE_ENUM.BINARY)
                             {
@@ -513,11 +517,11 @@ namespace RNNSharp
 
             // Create place hold for run time feature
             // The real feature value is calculated at run time
-            if (fc.ContainsKey(RT_FEATURE_CONTEXT) == true)
+            if (fc.ContainsKey(RT_FEATURE_CONTEXT))
             {
-                List<int> v = fc[RT_FEATURE_CONTEXT];
+                var v = fc[RT_FEATURE_CONTEXT];
                 pState.RuntimeFeatures = new PriviousLabelFeature[v.Count];
-                for (int j = 0; j < v.Count; j++)
+                for (var j = 0; j < v.Count; j++)
                 {
                     if (v[j] < 0)
                     {
@@ -532,7 +536,7 @@ namespace RNNSharp
                 }
             }
 
-            SparseVector spSparseFeature = pState.SparseFeature;
+            var spSparseFeature = pState.SparseFeature;
             spSparseFeature.SetLength(SparseFeatureSize);
             spSparseFeature.AddKeyValuePairData(sparseFeature);
         }
@@ -542,22 +546,22 @@ namespace RNNSharp
         {
             var fc = featureContext;
 
-            if (fc.ContainsKey(WORDEMBEDDING_CONTEXT) == true)
+            if (fc.ContainsKey(WORDEMBEDDING_CONTEXT))
             {
-                List<int> v = fc[WORDEMBEDDING_CONTEXT];
+                var v = fc[WORDEMBEDDING_CONTEXT];
                 if (v.Count == 1)
                 {
-                    string strKey = features[TruncPosition((int)currentState + v[0], 0, (int)numStates)][preTrainedModelColumn];
+                    var strKey = features[TruncPosition(currentState + v[0], 0, numStates)][preTrainedModelColumn];
                     return preTrainedModel.GetTermVector(strKey);
                 }
 
-                CombinedVector dense = new CombinedVector();
-                for (int j = 0;j < v.Count;j++)
+                var dense = new CombinedVector();
+                for (var j = 0; j < v.Count; j++)
                 {
-                    int offset = currentState + v[j];
+                    var offset = currentState + v[j];
                     if (offset >= 0 && offset < numStates)
                     {
-                        string strKey = features[offset][preTrainedModelColumn];
+                        var strKey = features[offset][preTrainedModelColumn];
                         dense.Append(preTrainedModel.GetTermVector(strKey));
                     }
                     else
@@ -565,7 +569,6 @@ namespace RNNSharp
                         dense.Append(preTrainedModel.m_UnkEmbedding);
                     }
                 }
-
 
                 return dense;
             }
@@ -575,19 +578,20 @@ namespace RNNSharp
 
         public SequencePair ExtractFeatures(SentencePair sentence)
         {
-            SequencePair sPair = new SequencePair();
-            sPair.autoEncoder = Seq2SeqAutoEncoder;
-            sPair.srcSentence = sentence.srcSentence;
-            sPair.tgtSequence = ExtractFeatures(sentence.tgtSentence);
+            var sPair = new SequencePair
+            {
+                autoEncoder = Seq2SeqAutoEncoder,
+                srcSentence = sentence.srcSentence,
+                tgtSequence = ExtractFeatures(sentence.tgtSentence)
+            };
 
             return sPair;
         }
 
         public State ExtractFeatures(string[] word)
         {
-            State state = new State();
-            List<string[]> tokenList = new List<string[]>();
-            tokenList.Add(word);
+            var state = new State();
+            var tokenList = new List<string[]> { word };
 
             ExtractSparseFeature(0, 1, tokenList, state);
             state.DenseFeature = ExtractDenseFeature(0, 1, tokenList);
@@ -595,33 +599,32 @@ namespace RNNSharp
             return state;
         }
 
-
         public Sequence ExtractFeatures(Sentence sentence)
         {
-            int n = sentence.TokensList.Count;
-            Sequence sequence = new Sequence(n);
+            var n = sentence.TokensList.Count;
+            var sequence = new Sequence(n);
 
             //For each token, get its sparse and dense feature set according configuration and training corpus
-            for (int i = 0; i < n; i++)
+            for (var i = 0; i < n; i++)
             {
-                State state = sequence.States[i];
+                var state = sequence.States[i];
                 ExtractSparseFeature(i, n, sentence.TokensList, state);
             }
 
             if (preTrainType == RNNSharp.PRETRAIN_TYPE.AutoEncoder)
             {
-                List<float[]> outputs = autoEncoder.ComputeTopHiddenLayerOutput(sentence);
-                for (int i = 0; i < n; i++)
+                var outputs = autoEncoder.ComputeTopHiddenLayerOutput(sentence);
+                for (var i = 0; i < n; i++)
                 {
-                    State state = sequence.States[i];
+                    var state = sequence.States[i];
                     state.DenseFeature = new SingleVector(outputs[i]);
                 }
             }
             else
             {
-                for (int i = 0; i < n; i++)
+                for (var i = 0; i < n; i++)
                 {
-                    State state = sequence.States[i];
+                    var state = sequence.States[i];
                     state.DenseFeature = ExtractDenseFeature(i, n, sentence.TokensList);
                 }
             }

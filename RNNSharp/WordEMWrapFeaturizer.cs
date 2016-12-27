@@ -1,34 +1,36 @@
 ﻿using System.Collections.Generic;
+using Txt2Vec;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace RNNSharp
 {
     public class WordEMWrapFeaturizer
     {
-        public int vectorSize;
-        public Dictionary<string, SingleVector> m_WordEmbedding;
         public SingleVector m_UnkEmbedding;
+        public Dictionary<string, SingleVector> m_WordEmbedding;
+        public int vectorSize;
 
         public WordEMWrapFeaturizer(string filename, bool textFormat = false)
         {
-            Txt2Vec.Model model = new Txt2Vec.Model();
+            var model = new Model();
             model.LoadModel(filename, textFormat);
 
-            string[] terms = model.GetAllTerms();
+            var terms = model.GetAllTerms();
             vectorSize = model.VectorSize;
 
             m_WordEmbedding = new Dictionary<string, SingleVector>();
             m_UnkEmbedding = new SingleVector(vectorSize);
 
-            foreach (string term in terms)
+            foreach (var term in terms)
             {
-                float[] vector = model.GetVector(term);
+                var vector = model.GetVector(term);
 
                 if (vector != null)
                 {
-                    SingleVector spVector = new SingleVector(vector);
+                    var spVector = new SingleVector(vector);
                     m_WordEmbedding.Add(term, spVector);
                 }
             }
@@ -41,12 +43,7 @@ namespace RNNSharp
 
         public SingleVector GetTermVector(string strTerm)
         {
-            if (m_WordEmbedding.ContainsKey(strTerm) == true)
-            {
-                return m_WordEmbedding[strTerm];
-            }
-
-            return m_UnkEmbedding;
+            return m_WordEmbedding.ContainsKey(strTerm) ? m_WordEmbedding[strTerm] : m_UnkEmbedding;
         }
     }
 }

@@ -1,25 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.IO;
-using AdvUtils;
+﻿using AdvUtils;
 using RNNSharp;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
+
 namespace TFeatureBin
 {
-    class Program
+    internal class Program
     {
-        static string strTemplateFile = "";
-        static string strInputFile = "";
-        static string strFeatureFile = "";
-        static string strMode = "";
-        static int minfreq = 1;
-        static TemplateFeaturizer templateFeaturizer;
+        private static string strTemplateFile = "";
+        private static string strInputFile = "";
+        private static string strFeatureFile = "";
+        private static string strMode = "";
+        private static int minfreq = 1;
+        private static TemplateFeaturizer templateFeaturizer;
 
-        static int ArgPos(string str, string[] args)
+        private static int ArgPos(string str, string[] args)
         {
             int a;
             for (a = 0; a < args.Length; a++)
@@ -37,11 +39,12 @@ namespace TFeatureBin
             return -1;
         }
 
-        static void UsageTitle()
+        private static void UsageTitle()
         {
             Console.WriteLine("Template Feature Builder written by Zhongkai Fu(fuzhongkai@gmail.com)");
         }
-        static void Usage()
+
+        private static void Usage()
         {
             UsageTitle();
             Console.WriteLine("TFeatureBin.exe <parameters>");
@@ -52,7 +55,7 @@ namespace TFeatureBin
             Console.WriteLine("  build   : extract features from corpus and generate indexed feature set");
         }
 
-        static void UsageBuild()
+        private static void UsageBuild()
         {
             UsageTitle();
             Console.WriteLine("TFeatureBin.exe -mode build <parameters>");
@@ -62,10 +65,11 @@ namespace TFeatureBin
             Console.WriteLine("-ftrfile <string> : generated indexed feature file");
             Console.WriteLine("-minfreq <int> : min-frequency of feature");
             Console.WriteLine();
-            Console.WriteLine("Example: TFeatureBin.exe -mode build -template template.txt -inputfile train.txt -ftrfile tfeatures -minfreq 3");
+            Console.WriteLine(
+                "Example: TFeatureBin.exe -mode build -template template.txt -inputfile train.txt -ftrfile tfeatures -minfreq 3");
         }
 
-        static void UsageExtract()
+        private static void UsageExtract()
         {
             UsageTitle();
             Console.WriteLine("TFeatureBin.exe -mode extract <parameters>");
@@ -75,10 +79,11 @@ namespace TFeatureBin
             Console.WriteLine("-ftrfile <string> : generated feature list file in raw text format");
             Console.WriteLine("-minfreq <int> : min-frequency of feature");
             Console.WriteLine();
-            Console.WriteLine("Example: TFeatureBin.exe -mode extract -template template.txt -inputfile train.txt -ftrfile features_raw.txt -minfreq 3");
+            Console.WriteLine(
+                "Example: TFeatureBin.exe -mode extract -template template.txt -inputfile train.txt -ftrfile features_raw.txt -minfreq 3");
         }
 
-        static void UsageIndex()
+        private static void UsageIndex()
         {
             UsageTitle();
             Console.WriteLine("TFeatureBin.exe -mode index <parameters>");
@@ -87,10 +92,11 @@ namespace TFeatureBin
             Console.WriteLine("-inputfile <string> : feature list in raw text format");
             Console.WriteLine("-ftrfile <string> : indexed feature set");
             Console.WriteLine();
-            Console.WriteLine("Example: TFeatureBin.exe -mode index -template template.txt -inputfile features.txt -ftrfile tfeatures");
+            Console.WriteLine(
+                "Example: TFeatureBin.exe -mode index -template template.txt -inputfile features.txt -ftrfile tfeatures");
         }
 
-        static void ExtractMode()
+        private static void ExtractMode()
         {
             if (File.Exists(strInputFile) == false ||
                 File.Exists(strTemplateFile) == false)
@@ -100,18 +106,18 @@ namespace TFeatureBin
             }
 
             //Extract feature set from given corpus
-            IDictionary<string, int> feature2freq = ExtractFeatureSetFromFile();
+            var feature2freq = ExtractFeatureSetFromFile();
 
             //Save feature set into raw text file
-            StreamWriter sw = new StreamWriter(strFeatureFile, false, Encoding.UTF8);
-            foreach (KeyValuePair<string, int> pair in feature2freq)
+            var sw = new StreamWriter(strFeatureFile, false, Encoding.UTF8);
+            foreach (var pair in feature2freq)
             {
                 sw.WriteLine("{0}\t{1}", pair.Key, pair.Value);
             }
             sw.Close();
         }
 
-        static void IndexMode()
+        private static void IndexMode()
         {
             if (File.Exists(strInputFile) == false ||
                 File.Exists(strTemplateFile) == false)
@@ -121,13 +127,13 @@ namespace TFeatureBin
             }
 
             //Load feature set from given file
-            List<string> features = new List<string>();
-            StreamReader sr = new StreamReader(strInputFile);
-            string strLine = null;
+            var features = new List<string>();
+            var sr = new StreamReader(strInputFile);
+            string strLine;
 
             while ((strLine = sr.ReadLine()) != null)
             {
-                string[] items = strLine.Split('\t');
+                var items = strLine.Split('\t');
                 features.Add(items[0]);
             }
             sr.Close();
@@ -138,7 +144,7 @@ namespace TFeatureBin
             templateFeaturizer.BuildIndexedFeatureIntoFile(strFeatureFile, features);
         }
 
-        static void BuildMode()
+        private static void BuildMode()
         {
             if (File.Exists(strInputFile) == false ||
                 File.Exists(strTemplateFile) == false)
@@ -148,18 +154,14 @@ namespace TFeatureBin
             }
 
             //Extract feature set from given corpus
-            IDictionary<string, int> feature2freq = ExtractFeatureSetFromFile();
-            List<string> features = new List<string>();
-            foreach (KeyValuePair<string, int> pair in feature2freq)
-            {
-                features.Add(pair.Key);
-            }
+            var feature2freq = ExtractFeatureSetFromFile();
+            var features = feature2freq.Select(pair => pair.Key).ToList();
 
             //Build indexed feature set
             templateFeaturizer.BuildIndexedFeatureIntoFile(strFeatureFile, features);
         }
 
-        static IDictionary<string, int> ExtractFeatureSetFromFile()
+        private static IDictionary<string, int> ExtractFeatureSetFromFile()
         {
             //Load templates from given file
             Logger.WriteLine("Loading feature template from {0}...", strTemplateFile);
@@ -167,15 +169,14 @@ namespace TFeatureBin
             templateFeaturizer.LoadTemplateFromFile(strTemplateFile);
 
             Logger.WriteLine("Generate feature set...");
-            BigDictionary<string, int> feature2freq = new BigDictionary<string, int>();
+            var feature2freq = new BigDictionary<string, int>();
 
+            var tokenList = new List<string[]>();
 
-            List<string[]> tokenList = new List<string[]>();
-            string strLine = null;
-            Sentence sentence = null;
-
-            using (StreamReader srCorpus = new StreamReader(strInputFile, Encoding.UTF8))
+            using (var srCorpus = new StreamReader(strInputFile, Encoding.UTF8))
             {
+                string strLine;
+                Sentence sentence;
                 while ((strLine = srCorpus.ReadLine()) != null)
                 {
                     strLine = strLine.Trim();
@@ -183,11 +184,11 @@ namespace TFeatureBin
                     {
                         //The end of current record
                         sentence = new Sentence(tokenList);
-                        for (int i = 0; i < sentence.TokensList.Count; i++)
+                        for (var i = 0; i < sentence.TokensList.Count; i++)
                         {
                             //Get feature of i-th token
-                            List<string> featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
-                            foreach (string strFeature in featureList)
+                            var featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
+                            foreach (var strFeature in featureList)
                             {
                                 if (feature2freq.ContainsKey(strFeature) == false)
                                 {
@@ -207,11 +208,11 @@ namespace TFeatureBin
 
                 //The end of current record
                 sentence = new Sentence(tokenList);
-                for (int i = 0; i < sentence.TokensList.Count; i++)
+                for (var i = 0; i < sentence.TokensList.Count; i++)
                 {
                     //Get feature of i-th token
-                    List<string> featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
-                    foreach (string strFeature in featureList)
+                    var featureList = templateFeaturizer.GenerateFeature(sentence.TokensList, i);
+                    foreach (var strFeature in featureList)
                     {
                         if (feature2freq.ContainsKey(strFeature) == false)
                         {
@@ -224,7 +225,7 @@ namespace TFeatureBin
 
             //Only save the feature whose frequency is not less than minfreq
             Logger.WriteLine("Filter out features whose frequency is less than {0}", minfreq);
-            SortedDictionary<string, int> features = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var features = new SortedDictionary<string, int>(StringComparer.Ordinal);
             foreach (KeyValuePair<string, int> pair in feature2freq)
             {
                 if (pair.Value >= minfreq)
@@ -236,7 +237,7 @@ namespace TFeatureBin
             return features;
         }
 
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             int i;
             if ((i = ArgPos("-template", args)) >= 0) strTemplateFile = args[i + 1];
@@ -245,21 +246,23 @@ namespace TFeatureBin
             if ((i = ArgPos("-minfreq", args)) >= 0) minfreq = int.Parse(args[i + 1]);
             if ((i = ArgPos("-mode", args)) >= 0) strMode = args[i + 1];
 
-            if (strMode == "build")
+            switch (strMode)
             {
-                BuildMode();
-            }
-            else if (strMode == "extract")
-            {
-                ExtractMode();
-            }
-            else if (strMode == "index")
-            {
-                IndexMode();
-            }
-            else
-            {
-                Usage();
+                case "build":
+                    BuildMode();
+                    break;
+
+                case "extract":
+                    ExtractMode();
+                    break;
+
+                case "index":
+                    IndexMode();
+                    break;
+
+                default:
+                    Usage();
+                    break;
             }
         }
     }

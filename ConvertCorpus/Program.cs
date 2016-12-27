@@ -1,16 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using AdvUtils;
 using System.IO;
-using AdvUtils;
 
 namespace ConvertCorpus
 {
-    class Program
+    internal class Program
     {
-        static int ArgPos(string str, string[] args)
+        private static int ArgPos(string str, string[] args)
         {
             int a;
             for (a = 0; a < args.Length; a++)
@@ -30,20 +25,20 @@ namespace ConvertCorpus
 
         public static void ConvertFormat(string strInputFile, string strOutputFile)
         {
-            StreamReader sr = new StreamReader(strInputFile);
-            StreamWriter sw = new StreamWriter(strOutputFile);
-            string strLine = null;
+            var sr = new StreamReader(strInputFile);
+            var sw = new StreamWriter(strOutputFile);
+            string strLine;
 
             while ((strLine = sr.ReadLine()) != null)
             {
                 strLine = strLine.Trim();
 
-                string[] items = strLine.Split();
-                foreach (string item in items)
+                var items = strLine.Split();
+                foreach (var item in items)
                 {
-                    int pos = item.LastIndexOf('[');
-                    string strTerm = item.Substring(0, pos);
-                    string strTag = item.Substring(pos + 1, item.Length - pos - 2);
+                    var pos = item.LastIndexOf('[');
+                    var strTerm = item.Substring(0, pos);
+                    var strTag = item.Substring(pos + 1, item.Length - pos - 2);
 
                     sw.WriteLine("{0}\t{1}", strTerm, strTag);
                 }
@@ -54,7 +49,7 @@ namespace ConvertCorpus
             sw.Close();
         }
 
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             ConvertFormat(args[0], args[1]);
         }
