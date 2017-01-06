@@ -14,9 +14,9 @@ namespace TFeatureBin
 {
     internal class Program
     {
-        private static string strTemplateFile = "";
-        private static string strInputFile = "";
-        private static string strFeatureFile = "";
+        private static string templateFilePath = "";
+        private static string inputFilePath = "";
+        private static string featureFilePath = "";
         private static string strMode = "";
         private static int minfreq = 1;
         private static TemplateFeaturizer templateFeaturizer;
@@ -98,8 +98,8 @@ namespace TFeatureBin
 
         private static void ExtractMode()
         {
-            if (File.Exists(strInputFile) == false ||
-                File.Exists(strTemplateFile) == false)
+            if (File.Exists(inputFilePath) == false ||
+                File.Exists(templateFilePath) == false)
             {
                 UsageExtract();
                 return;
@@ -109,7 +109,7 @@ namespace TFeatureBin
             var feature2freq = ExtractFeatureSetFromFile();
 
             //Save feature set into raw text file
-            var sw = new StreamWriter(strFeatureFile, false, Encoding.UTF8);
+            var sw = new StreamWriter(featureFilePath, false, Encoding.UTF8);
             foreach (var pair in feature2freq)
             {
                 sw.WriteLine("{0}\t{1}", pair.Key, pair.Value);
@@ -119,8 +119,8 @@ namespace TFeatureBin
 
         private static void IndexMode()
         {
-            if (File.Exists(strInputFile) == false ||
-                File.Exists(strTemplateFile) == false)
+            if (File.Exists(inputFilePath) == false ||
+                File.Exists(templateFilePath) == false)
             {
                 UsageIndex();
                 return;
@@ -128,7 +128,7 @@ namespace TFeatureBin
 
             //Load feature set from given file
             var features = new List<string>();
-            var sr = new StreamReader(strInputFile);
+            var sr = new StreamReader(inputFilePath);
             string strLine;
 
             while ((strLine = sr.ReadLine()) != null)
@@ -140,14 +140,14 @@ namespace TFeatureBin
 
             //Build indexed feature set
             templateFeaturizer = new TemplateFeaturizer();
-            templateFeaturizer.LoadTemplateFromFile(strTemplateFile);
-            templateFeaturizer.BuildIndexedFeatureIntoFile(strFeatureFile, features);
+            templateFeaturizer.LoadTemplateFromFile(templateFilePath);
+            templateFeaturizer.BuildIndexedFeatureIntoFile(featureFilePath, features);
         }
 
         private static void BuildMode()
         {
-            if (File.Exists(strInputFile) == false ||
-                File.Exists(strTemplateFile) == false)
+            if (File.Exists(inputFilePath) == false ||
+                File.Exists(templateFilePath) == false)
             {
                 UsageBuild();
                 return;
@@ -158,22 +158,22 @@ namespace TFeatureBin
             var features = feature2freq.Select(pair => pair.Key).ToList();
 
             //Build indexed feature set
-            templateFeaturizer.BuildIndexedFeatureIntoFile(strFeatureFile, features);
+            templateFeaturizer.BuildIndexedFeatureIntoFile(featureFilePath, features);
         }
 
         private static IDictionary<string, int> ExtractFeatureSetFromFile()
         {
             //Load templates from given file
-            Logger.WriteLine("Loading feature template from {0}...", strTemplateFile);
+            Logger.WriteLine("Loading feature template from {0}...", templateFilePath);
             templateFeaturizer = new TemplateFeaturizer();
-            templateFeaturizer.LoadTemplateFromFile(strTemplateFile);
+            templateFeaturizer.LoadTemplateFromFile(templateFilePath);
 
             Logger.WriteLine("Generate feature set...");
             var feature2freq = new BigDictionary<string, int>();
 
             var tokenList = new List<string[]>();
 
-            using (var srCorpus = new StreamReader(strInputFile, Encoding.UTF8))
+            using (var srCorpus = new StreamReader(inputFilePath, Encoding.UTF8))
             {
                 string strLine;
                 Sentence sentence;
@@ -240,9 +240,9 @@ namespace TFeatureBin
         private static void Main(string[] args)
         {
             int i;
-            if ((i = ArgPos("-template", args)) >= 0) strTemplateFile = args[i + 1];
-            if ((i = ArgPos("-inputfile", args)) >= 0) strInputFile = args[i + 1];
-            if ((i = ArgPos("-ftrfile", args)) >= 0) strFeatureFile = args[i + 1];
+            if ((i = ArgPos("-template", args)) >= 0) templateFilePath = args[i + 1];
+            if ((i = ArgPos("-inputfile", args)) >= 0) inputFilePath = args[i + 1];
+            if ((i = ArgPos("-ftrfile", args)) >= 0) featureFilePath = args[i + 1];
             if ((i = ArgPos("-minfreq", args)) >= 0) minfreq = int.Parse(args[i + 1]);
             if ((i = ArgPos("-mode", args)) >= 0) strMode = args[i + 1];
 

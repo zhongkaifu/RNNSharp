@@ -582,13 +582,13 @@ namespace RNNSharp
             {
                 autoEncoder = Seq2SeqAutoEncoder,
                 srcSentence = sentence.srcSentence,
-                tgtSequence = ExtractFeatures(sentence.tgtSentence)
+                tgtSequence = BuildSequence(sentence.tgtSentence)
             };
 
             return sPair;
         }
 
-        public State ExtractFeatures(string[] word)
+        public State BuildState(string[] word)
         {
             var state = new State();
             var tokenList = new List<string[]> { word };
@@ -599,7 +599,7 @@ namespace RNNSharp
             return state;
         }
 
-        public Sequence ExtractFeatures(Sentence sentence)
+        public Sequence BuildSequence(Sentence sentence)
         {
             var n = sentence.TokensList.Count;
             var sequence = new Sequence(n);

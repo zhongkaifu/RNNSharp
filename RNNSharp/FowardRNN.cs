@@ -65,13 +65,13 @@ namespace RNNSharp
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, false);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell, false);
                 }
 
-                var tmpOutput = new float[HiddenLayerList[numLayers - 1].cellOutput.Length];
-                for (var i = 0; i < HiddenLayerList[numLayers - 1].cellOutput.Length; i++)
+                var tmpOutput = new float[HiddenLayerList[numLayers - 1].Cell.Length];
+                for (var i = 0; i < HiddenLayerList[numLayers - 1].Cell.Length; i++)
                 {
-                    tmpOutput[i] = HiddenLayerList[numLayers - 1].cellOutput[i];
+                    tmpOutput[i] = HiddenLayerList[numLayers - 1].Cell[i];
                 }
                 outputs.Add(tmpOutput);
             }
@@ -79,9 +79,67 @@ namespace RNNSharp
             return outputs;
         }
 
+        /// <summary>
+        /// Extract features from source sequence
+        /// </summary>
+        /// <param name="decoder"></param>
+        /// <param name="srcSequence"></param>
+        /// <param name="targetSparseFeatureSize"></param>
+        /// <param name="srcHiddenAvgOutput"></param>
+        /// <param name="srcSparseFeatures"></param>
+        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize,
+            out float[] srcHiddenAvgOutput, out Dictionary<int, float> srcSparseFeatures)
+        {
+            //Extract dense features from source sequence
+            var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
+            int srcSequenceDenseFeatureSize = srcOutputs[0].Length;
+            int srcSequenceLength = srcOutputs.Count - 1;
+            srcHiddenAvgOutput = new float[srcSequenceDenseFeatureSize];
+
+            var j = 0;
+            var vDiv2 = new Vector<float>(2.0f);
+            float[] srcOutputForward = srcOutputs[0];
+            float[] srcOutputBackward = srcOutputs[srcSequenceLength];
+            while (j < srcSequenceDenseFeatureSize - Vector<float>.Count)
+            {
+                var vForward = new Vector<float>(srcOutputForward, j);
+                var vBackward = new Vector<float>(srcOutputBackward, j);
+
+                var vResult = (vForward + vBackward) / vDiv2;
+                vResult.CopyTo(srcHiddenAvgOutput, j);
+
+                j += Vector<float>.Count;
+            }
+
+            while (j < srcSequenceDenseFeatureSize)
+            {
+                srcHiddenAvgOutput[j] = (srcOutputForward[j] + srcOutputBackward[j]) / 2.0f;
+                j++;
+            }
+
+            //Extract sparse features from source sequence
+            srcSparseFeatures = new Dictionary<int, float>();
+            for (var i = 0; i < srcSequence.States.Length; i++)
+            {
+                foreach (var kv in srcSequence.States[i].SparseFeature)
+                {
+                    var srcSparseFeatureIndex = kv.Key + targetSparseFeatureSize;
+
+                    if (srcSparseFeatures.ContainsKey(srcSparseFeatureIndex) == false)
+                    {
+                        srcSparseFeatures.Add(srcSparseFeatureIndex, kv.Value);
+                    }
+                    else
+                    {
+                        srcSparseFeatures[srcSparseFeatureIndex] += kv.Value;
+                    }
+                }
+            }
+        }
+
         public override int[] TestSeq2Seq(Sentence srcSentence, Config featurizer)
         {
-            var curState = featurizer.ExtractFeatures(new[] { "<s>" });
+            var curState = featurizer.BuildState(new[] { "<s>" });
             curState.Label = featurizer.TagSet.GetIndex("<s>");
 
             //Reset all layers
@@ -91,7 +149,7 @@ namespace RNNSharp
             }
 
             //Extract features from source sentence
-            var srcSequence = featurizer.Seq2SeqAutoEncoder.Featurizer.ExtractFeatures(srcSentence);
+            var srcSequence = featurizer.Seq2SeqAutoEncoder.Config.BuildSequence(srcSentence);
             float[] srcHiddenAvgOutput;
             Dictionary<int, float> srcSparseFeatures;
             ExtractSourceSentenceFeature(featurizer.Seq2SeqAutoEncoder, srcSequence, curState.SparseFeature.Length,
@@ -115,12 +173,12 @@ namespace RNNSharp
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].cellOutput, srcHiddenAvgOutput);
+                    denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].Cell, srcHiddenAvgOutput);
                     HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, false);
                 }
 
                 //Compute output layer
-                denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].cellOutput,
+                denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].Cell,
                     srcHiddenAvgOutput);
                 OutputLayer.ForwardPass(sparseVector, denseFeatures, false);
 
@@ -129,7 +187,7 @@ namespace RNNSharp
                 var nextTagId = OutputLayer.GetBestOutputIndex(false);
                 var nextWord = featurizer.TagSet.GetTagName(nextTagId);
 
-                curState = featurizer.ExtractFeatures(new[] { nextWord });
+                curState = featurizer.BuildState(new[] { nextWord });
                 curState.Label = nextTagId;
 
                 predicted.Add(nextTagId);
@@ -143,39 +201,7 @@ namespace RNNSharp
             return predicted.ToArray();
         }
 
-        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize,
-            out float[] srcHiddenAvgOutput, out Dictionary<int, float> srcSparseFeatures)
-        {
-            var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
-            srcHiddenAvgOutput = new float[srcOutputs[0].Length * 2];
-            for (var i = 0; i < srcOutputs[0].Length; i++)
-            {
-                srcHiddenAvgOutput[i] = srcOutputs[0][i];
-            }
-            for (var i = 0; i < srcOutputs[srcOutputs.Count - 1].Length; i++)
-            {
-                srcHiddenAvgOutput[srcOutputs[0].Length + i] = srcOutputs[srcOutputs.Count - 1][i];
-            }
-
-            srcSparseFeatures = new Dictionary<int, float>();
-            for (var i = 0; i < srcSequence.States.Length; i++)
-            {
-                foreach (var kv in srcSequence.States[i].SparseFeature)
-                {
-                    var srcSparseFeatureIndex = kv.Key + targetSparseFeatureSize;
-
-                    if (srcSparseFeatures.ContainsKey(srcSparseFeatureIndex) == false)
-                    {
-                        srcSparseFeatures.Add(srcSparseFeatureIndex, kv.Value);
-                    }
-                    else
-                    {
-                        srcSparseFeatures[srcSparseFeatureIndex] += kv.Value;
-                    }
-                }
-            }
-        }
-
+    
         public override int[] ProcessSeq2Seq(SequencePair pSequence, RunningMode runningMode)
         {
             var tgtSequence = pSequence.tgtSequence;
@@ -188,7 +214,7 @@ namespace RNNSharp
             }
 
             //Extract features from source sentences
-            var srcSequence = pSequence.autoEncoder.Featurizer.ExtractFeatures(pSequence.srcSentence);
+            var srcSequence = pSequence.autoEncoder.Config.BuildSequence(pSequence.srcSentence);
             float[] srcHiddenAvgOutput;
             Dictionary<int, float> srcSparseFeatures;
             ExtractSourceSentenceFeature(pSequence.autoEncoder, srcSequence, tgtSequence.SparseFeatureSize,
@@ -225,12 +251,12 @@ namespace RNNSharp
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].cellOutput, srcHiddenAvgOutput);
+                    denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].Cell, srcHiddenAvgOutput);
                     HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, isTraining);
                 }
 
                 //Compute output layer
-                denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].cellOutput,
+                denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].Cell,
                     srcHiddenAvgOutput);
                 OutputLayer.ForwardPass(sparseVector, denseFeatures, isTraining);
 
@@ -240,7 +266,7 @@ namespace RNNSharp
 
                 if (runningMode != RunningMode.Test)
                 {
-                    logp += Math.Log10(OutputLayer.cellOutput[state.Label] + 0.0001);
+                    logp += Math.Log10(OutputLayer.Cell[state.Label] + 0.0001);
                 }
 
                 if (runningMode == RunningMode.Training)
@@ -303,15 +329,15 @@ namespace RNNSharp
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput, isTraining);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell, isTraining);
                 }
 
                 //Compute output layer
-                OutputLayer.ForwardPass(state.SparseFeature, HiddenLayerList[numLayers - 1].cellOutput, isTraining);
+                OutputLayer.ForwardPass(state.SparseFeature, HiddenLayerList[numLayers - 1].Cell, isTraining);
 
                 if (m != null)
                 {
-                    OutputLayer.cellOutput.CopyTo(m[curState], 0);
+                    OutputLayer.Cell.CopyTo(m[curState], 0);
                 }
 
                 OutputLayer.Softmax(isTraining);
@@ -320,7 +346,7 @@ namespace RNNSharp
 
                 if (runningMode != RunningMode.Test)
                 {
-                    logp += Math.Log10(OutputLayer.cellOutput[state.Label] + 0.0001);
+                    logp += Math.Log10(OutputLayer.Cell[state.Label] + 0.0001);
                 }
 
                 if (runningMode == RunningMode.Training)
@@ -392,7 +418,7 @@ namespace RNNSharp
 
                     for (var i = 1; i < numLayers; i++)
                     {
-                        HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].cellOutput);
+                        HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell);
                     }
 
                     OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
@@ -499,10 +525,6 @@ namespace RNNSharp
             }
 
             OutputLayer.CleanLearningRate();
-
-            RNNHelper.vecMaxGrad = new Vector<float>(RNNHelper.GradientCutoff);
-            RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
-            RNNHelper.vecNormalLearningRate = new Vector<float>(RNNHelper.LearningRate);
         }
     }
 }

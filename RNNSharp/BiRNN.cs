@@ -46,10 +46,6 @@ namespace RNNSharp
             }
 
             OutputLayer.CleanLearningRate();
-
-            RNNHelper.vecMaxGrad = new Vector<float>(RNNHelper.GradientCutoff);
-            RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
-            RNNHelper.vecNormalLearningRate = new Vector<float>(RNNHelper.LearningRate);
         }
 
         private SimpleLayer[] ComputeMiddleLayers(Sequence pSequence, SimpleLayer[] lastLayers, SimpleLayer forwardLayer,
@@ -67,7 +63,7 @@ namespace RNNSharp
                 for (var curState = 0; curState < lastLayers.Length; curState++)
                 {
                     var state = pSequence.States[curState];
-                    forwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].cellOutput);
+                    forwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
                     mForward[curState] = forwardLayer.CloneHiddenLayer();
                 }
             },
@@ -79,7 +75,7 @@ namespace RNNSharp
                     for (var curState = lastLayers.Length - 1; curState >= 0; curState--)
                     {
                         var state = pSequence.States[curState];
-                        backwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].cellOutput);
+                        backwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
                         mBackward[curState] = backwardLayer.CloneHiddenLayer();
                     }
                 });
@@ -92,7 +88,7 @@ namespace RNNSharp
                 mergedLayer[curState] = new SimpleLayer(forwardLayer.LayerConfig)
                 {
                     SparseFeature = state.SparseFeature,
-                    DenseFeature = lastLayers[curState].cellOutput
+                    DenseFeature = lastLayers[curState].Cell
                 };
 
                 var forwardCells = mForward[curState];
@@ -101,19 +97,19 @@ namespace RNNSharp
                 var i = 0;
                 while (i < forwardLayer.LayerSize - Vector<float>.Count)
                 {
-                    var v1 = new Vector<float>(forwardCells.cellOutput, i);
-                    var v2 = new Vector<float>(backwardCells.cellOutput, i);
+                    var v1 = new Vector<float>(forwardCells.Cell, i);
+                    var v2 = new Vector<float>(backwardCells.Cell, i);
                     var v = (v1 + v2) / vecConst2;
 
-                    v.CopyTo(mergedLayer[curState].cellOutput, i);
+                    v.CopyTo(mergedLayer[curState].Cell, i);
 
                     i += Vector<float>.Count;
                 }
 
                 while (i < forwardLayer.LayerSize)
                 {
-                    mergedLayer[curState].cellOutput[i] =
-                        (float)((forwardCells.cellOutput[i] + backwardCells.cellOutput[i]) / 2.0);
+                    mergedLayer[curState].Cell[i] =
+                        (float)((forwardCells.Cell[i] + backwardCells.Cell[i]) / 2.0);
                     i++;
                 }
             });
@@ -178,19 +174,19 @@ namespace RNNSharp
                 var i = 0;
                 while (i < forwardLayer.LayerSize - Vector<float>.Count)
                 {
-                    var v1 = new Vector<float>(forwardCells.cellOutput, i);
-                    var v2 = new Vector<float>(backwardCells.cellOutput, i);
+                    var v1 = new Vector<float>(forwardCells.Cell, i);
+                    var v2 = new Vector<float>(backwardCells.Cell, i);
                     var v = (v1 + v2) / vecConst2;
 
-                    v.CopyTo(mergedLayer[curState].cellOutput, i);
+                    v.CopyTo(mergedLayer[curState].Cell, i);
 
                     i += Vector<float>.Count;
                 }
 
                 while (i < forwardLayer.LayerSize)
                 {
-                    mergedLayer[curState].cellOutput[i] =
-                        (float)((forwardCells.cellOutput[i] + backwardCells.cellOutput[i]) / 2.0);
+                    mergedLayer[curState].Cell[i] =
+                        (float)((forwardCells.Cell[i] + backwardCells.Cell[i]) / 2.0);
                     i++;
                 }
             });
@@ -229,11 +225,11 @@ namespace RNNSharp
                 var state = pSequence.States[curState];
                 var outputCells = (SimpleLayer)seqFinalOutput.GetValue(curState);
                 outputCells.LabelShortList = labelSet;
-                outputCells.ForwardPass(state.SparseFeature, lastLayer[curState].cellOutput, isTraining);
+                outputCells.ForwardPass(state.SparseFeature, lastLayer[curState].Cell, isTraining);
 
                 if (outputRawScore)
                 {
-                    outputCells.cellOutput.CopyTo(tmp_rawOutputLayer[curState], 0);
+                    outputCells.Cell.CopyTo(tmp_rawOutputLayer[curState], 0);
                 }
                 outputCells.Softmax(isTraining);
             });
@@ -262,7 +258,7 @@ namespace RNNSharp
                 layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
             }
             var outputs = new List<float[]>(layer.Length);
-            outputs.AddRange(layer.Select(t => t.cellOutput));
+            outputs.AddRange(layer.Select(t => t.Cell));
             return outputs;
         }
 
@@ -334,7 +330,7 @@ namespace RNNSharp
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 errLayer[curState] = new float[forwardLayer.LayerSize];
-                forwardLayer.ComputeLayerErr(seqFinalOutput[curState], errLayer[curState], seqFinalOutput[curState].er);
+                forwardLayer.ComputeLayerErr(seqFinalOutput[curState], errLayer[curState], seqFinalOutput[curState].Err);
             });
             fErrLayers[numLayers - 1] = errLayer;
             bErrLayers[numLayers - 1] = errLayer;
@@ -398,7 +394,7 @@ namespace RNNSharp
                             {
                                 forwardLayer.ForwardPass(layerList[i][curState].SparseFeature,
                                     layerList[i][curState].DenseFeature, true);
-                                forwardLayer.er = fErrLayers[i][curState];
+                                forwardLayer.Err = fErrLayers[i][curState];
                                 forwardLayer.BackwardPass(numStates, curState);
                             }
                         },
@@ -411,7 +407,7 @@ namespace RNNSharp
                                     var curState2 = numStates - curState - 1;
                                     backwardLayer.ForwardPass(layerList[i][curState2].SparseFeature,
                                         layerList[i][curState2].DenseFeature, true);
-                                    backwardLayer.er = bErrLayers[i][curState2];
+                                    backwardLayer.Err = bErrLayers[i][curState2];
                                     backwardLayer.BackwardPass(numStates, curState);
                                 }
                             });
@@ -441,7 +437,7 @@ namespace RNNSharp
                 var numStates = pSequence.States.Length;
                 for (var curState = 0; curState < numStates; curState++)
                 {
-                    logp += Math.Log10(seqOutput[curState].cellOutput[pSequence.States[curState].Label] + 0.0001);
+                    logp += Math.Log10(seqOutput[curState].Cell[pSequence.States[curState].Label] + 0.0001);
                 }
             }
 

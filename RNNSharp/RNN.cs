@@ -14,7 +14,6 @@ namespace RNNSharp
 
         protected ParallelOptions parallelOption = new ParallelOptions();
         public virtual bool IsCRFTraining { get; set; }
-        public virtual MODELTYPE ModelType { get; set; }
         public virtual bool bVQ { get; set; }
 
         public virtual int MaxIter { get; set; }
@@ -316,7 +315,7 @@ namespace RNNSharp
                 {
                     predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Training);
                 }
-                else if (ModelType == MODELTYPE.Seq2Seq)
+                else if (pSequence is SequencePair)
                 {
                     predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Training);
                 }
@@ -405,7 +404,7 @@ namespace RNNSharp
                 {
                     predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Validate);
                 }
-                else if (ModelType == MODELTYPE.Seq2Seq)
+                else if (pSequence is SequencePair)
                 {
                     predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Validate);
                 }

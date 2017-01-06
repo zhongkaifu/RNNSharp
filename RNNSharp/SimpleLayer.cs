@@ -9,30 +9,27 @@ namespace RNNSharp
 {
     public class SimpleLayer
     {
-        public float[] cellOutput;
+        public float[] Cell { get; set; }
+        public float[] Err { get; set; }
 
-        //Dense feature set
-        public float[] DenseFeature;
-
-        public float[] er;
-
-        public List<int> LabelShortList;
+        public List<int> LabelShortList { get; set; }
+        public SparseVector SparseFeature { get; set; }
+        public float[] DenseFeature { get; set; }
 
         protected ParallelOptions parallelOption = new ParallelOptions();
-        public float[] previousCellOutput;
-
-        //Sparse feature set
-        public SparseVector SparseFeature;
+        protected float[] previousCellOutput;
 
         public SimpleLayer(LayerConfig config)
         {
             LayerConfig = config;
             AllocateMemoryForCells();
+            LabelShortList = new List<int>();
         }
 
         public SimpleLayer()
         {
             LayerConfig = new LayerConfig();
+            LabelShortList = new List<int>();
         }
 
         public int LayerSize
@@ -54,9 +51,9 @@ namespace RNNSharp
 
         public void AllocateMemoryForCells()
         {
-            cellOutput = new float[LayerSize];
+            Cell = new float[LayerSize];
             previousCellOutput = new float[LayerSize];
-            er = new float[LayerSize];
+            Err = new float[LayerSize];
         }
 
         public SimpleLayer CloneHiddenLayer()
@@ -66,18 +63,18 @@ namespace RNNSharp
             var j = 0;
             while (j < LayerSize - Vector<float>.Count)
             {
-                var vCellOutput = new Vector<float>(cellOutput, j);
-                vCellOutput.CopyTo(m.cellOutput, j);
-                var vEr = new Vector<float>(er, j);
-                vEr.CopyTo(m.er, j);
+                var vCellOutput = new Vector<float>(Cell, j);
+                vCellOutput.CopyTo(m.Cell, j);
+                var vEr = new Vector<float>(Err, j);
+                vEr.CopyTo(m.Err, j);
 
                 j += Vector<float>.Count;
             }
 
             while (j < LayerSize)
             {
-                m.cellOutput[j] = cellOutput[j];
-                m.er[j] = er[j];
+                m.Cell[j] = Cell[j];
+                m.Err[j] = Err[j];
                 j++;
             }
 
@@ -173,7 +170,7 @@ namespace RNNSharp
             if (DenseFeatureSize > 0)
             {
                 DenseFeature = denseFeature;
-                RNNHelper.matrixXvectorADD(cellOutput, denseFeature, DenseWeights, LayerSize, DenseFeatureSize);
+                RNNHelper.matrixXvectorADD(Cell, denseFeature, DenseWeights, LayerSize, DenseFeatureSize);
             }
 
             if (SparseFeatureSize > 0)
@@ -188,7 +185,7 @@ namespace RNNSharp
                     {
                         score += pair.Value * vector_b[pair.Key];
                     }
-                    cellOutput[b] += score;
+                    Cell[b] += score;
                 });
             }
         }
@@ -200,7 +197,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.For(0, LayerSize, parallelOption, c =>
                 {
-                    var err = er[c];
+                    var err = Err[c];
                     var featureWeightCol = DenseWeights[c];
                     var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
                     var j = 0;
@@ -226,7 +223,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.For(0, LayerSize, parallelOption, c =>
                 {
-                    var er2 = er[c];
+                    var er2 = Err[c];
                     var vector_c = SparseWeights[c];
                     foreach (var pair in SparseFeature)
                     {
@@ -265,13 +262,13 @@ namespace RNNSharp
             var largeOutputLayer = nextLayer as NCEOutputLayer;
             if (largeOutputLayer != null)
             {
-                RNNHelper.matrixXvectorADDErr(er, largeOutputLayer.er, largeOutputLayer.DenseWeights, LayerSize,
+                RNNHelper.matrixXvectorADDErr(Err, largeOutputLayer.Err, largeOutputLayer.DenseWeights, LayerSize,
                     largeOutputLayer.negativeSampleWordList);
             }
             else
             {
                 //error output->hidden for words from specific class
-                RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+                RNNHelper.matrixXvectorADDErr(Err, nextLayer.Err, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
             }
         }
 
@@ -282,18 +279,18 @@ namespace RNNSharp
                 //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
                 for (var c = 0; c < LayerSize; c++)
                 {
-                    er[c] = -CRFSeqOutput[timeat][c];
+                    Err[c] = -CRFSeqOutput[timeat][c];
                 }
-                er[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
+                Err[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
             }
             else
             {
                 //For standard RNN
                 for (var c = 0; c < LayerSize; c++)
                 {
-                    er[c] = -cellOutput[c];
+                    Err[c] = -Cell[c];
                 }
-                er[state.Label] = (float)(1.0 - cellOutput[state.Label]);
+                Err[state.Label] = (float)(1.0 - Cell[state.Label]);
             }
         }
 
@@ -311,12 +308,12 @@ namespace RNNSharp
         public virtual int GetBestOutputIndex(bool isTrain)
         {
             var imax = 0;
-            var dmax = cellOutput[0];
+            var dmax = Cell[0];
             for (var k = 1; k < LayerSize; k++)
             {
-                if (cellOutput[k] > dmax)
+                if (Cell[k] > dmax)
                 {
-                    dmax = cellOutput[k];
+                    dmax = Cell[k];
                     imax = k;
                 }
             }
@@ -328,26 +325,26 @@ namespace RNNSharp
             float sum = 0;
             for (var c = 0; c < LayerSize; c++)
             {
-                var cell = cellOutput[c];
+                var cell = Cell[c];
                 if (cell > 50) cell = 50;
                 else if (cell < -50) cell = -50;
                 var val = (float)Math.Exp(cell);
                 sum += val;
-                cellOutput[c] = val;
+                Cell[c] = val;
             }
             var i = 0;
             var vecSum = new Vector<float>(sum);
             while (i < LayerSize - Vector<float>.Count)
             {
-                var v = new Vector<float>(cellOutput, i);
+                var v = new Vector<float>(Cell, i);
                 v /= vecSum;
-                v.CopyTo(cellOutput, i);
+                v.CopyTo(Cell, i);
                 i += Vector<float>.Count;
             }
 
             while (i < LayerSize)
             {
-                cellOutput[i] /= sum;
+                Cell[i] /= sum;
                 i++;
             }
         }

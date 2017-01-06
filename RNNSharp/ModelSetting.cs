@@ -16,8 +16,6 @@ namespace RNNSharp
             GradientCutoff = 15.0f;
         }
 
-        public string TagFile { get; set; }
-        public TagSet Tags { get; set; }
         public float LearningRate { get; set; }
         public int MaxIteration { get; set; }
         public bool IsConstAlpha { get; set; }
@@ -31,8 +29,9 @@ namespace RNNSharp
             Logger.WriteLine("Starting learning rate: {0}", LearningRate);
             Logger.WriteLine("Max Iteration: {0}", MaxIteration);
             Logger.WriteLine("SIMD: {0}, Size: {1}bits", Vector.IsHardwareAccelerated,
-                Vector<float>.Count * sizeof(double) * 8);
+                Vector<float>.Count * sizeof(float) * 8);
             Logger.WriteLine("Gradient cut-off: {0}", GradientCutoff);
+
             if (SaveStep > 0)
             {
                 Logger.WriteLine("Save temporary model after every {0} sentences", SaveStep);

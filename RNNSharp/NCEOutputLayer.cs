@@ -10,13 +10,8 @@ namespace RNNSharp
     internal class NCEOutputLayer : SimpleLayer
     {
         private readonly int NegativeSampleSize = 10;
-        public long[] accFreqTable;
-        public int[] accTagIdTable;
-        public long accTotalFreq;
-
         public HashSet<int> negativeSampleWordList = new HashSet<int>();
         public Random rand = new Random();
-        public int vocab_size;
 
         public NCEOutputLayer()
         {
@@ -33,113 +28,6 @@ namespace RNNSharp
             }
         }
 
-        public void BuildStatisticData<T>(DataSet<T> m_trainSet) where T : ISequence
-        {
-            long train_words = 0;
-            vocab_size = 0;
-            var tagId2Freq = new Dictionary<int, int>();
-            foreach (ISequence seq in m_trainSet.SequenceList)
-            {
-                State[] States;
-                if (seq is Sequence)
-                {
-                    States = (seq as Sequence).States;
-                }
-                else
-                {
-                    States = (seq as SequencePair).tgtSequence.States;
-                }
-
-                foreach (var state in States)
-                {
-                    if (tagId2Freq.ContainsKey(state.Label) == false)
-                    {
-                        tagId2Freq.Add(state.Label, 0);
-                    }
-                    tagId2Freq[state.Label]++;
-                    train_words++;
-                }
-            }
-
-            vocab_size = tagId2Freq.Keys.Count;
-            Logger.WriteLine("Vocabulary size: {0}", vocab_size);
-            Logger.WriteLine("Training words in total: {0}", train_words);
-
-            accFreqTable = new long[vocab_size];
-            accTagIdTable = new int[vocab_size];
-            accTotalFreq = 0;
-
-            //Keep accTotalFreq is less than int.MaxValue
-            var accFactor = 1 + (int)(train_words / int.MaxValue);
-
-            var freq2TagIdList = new SortedDictionary<int, List<int>>();
-            foreach (var pair in tagId2Freq)
-            {
-                if (freq2TagIdList.ContainsKey(pair.Value) == false)
-                {
-                    freq2TagIdList.Add(pair.Value, new List<int>());
-                }
-                freq2TagIdList[pair.Value].Add(pair.Key);
-            }
-
-            var i = 0;
-            foreach (var pair in freq2TagIdList.Reverse())
-            {
-                foreach (var tagId in pair.Value)
-                {
-                    accTotalFreq += pair.Key / accFactor;
-                    accFreqTable[i] = accTotalFreq;
-                    accTagIdTable[i] = tagId;
-                    i++;
-                }
-            }
-        }
-
-        private int SearchAccTermTable(int freq)
-        {
-            var mid = vocab_size >> 1;
-            int left = 0, right = vocab_size - 1;
-
-            while (true)
-            {
-                if (accFreqTable[mid] < freq)
-                {
-                    left = mid + 1;
-                }
-                else if (accFreqTable[mid] > freq)
-                {
-                    if (mid == 0)
-                    {
-                        return accTagIdTable[0];
-                    }
-
-                    if (accFreqTable[mid - 1] < freq)
-                    {
-                        return accTagIdTable[mid];
-                    }
-
-                    right = mid - 1;
-                }
-                else
-                {
-                    return accTagIdTable[mid];
-                }
-
-                mid = (left + right) >> 1;
-            }
-        }
-
-        public override void ShallowCopyWeightTo(SimpleLayer destLayer)
-        {
-            var layer = destLayer as NCEOutputLayer;
-            layer.accFreqTable = accFreqTable;
-            layer.accTagIdTable = accTagIdTable;
-            layer.vocab_size = vocab_size;
-            layer.accTotalFreq = accTotalFreq;
-
-            base.ShallowCopyWeightTo(layer);
-        }
-
         public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             if (isTrain)
@@ -153,11 +41,10 @@ namespace RNNSharp
 
                 for (var i = 0; i < NegativeSampleSize; i++)
                 {
-                    var randomFreq = rand.Next((int)accTotalFreq);
-                    var wordId = SearchAccTermTable(randomFreq);
+                    var wordId = rand.Next() % LayerSize;
                     while (negativeSampleWordList.Contains(wordId))
                     {
-                        wordId = (wordId + 1) % vocab_size;
+                        wordId = (wordId + 1) % LayerSize;
                     }
                     negativeSampleWordList.Add(wordId);
                 }
@@ -165,7 +52,7 @@ namespace RNNSharp
                 if (DenseFeatureSize > 0)
                 {
                     DenseFeature = denseFeature;
-                    RNNHelper.matrixXvectorADD(cellOutput, denseFeature, DenseWeights, negativeSampleWordList,
+                    RNNHelper.matrixXvectorADD(Cell, denseFeature, DenseWeights, negativeSampleWordList,
                         DenseFeatureSize, true);
                 }
 
@@ -181,7 +68,7 @@ namespace RNNSharp
                         {
                             score += pair.Value * vector_b[pair.Key];
                         }
-                        cellOutput[b] += score;
+                        Cell[b] += score;
                     });
                 }
             }
@@ -197,9 +84,9 @@ namespace RNNSharp
             {
                 var imax = 0;
                 var dmax = double.MinValue;
-                foreach (var k in negativeSampleWordList.Where(k => cellOutput[k] > dmax))
+                foreach (var k in negativeSampleWordList.Where(k => Cell[k] > dmax))
                 {
-                    dmax = cellOutput[k];
+                    dmax = Cell[k];
                     imax = k;
                 }
                 return imax;
@@ -214,17 +101,17 @@ namespace RNNSharp
                 double sum = 0;
                 foreach (var c in negativeSampleWordList)
                 {
-                    var cell = cellOutput[c];
+                    var cell = Cell[c];
                     if (cell > 50) cell = 50;
                     if (cell < -50) cell = -50;
                     var val = (float)Math.Exp(cell);
                     sum += val;
-                    cellOutput[c] = val;
+                    Cell[c] = val;
                 }
 
                 foreach (var c in negativeSampleWordList)
                 {
-                    cellOutput[c] /= (float)sum;
+                    Cell[c] /= (float)sum;
                 }
             }
             else
@@ -240,7 +127,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    var err = er[c];
+                    var err = Err[c];
                     var featureWeightCol = DenseWeights[c];
                     var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
                     var j = 0;
@@ -266,7 +153,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    var er2 = er[c];
+                    var er2 = Err[c];
                     var vector_c = SparseWeights[c];
                     foreach (var pair in SparseFeature)
                     {
@@ -290,7 +177,7 @@ namespace RNNSharp
         public override void ComputeLayerErr(SimpleLayer nextLayer)
         {
             //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, negativeSampleWordList,
+            RNNHelper.matrixXvectorADDErr(Err, nextLayer.Err, nextLayer.DenseWeights, negativeSampleWordList,
                 nextLayer.LayerSize);
         }
 
@@ -301,18 +188,18 @@ namespace RNNSharp
                 //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
                 foreach (var c in negativeSampleWordList)
                 {
-                    er[c] = -CRFSeqOutput[timeat][c];
+                    Err[c] = -CRFSeqOutput[timeat][c];
                 }
-                er[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
+                Err[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
             }
             else
             {
                 //For standard RNN
                 foreach (var c in negativeSampleWordList)
                 {
-                    er[c] = -cellOutput[c];
+                    Err[c] = -Cell[c];
                 }
-                er[state.Label] = (float)(1.0 - cellOutput[state.Label]);
+                Err[state.Label] = (float)(1.0 - Cell[state.Label]);
             }
         }
     }

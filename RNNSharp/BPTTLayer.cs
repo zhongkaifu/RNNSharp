@@ -172,11 +172,11 @@ namespace RNNSharp
         public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
         {
             //keep last hidden layer and erase activations
-            cellOutput.CopyTo(previousCellOutput, 0);
+            Cell.CopyTo(previousCellOutput, 0);
 
             //Apply previous feature to current time
             //hidden(t-1) -> hidden(t)
-            RNNHelper.matrixXvectorADD(cellOutput, previousCellOutput, BpttWeights, LayerSize, LayerSize);
+            RNNHelper.matrixXvectorADD(Cell, previousCellOutput, BpttWeights, LayerSize, LayerSize);
 
             //Apply features on hidden layer
             SparseFeature = sparseFeature;
@@ -196,14 +196,14 @@ namespace RNNSharp
                             score += pair.Value * vector_b[pair.Key];
                         }
                     }
-                    cellOutput[b] += score;
+                    Cell[b] += score;
                 });
             }
 
             if (DenseFeatureSize > 0)
             {
                 //Apply dense features
-                RNNHelper.matrixXvectorADD(cellOutput, DenseFeature, DenseWeights, LayerSize, DenseFeatureSize, false);
+                RNNHelper.matrixXvectorADD(Cell, DenseFeature, DenseWeights, LayerSize, DenseFeatureSize, false);
             }
 
             //activate layer
@@ -214,7 +214,7 @@ namespace RNNSharp
         {
             Parallel.For(0, LayerSize, parallelOption, a =>
             {
-                var score = cellOutput[a];
+                var score = Cell[a];
                 if (score > 50)
                 {
                     score = 50; //for numerical stability
@@ -225,7 +225,7 @@ namespace RNNSharp
                 }
 
                 score = (float)(1.0 / (1.0 + Math.Exp(-score)));
-                cellOutput[a] = score;
+                Cell[a] = score;
             });
         }
 
@@ -255,8 +255,8 @@ namespace RNNSharp
             bptt_fea[0] = new float[DenseFeatureSize];
             for (var i = 0; i < LayerSize; i++)
             {
-                last_bptt_hidden.cellOutput[i] = cellOutput[i];
-                last_bptt_hidden.er[i] = er[i];
+                last_bptt_hidden.Cell[i] = Cell[i];
+                last_bptt_hidden.Err[i] = Err[i];
             }
 
             for (var i = 0; i < DenseFeatureSize; i++)
@@ -285,11 +285,11 @@ namespace RNNSharp
                 Parallel.For(0, LayerSize, parallelOption, a =>
                 {
                     // compute hidden layer gradient
-                    er[a] *= cellOutput[a] * (1 - cellOutput[a]);
+                    Err[a] *= Cell[a] * (1 - Cell[a]);
 
                     //dense weight update fea->0
                     float[] vector_a;
-                    var er2 = er[a];
+                    var er2 = Err[a];
                     var vecErr = new Vector<float>(er2);
 
                     int i;
@@ -346,25 +346,25 @@ namespace RNNSharp
 
                 //propagates errors hidden->input to the recurrent part
                 var previousHiddenErr = new float[LayerSize];
-                RNNHelper.matrixXvectorADDErr(previousHiddenErr, er, BpttWeights, LayerSize, LayerSize);
+                RNNHelper.matrixXvectorADDErr(previousHiddenErr, Err, BpttWeights, LayerSize, LayerSize);
 
                 for (var a = 0; a < LayerSize; a++)
                 {
                     //propagate error from time T-n to T-n-1
-                    er[a] = previousHiddenErr[a] + last_bptt_hidden.er[a];
+                    Err[a] = previousHiddenErr[a] + last_bptt_hidden.Err[a];
                 }
                 if (step < bptt + bptt_block - 3)
                 {
                     for (var a = 0; a < LayerSize; a++)
                     {
-                        cellOutput[a] = last_bptt_hidden.cellOutput[a];
-                        previousCellOutput[a] = last_last_bptt_hidden.cellOutput[a];
+                        Cell[a] = last_bptt_hidden.Cell[a];
+                        previousCellOutput[a] = last_last_bptt_hidden.Cell[a];
                     }
                 }
             }
 
             //restore hidden layer after bptt
-            bptt_hidden[0].cellOutput.CopyTo(cellOutput, 0);
+            bptt_hidden[0].Cell.CopyTo(Cell, 0);
 
             Parallel.For(0, LayerSize, parallelOption, b =>
             {
@@ -486,7 +486,7 @@ namespace RNNSharp
         {
             for (var a = 0; a < LayerSize; a++)
             {
-                cellOutput[a] = 0.1f;
+                Cell[a] = 0.1f;
             }
 
             if (updateNet)
@@ -495,8 +495,8 @@ namespace RNNSharp
                 var last_bptt_hidden = bptt_hidden[0];
                 for (var a = 0; a < LayerSize; a++)
                 {
-                    last_bptt_hidden.cellOutput[a] = cellOutput[a];
-                    last_bptt_hidden.er[a] = 0;
+                    last_bptt_hidden.Cell[a] = Cell[a];
+                    last_bptt_hidden.Err[a] = 0;
                 }
 
                 Array.Clear(bptt_inputs, 0, MAX_RNN_HIST);

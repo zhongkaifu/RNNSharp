@@ -35,12 +35,12 @@ namespace RNNSharp
                     if (val < dropoutRatio)
                     {
                         mask[i] = true;
-                        cellOutput[i] = 0;
+                        Cell[i] = 0;
                     }
                     else
                     {
                         mask[i] = false;
-                        cellOutput[i] = denseFeature[i];
+                        Cell[i] = denseFeature[i];
                     }
                 }
             }
@@ -48,7 +48,7 @@ namespace RNNSharp
             {
                 for (var i = 0; i < LayerSize; i++)
                 {
-                    cellOutput[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
+                    Cell[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
                 }
             }
         }
@@ -75,14 +75,14 @@ namespace RNNSharp
         public override void ComputeLayerErr(SimpleLayer nextLayer)
         {
             //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(er, nextLayer.er, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            RNNHelper.matrixXvectorADDErr(Err, nextLayer.Err, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
 
             //Apply drop out on error in hidden layer
             for (var i = 0; i < LayerSize; i++)
             {
                 if (mask[i])
                 {
-                    er[i] = 0;
+                    Err[i] = 0;
                 }
             }
         }

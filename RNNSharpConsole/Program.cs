@@ -14,12 +14,12 @@ namespace RNNSharpConsole
     /// </summary>
     internal class Program
     {
-        private static string strTestFile = "";
-        private static string strOutputFile = "";
-        private static string strTagFile = "";
-        private static string configFile = "";
-        private static string strTrainFile = "";
-        private static string strValidFile = "";
+        private static string testFilePath = "";
+        private static string outputFilePath = "";
+        private static string tagFilePath = "";
+        private static string configFilePath = "";
+        private static string trainFilePath = "";
+        private static string validFilePath = "";
         private static int maxIter = 20;
         private static long savestep;
         private static float alpha = 0.1f;
@@ -30,7 +30,7 @@ namespace RNNSharpConsole
 
         private static void UsageTitle()
         {
-            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.2 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.2.1 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         private static void Usage()
@@ -109,12 +109,12 @@ namespace RNNSharpConsole
         private static void InitParameters(string[] args)
         {
             int i;
-            if ((i = ArgPos("-trainfile", args)) >= 0) strTrainFile = args[i + 1];
-            if ((i = ArgPos("-validfile", args)) >= 0) strValidFile = args[i + 1];
-            if ((i = ArgPos("-testfile", args)) >= 0) strTestFile = args[i + 1];
-            if ((i = ArgPos("-outfile", args)) >= 0) strOutputFile = args[i + 1];
-            if ((i = ArgPos("-tagfile", args)) >= 0) strTagFile = args[i + 1];
-            if ((i = ArgPos("-cfgfile", args)) >= 0) configFile = args[i + 1];
+            if ((i = ArgPos("-trainfile", args)) >= 0) trainFilePath = args[i + 1];
+            if ((i = ArgPos("-validfile", args)) >= 0) validFilePath = args[i + 1];
+            if ((i = ArgPos("-testfile", args)) >= 0) testFilePath = args[i + 1];
+            if ((i = ArgPos("-outfile", args)) >= 0) outputFilePath = args[i + 1];
+            if ((i = ArgPos("-tagfile", args)) >= 0) tagFilePath = args[i + 1];
+            if ((i = ArgPos("-cfgfile", args)) >= 0) configFilePath = args[i + 1];
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
@@ -248,7 +248,7 @@ namespace RNNSharpConsole
                         break;
                     }
 
-                    var seq = featurizer.ExtractFeatures(sent);
+                    var seq = featurizer.BuildSequence(sent);
 
                     //Set label for the sequence
                     if (seq.SetLabel(sent, featurizer.TagSet))
@@ -324,25 +324,25 @@ namespace RNNSharpConsole
 
         private static void Test()
         {
-            if (string.IsNullOrEmpty(strTagFile))
+            if (string.IsNullOrEmpty(tagFilePath))
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't specified.", strTagFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The tag mapping file {0} isn't specified.", tagFilePath);
                 UsageTest();
                 return;
             }
 
             //Load tag name
-            Logger.WriteLine($"Loading tag file '{strTagFile}'");
-            var tagSet = new TagSet(strTagFile);
+            Logger.WriteLine($"Loading tag file '{tagFilePath}'");
+            var tagSet = new TagSet(tagFilePath);
 
-            if (string.IsNullOrEmpty(configFile))
+            if (string.IsNullOrEmpty(configFilePath))
             {
-                Logger.WriteLine(Logger.Level.err, "FAILED: The configuration file {0} isn't specified.", configFile);
+                Logger.WriteLine(Logger.Level.err, "FAILED: The configuration file {0} isn't specified.", configFilePath);
                 UsageTest();
                 return;
             }
 
-            if (strOutputFile.Length == 0)
+            if (outputFilePath.Length == 0)
             {
                 Logger.WriteLine(Logger.Level.err, "FAILED: The output file name should not be empty.");
                 UsageTest();
@@ -350,23 +350,23 @@ namespace RNNSharpConsole
             }
 
             //Create feature extractors and load word embedding data from file
-            Logger.WriteLine($"Initializing config file = '{configFile}'");
-            var config = new Config(configFile, tagSet);
+            Logger.WriteLine($"Initializing config file = '{configFilePath}'");
+            var config = new Config(configFilePath, tagSet);
             config.ShowFeatureSize();
 
             //Create instance for decoder
             Logger.WriteLine($"Loading model from {config.ModelFilePath} and creating decoder instance...");
             var decoder = new RNNDecoder(config);
 
-            if (File.Exists(strTestFile) == false)
+            if (File.Exists(testFilePath) == false)
             {
-                Logger.WriteLine(Logger.Level.err, $"FAILED: The test corpus {strTestFile} doesn't exist.");
+                Logger.WriteLine(Logger.Level.err, $"FAILED: The test corpus {testFilePath} doesn't exist.");
                 UsageTest();
                 return;
             }
 
-            var sr = new StreamReader(strTestFile);
-            var sw = new StreamWriter(strOutputFile);
+            var sr = new StreamReader(testFilePath);
+            var sw = new StreamWriter(outputFilePath);
 
             while (true)
             {
@@ -462,21 +462,19 @@ namespace RNNSharpConsole
         {
             Logger.LogFile = "RNNSharpConsole.log";
 
-            if (File.Exists(strTagFile) == false)
+            if (File.Exists(tagFilePath) == false)
             {
-                Logger.WriteLine(Logger.Level.err, $"FAILED: The tag mapping file {strTagFile} doesn't exist.");
+                Logger.WriteLine(Logger.Level.err, $"FAILED: The tag mapping file {tagFilePath} doesn't exist.");
                 UsageTrain();
                 return;
             }
 
             //Load tag id and its name from file
-            var tagSet = new TagSet(strTagFile);
+            var tagSet = new TagSet(tagFilePath);
 
             //Create configuration instance and set parameters
             var RNNConfig = new ModelSetting
             {
-                TagFile = strTagFile,
-                Tags = tagSet,
                 VQ = iVQ,
                 MaxIteration = maxIter,
                 SaveStep = savestep,
@@ -488,18 +486,18 @@ namespace RNNSharpConsole
             //Dump RNN setting on console
             RNNConfig.DumpSetting();
 
-            if (File.Exists(configFile) == false)
+            if (File.Exists(configFilePath) == false)
             {
                 Logger.WriteLine(Logger.Level.err, "FAILED: The feature configuration file {0} doesn't exist.",
-                    configFile);
+                    configFilePath);
                 UsageTrain();
                 return;
             }
             //Create feature extractors and load word embedding data from file
-            var config = new Config(configFile, tagSet);
+            var config = new Config(configFilePath, tagSet);
             config.ShowFeatureSize();
 
-            if (File.Exists(strTrainFile) == false)
+            if (File.Exists(trainFilePath) == false)
             {
                 Logger.WriteLine(Logger.Level.err, "FAILED: The training corpus doesn't exist.");
                 UsageTrain();
@@ -515,14 +513,14 @@ namespace RNNSharpConsole
                 };
 
                 //LoadFeatureConfig training corpus and extract feature set
-                LoadDataset(strTrainFile, config, encoder.TrainingSet);
+                LoadDataset(trainFilePath, config, encoder.TrainingSet);
 
-                if (string.IsNullOrEmpty(strValidFile) == false)
+                if (string.IsNullOrEmpty(validFilePath) == false)
                 {
                     //LoadFeatureConfig validated corpus and extract feature set
-                    Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                    Logger.WriteLine("Loading validated corpus from {0}", validFilePath);
                     encoder.ValidationSet = new DataSet<Sequence>(tagSet.GetSize());
-                    LoadDataset(strValidFile, config, encoder.ValidationSet);
+                    LoadDataset(validFilePath, config, encoder.ValidationSet);
                 }
                 else
                 {
@@ -550,14 +548,14 @@ namespace RNNSharpConsole
 
                 //LoadFeatureConfig training corpus and extract feature set
 
-                LoadSeq2SeqDataSet(strTrainFile, config, encoder.TrainingSet);
+                LoadSeq2SeqDataSet(trainFilePath, config, encoder.TrainingSet);
 
-                if (string.IsNullOrEmpty(strValidFile) == false)
+                if (string.IsNullOrEmpty(validFilePath) == false)
                 {
                     //LoadFeatureConfig validated corpus and extract feature set
-                    Logger.WriteLine("Loading validated corpus from {0}", strValidFile);
+                    Logger.WriteLine("Loading validated corpus from {0}", validFilePath);
                     encoder.ValidationSet = new DataSet<SequencePair>(tagSet.GetSize());
-                    LoadSeq2SeqDataSet(strValidFile, config, encoder.ValidationSet);
+                    LoadSeq2SeqDataSet(validFilePath, config, encoder.ValidationSet);
                 }
                 else
                 {

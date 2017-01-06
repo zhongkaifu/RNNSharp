@@ -11,12 +11,12 @@ namespace RNNSharp
     public class RNNDecoder
     {
         private readonly RNN<Sequence> rnn;
-        public Config Featurizer;
+        public Config Config;
 
-        public RNNDecoder(Config featurizer)
+        public RNNDecoder(Config config)
         {
-            Featurizer = featurizer;
-            if (Featurizer.ModelDirection == MODELDIRECTION.BiDirectional)
+            Config = config;
+            if (Config.ModelDirection == MODELDIRECTION.BiDirectional)
             {
                 Logger.WriteLine("Model Structure: Bi-directional RNN");
                 rnn = new BiRNN<Sequence>();
@@ -27,11 +27,11 @@ namespace RNNSharp
                 rnn = new ForwardRNN<Sequence>();
             }
 
-            rnn.LoadModel(featurizer.ModelFilePath);
+            rnn.LoadModel(config.ModelFilePath);
             Logger.WriteLine("CRF Model: {0}", rnn.IsCRFTraining);
         }
 
-        public MODELTYPE ModelType => Featurizer.ModelType;
+        public MODELTYPE ModelType => Config.ModelType;
 
         public int[][] ProcessNBest(Sentence sent, int nbest)
         {
@@ -40,7 +40,7 @@ namespace RNNSharp
                 throw new ArgumentException("N-best result is only for RNN-CRF model.");
             }
 
-            var seq = Featurizer.ExtractFeatures(sent);
+            var seq = Config.BuildSequence(sent);
             var predicted = rnn.DecodeNBestCRF(seq, nbest);
 
             return predicted;
@@ -48,7 +48,7 @@ namespace RNNSharp
 
         public int[] Process(Sentence sent)
         {
-            var seq = Featurizer.ExtractFeatures(sent);
+            var seq = Config.BuildSequence(sent);
             var predicted = rnn.IsCRFTraining ? rnn.DecodeCRF(seq) : rnn.DecodeNN(seq);
 
             return predicted;
@@ -56,13 +56,13 @@ namespace RNNSharp
 
         public int[] ProcessSeq2Seq(Sentence sent)
         {
-            var predicted = rnn.TestSeq2Seq(sent, Featurizer);
+            var predicted = rnn.TestSeq2Seq(sent, Config);
             return predicted;
         }
 
         public List<float[]> ComputeTopHiddenLayerOutput(Sentence sent)
         {
-            var seq = Featurizer.ExtractFeatures(sent);
+            var seq = Config.BuildSequence(sent);
             return rnn.ComputeTopHiddenLayerOutput(seq);
         }
 
