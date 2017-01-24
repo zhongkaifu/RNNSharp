@@ -261,7 +261,8 @@ namespace RNNSharp
                 Logger.WriteLine($"Loading auto encoder model. Config file = '{autoEncoderConfigFilePath}'");
                 autoEncoder = InitializeAutoEncoder(autoEncoderConfigFilePath);
             }
-            else
+            else if (preTrainTypeValue.Equals(RNNSharp.PRETRAIN_TYPE.Embedding.ToString(),
+                StringComparison.InvariantCultureIgnoreCase))
             {
                 preTrainType = RNNSharp.PRETRAIN_TYPE.Embedding;
                 var preTrainedModelFilePath = config.GetValueOptional(PRETRAINEDMODEL_FILENAME);
@@ -300,6 +301,11 @@ namespace RNNSharp
                     featureContext[WORDEMBEDDING_CONTEXT].Add(int.Parse(contextOffset));
                 }
                 Logger.WriteLine($"Pretrained model context offset : {preTrainedModelContext}");
+            }
+            else
+            {
+                preTrainType = RNNSharp.PRETRAIN_TYPE.None;
+                Logger.WriteLine("No pretrained model for this training.");
             }
         }
 

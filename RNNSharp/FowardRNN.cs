@@ -94,10 +94,9 @@ namespace RNNSharp
             var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
             int srcSequenceDenseFeatureSize = srcOutputs[0].Length;
             int srcSequenceLength = srcOutputs.Count - 1;
-            srcHiddenAvgOutput = new float[srcSequenceDenseFeatureSize];
+            srcHiddenAvgOutput = new float[srcSequenceDenseFeatureSize * 2];
 
             var j = 0;
-            var vDiv2 = new Vector<float>(2.0f);
             float[] srcOutputForward = srcOutputs[0];
             float[] srcOutputBackward = srcOutputs[srcSequenceLength];
             while (j < srcSequenceDenseFeatureSize - Vector<float>.Count)
@@ -105,15 +104,16 @@ namespace RNNSharp
                 var vForward = new Vector<float>(srcOutputForward, j);
                 var vBackward = new Vector<float>(srcOutputBackward, j);
 
-                var vResult = (vForward + vBackward) / vDiv2;
-                vResult.CopyTo(srcHiddenAvgOutput, j);
+                vForward.CopyTo(srcHiddenAvgOutput, j);
+                vBackward.CopyTo(srcHiddenAvgOutput, srcSequenceDenseFeatureSize + j);
 
                 j += Vector<float>.Count;
             }
 
             while (j < srcSequenceDenseFeatureSize)
             {
-                srcHiddenAvgOutput[j] = (srcOutputForward[j] + srcOutputBackward[j]) / 2.0f;
+                srcHiddenAvgOutput[j] = srcOutputForward[j];
+                srcHiddenAvgOutput[srcSequenceDenseFeatureSize + j] = srcOutputBackward[j];
                 j++;
             }
 

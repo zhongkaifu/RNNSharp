@@ -40,7 +40,7 @@ namespace RNNSharp
             if (ModelType == MODELTYPE.Seq2Seq)
             {
                 //[Dense feature set of each state in target sequence][Dense feature set of entire source sequence]
-                inputDenseFeatureSize += featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize();
+                inputDenseFeatureSize += featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
             }
 
             return inputDenseFeatureSize;

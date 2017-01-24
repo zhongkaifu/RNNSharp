@@ -19,7 +19,8 @@
     public enum PRETRAIN_TYPE
     {
         AutoEncoder,
-        Embedding
+        Embedding,
+        None
     }
 
     public enum MODELDIRECTION

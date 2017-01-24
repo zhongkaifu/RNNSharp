@@ -266,7 +266,10 @@ namespace RNNSharpConsole
                 }
                 catch (Exception err)
                 {
-                    Logger.WriteLine("Fail to parse corpus: '{0}'", err.Message);
+                    Logger.WriteLine($"Fail to parse corpus: '{err.Message}'");
+                    Logger.WriteLine($"Stack trace: '{err.StackTrace}'");
+
+                    throw new InvalidDataException("Invalidated corpus.", err);
                 }
             }
 

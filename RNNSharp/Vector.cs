@@ -93,7 +93,20 @@ namespace RNNSharp
             m_innerData = new float[nLen];
         }
 
-        public override int Length => m_innerData.Length;
+        public override int Length
+        {
+            get
+            {
+                if (m_innerData == null)
+                {
+                    return 0;
+                }
+                else
+                {
+                    return m_innerData.Length;
+                }
+            }
+        }
 
         public override float this[int i]
         {
