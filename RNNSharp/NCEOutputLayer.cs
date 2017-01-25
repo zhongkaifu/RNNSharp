@@ -28,9 +28,9 @@ namespace RNNSharp
             }
         }
 
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
-            if (isTrain)
+            if (runningMode == RunningMode.Training)
             {
                 negativeSampleWordList.Clear();
 
@@ -74,7 +74,7 @@ namespace RNNSharp
             }
             else
             {
-                base.ForwardPass(sparseFeature, denseFeature, isTrain);
+                base.ForwardPass(sparseFeature, denseFeature);
             }
         }
 
@@ -120,7 +120,7 @@ namespace RNNSharp
             }
         }
 
-        public override void BackwardPass(int numStates, int curState)
+        public override void BackwardPass()
         {
             if (DenseFeatureSize > 0)
             {

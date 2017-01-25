@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AdvUtils;
+using System;
 
 namespace RNNSharp
 {
@@ -19,14 +20,14 @@ namespace RNNSharp
             rnd = new Random();
         }
 
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
             if (LayerSize != denseFeature.Length)
             {
                 throw new Exception("The layer size of dropout layer must be equal to its denseFeature size.");
             }
 
-            if (isTrain)
+            if (runningMode == RunningMode.Training)
             {
                 mask = new bool[LayerSize];
                 for (var i = 0; i < LayerSize; i++)
@@ -53,7 +54,7 @@ namespace RNNSharp
             }
         }
 
-        public override void BackwardPass(int numStates, int curState)
+        public override void BackwardPass()
         {
         }
 
@@ -75,7 +76,8 @@ namespace RNNSharp
         public override void ComputeLayerErr(SimpleLayer nextLayer)
         {
             //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(Err, nextLayer.Err, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+            Err = nextLayer.Err;
+            DenseWeights = nextLayer.DenseWeights;
 
             //Apply drop out on error in hidden layer
             for (var i = 0; i < LayerSize; i++)

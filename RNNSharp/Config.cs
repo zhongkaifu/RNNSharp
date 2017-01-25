@@ -24,16 +24,6 @@ namespace RNNSharp
         }
     }
 
-    public class BPTTLayerConfig : LayerConfig
-    {
-        public int Bptt;
-
-        public BPTTLayerConfig()
-        {
-            LayerType = LayerType.BPTT;
-        }
-    }
-
     public class DropoutLayerConfig : LayerConfig
     {
         public float DropoutRatio;
@@ -383,23 +373,9 @@ namespace RNNSharp
                         }
                         break;
 
-                    case LayerType.BPTT:
-                        {
-                            if (items.Length != 3)
-                            {
-                                throw new ArgumentException(
-                                    $"Invalidated settings for BPTT: {layer}, it should be [size:BPTT:bptt_value], such as [200:BPTT:5] .");
-                            }
-
-                            var layerConfig = new BPTTLayerConfig { Bptt = int.Parse(items[2]) };
-                            baseLayerConfig = layerConfig;
-                            Logger.WriteLine($"Initialize configuration for BPTT layer. BPTT = '{layerConfig.Bptt}'");
-                        }
-                        break;
-
                     case LayerType.DropOut:
                         {
-                            var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[2]) };
+                            var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[2])};
                             baseLayerConfig = layerConfig;
                             Logger.WriteLine(
                                 $"Initialize configuration for Dropout layer. Dropout ratio = '{layerConfig.DropoutRatio}'");

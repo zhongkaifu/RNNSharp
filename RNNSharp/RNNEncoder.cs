@@ -139,6 +139,7 @@ namespace RNNSharp
         private RNN<T> CreateNetwork()
         {
             RNN<T> rnn;
+
             if (modelDirection == MODELDIRECTION.Forward)
             {
                 var sparseFeatureSize = TrainingSet.SparseFeatureSize;
@@ -157,12 +158,6 @@ namespace RNNSharp
                     SimpleLayer layer = null;
                     switch (hiddenLayersConfig[i].LayerType)
                     {
-                        case LayerType.BPTT:
-                            var bpttLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
-                            layer = bpttLayer;
-                            Logger.WriteLine("Create BPTT layer.");
-                            break;
-
                         case LayerType.LSTM:
                             var lstmLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
                             layer = lstmLayer;
@@ -219,17 +214,6 @@ namespace RNNSharp
                     SimpleLayer backwardLayer = null;
                     switch (hiddenLayersConfig[i].LayerType)
                     {
-                        case LayerType.BPTT:
-                            //For BPTT layer
-                            var forwardBPTTLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
-                            forwardLayer = forwardBPTTLayer;
-
-                            var backwardBPTTLayer = new BPTTLayer(hiddenLayersConfig[i] as BPTTLayerConfig);
-                            backwardLayer = backwardBPTTLayer;
-
-                            Logger.WriteLine("Create BPTT layer.");
-                            break;
-
                         case LayerType.LSTM:
                             //For LSTM layer
                             var forwardLSTMLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
@@ -243,7 +227,9 @@ namespace RNNSharp
 
                         case LayerType.DropOut:
                             var forwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                            forwardLayer = forwardDropoutLayer;
                             var backwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                            backwardLayer = backwardDropoutLayer;
 
                             Logger.WriteLine("Create Dropout layer.");
                             break;

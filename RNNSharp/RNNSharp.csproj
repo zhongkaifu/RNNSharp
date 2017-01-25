@@ -62,7 +62,6 @@
     <Compile Include="ModelSetting.cs" />
     <Compile Include="FowardRNN.cs" />
     <Compile Include="RNNHelper.cs" />
-    <Compile Include="BPTTLayer.cs" />
     <Compile Include="DataSet.cs" />
     <Compile Include="RNNDecoder.cs" />
     <Compile Include="Config.cs" />

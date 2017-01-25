@@ -50,7 +50,7 @@ namespace RNNSharp
             //reset all layers
             foreach (var layer in HiddenLayerList)
             {
-                layer.Reset(false);
+                layer.Reset();
             }
 
             var outputs = new List<float[]>();
@@ -59,13 +59,15 @@ namespace RNNSharp
                 //Compute first layer
                 var state = pSequence.States[curState];
                 SetRuntimeFeatures(state, curState, numStates, null);
-                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo(), false);
+                HiddenLayerList[0].SetRunningMode(RunningMode.Test);
+                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
 
                 //Compute each layer
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell, false);
+                    HiddenLayerList[i].SetRunningMode(RunningMode.Test);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell);
                 }
 
                 var tmpOutput = new float[HiddenLayerList[numLayers - 1].Cell.Length];
@@ -145,7 +147,7 @@ namespace RNNSharp
             //Reset all layers
             foreach (var layer in HiddenLayerList)
             {
-                layer.Reset(false);
+                layer.Reset();
             }
 
             //Extract features from source sentence
@@ -167,20 +169,23 @@ namespace RNNSharp
 
                 //Compute first layer
                 var denseFeatures = RNNHelper.ConcatenateVector(curState.DenseFeature, srcHiddenAvgOutput);
-                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures, false);
+                HiddenLayerList[0].SetRunningMode(RunningMode.Test);
+                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures);
 
                 //Compute middle layers
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
                     denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].Cell, srcHiddenAvgOutput);
-                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, false);
+                    HiddenLayerList[i].SetRunningMode(RunningMode.Test);
+                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures);
                 }
 
                 //Compute output layer
                 denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].Cell,
                     srcHiddenAvgOutput);
-                OutputLayer.ForwardPass(sparseVector, denseFeatures, false);
+                OutputLayer.SetRunningMode(RunningMode.Test);
+                OutputLayer.ForwardPass(sparseVector, denseFeatures);
 
                 OutputLayer.Softmax(false);
 
@@ -210,7 +215,7 @@ namespace RNNSharp
             //Reset all layers
             foreach (var layer in HiddenLayerList)
             {
-                layer.Reset(isTraining);
+                layer.Reset();
             }
 
             //Extract features from source sentences
@@ -245,20 +250,23 @@ namespace RNNSharp
 
                 //Compute first layer
                 var denseFeatures = RNNHelper.ConcatenateVector(state.DenseFeature, srcHiddenAvgOutput);
-                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures, isTraining);
+                HiddenLayerList[0].SetRunningMode(runningMode);
+                HiddenLayerList[0].ForwardPass(sparseVector, denseFeatures);
 
                 //Compute middle layers
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
                     denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[i - 1].Cell, srcHiddenAvgOutput);
-                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures, isTraining);
+                    HiddenLayerList[i].SetRunningMode(runningMode);
+                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeatures);
                 }
 
                 //Compute output layer
                 denseFeatures = RNNHelper.ConcatenateVector(HiddenLayerList[numLayers - 1].Cell,
                     srcHiddenAvgOutput);
-                OutputLayer.ForwardPass(sparseVector, denseFeatures, isTraining);
+                OutputLayer.SetRunningMode(runningMode);
+                OutputLayer.ForwardPass(sparseVector, denseFeatures);
 
                 OutputLayer.Softmax(isTraining);
 
@@ -282,11 +290,11 @@ namespace RNNSharp
                     }
 
                     //Update net weights
-                    Parallel.Invoke(() => { OutputLayer.BackwardPass(numStates, curState); },
+                    Parallel.Invoke(() => { OutputLayer.BackwardPass(); },
                         () =>
                         {
                             Parallel.For(0, numLayers, parallelOption,
-                                i => { HiddenLayerList[i].BackwardPass(numStates, curState); });
+                                i => { HiddenLayerList[i].BackwardPass(); });
                         });
                 }
             }
@@ -308,7 +316,7 @@ namespace RNNSharp
             //reset all layers
             foreach (var layer in HiddenLayerList)
             {
-                layer.Reset(isTraining);
+                layer.Reset();
             }
 
             //Set current sentence labels into short list in output layer
@@ -323,17 +331,20 @@ namespace RNNSharp
                 //Compute first layer
                 var state = pSequence.States[curState];
                 SetRuntimeFeatures(state, curState, numStates, predicted);
-                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo(), isTraining);
+                HiddenLayerList[0].SetRunningMode(runningMode);
+                HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
 
                 //Compute each layer
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell, isTraining);
+                    HiddenLayerList[i].SetRunningMode(runningMode);
+                    HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell);
                 }
 
                 //Compute output layer
-                OutputLayer.ForwardPass(state.SparseFeature, HiddenLayerList[numLayers - 1].Cell, isTraining);
+                OutputLayer.SetRunningMode(runningMode);
+                OutputLayer.ForwardPass(state.SparseFeature, HiddenLayerList[numLayers - 1].Cell);
 
                 if (m != null)
                 {
@@ -362,11 +373,11 @@ namespace RNNSharp
                     }
 
                     //Update net weights
-                    Parallel.Invoke(() => { OutputLayer.BackwardPass(numStates, curState); },
+                    Parallel.Invoke(() => { OutputLayer.BackwardPass(); },
                         () =>
                         {
                             Parallel.For(0, numLayers, parallelOption,
-                                i => { HiddenLayerList[i].BackwardPass(numStates, curState); });
+                                i => { HiddenLayerList[i].BackwardPass(); });
                         });
                 }
             }
@@ -406,7 +417,7 @@ namespace RNNSharp
                 //Reset all layer states
                 foreach (var layer in HiddenLayerList)
                 {
-                    layer.Reset(true);
+                    layer.Reset();
                 }
 
                 for (var curState = 0; curState < numStates; curState++)
@@ -414,10 +425,12 @@ namespace RNNSharp
                     // error propogation
                     var state = pSequence.States[curState];
                     SetRuntimeFeatures(state, curState, numStates, null);
+                    HiddenLayerList[0].SetRunningMode(runningMode);
                     HiddenLayerList[0].ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
 
                     for (var i = 1; i < numLayers; i++)
                     {
+                        HiddenLayerList[i].SetRunningMode(runningMode);
                         HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cell);
                     }
 
@@ -430,11 +443,11 @@ namespace RNNSharp
                     }
 
                     //Update net weights
-                    Parallel.Invoke(() => { OutputLayer.BackwardPass(numStates, curState); },
+                    Parallel.Invoke(() => { OutputLayer.BackwardPass(); },
                         () =>
                         {
                             Parallel.For(0, numLayers, parallelOption,
-                                i => { HiddenLayerList[i].BackwardPass(numStates, curState); });
+                                i => { HiddenLayerList[i].BackwardPass(); });
                         });
                 }
             }
@@ -448,17 +461,8 @@ namespace RNNSharp
             var sw = new StreamWriter(filename);
             var fo = new BinaryWriter(sw.BaseStream);
 
-            if (HiddenLayerList[0] is BPTTLayer)
-            {
-                fo.Write((int)LAYERTYPE.BPTT);
-            }
-            else
-            {
-                fo.Write((int)LAYERTYPE.LSTM);
-            }
-
+            fo.Write((int)LAYERTYPE.LSTM);
             fo.Write(IsCRFTraining);
-
             fo.Write(HiddenLayerList.Count);
             foreach (var layer in HiddenLayerList)
             {
@@ -490,16 +494,7 @@ namespace RNNSharp
             HiddenLayerList = new List<SimpleLayer>();
             for (var i = 0; i < layerSize; i++)
             {
-                SimpleLayer layer;
-                if (layerType == LAYERTYPE.BPTT)
-                {
-                    layer = new BPTTLayer();
-                }
-                else
-                {
-                    layer = new LSTMLayer();
-                }
-
+                SimpleLayer layer = new LSTMLayer();
                 layer.Load(br);
                 HiddenLayerList.Add(layer);
             }

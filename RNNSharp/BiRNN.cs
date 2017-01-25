@@ -49,7 +49,7 @@ namespace RNNSharp
         }
 
         private SimpleLayer[] ComputeMiddleLayers(Sequence pSequence, SimpleLayer[] lastLayers, SimpleLayer forwardLayer,
-            SimpleLayer backwardLayer)
+            SimpleLayer backwardLayer, RunningMode runningMode)
         {
             var numStates = lastLayers.Length;
 
@@ -58,11 +58,12 @@ namespace RNNSharp
             Parallel.Invoke(() =>
             {
                 //Computing forward RNN
-                forwardLayer.Reset(false);
+                forwardLayer.Reset();
                 mForward = new SimpleLayer[lastLayers.Length];
                 for (var curState = 0; curState < lastLayers.Length; curState++)
                 {
                     var state = pSequence.States[curState];
+                    forwardLayer.SetRunningMode(runningMode);
                     forwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
                     mForward[curState] = forwardLayer.CloneHiddenLayer();
                 }
@@ -70,11 +71,12 @@ namespace RNNSharp
                 () =>
                 {
                     //Computing backward RNN
-                    backwardLayer.Reset(false);
+                    backwardLayer.Reset();
                     mBackward = new SimpleLayer[lastLayers.Length];
                     for (var curState = lastLayers.Length - 1; curState >= 0; curState--)
                     {
                         var state = pSequence.States[curState];
+                        forwardLayer.SetRunningMode(runningMode);
                         backwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
                         mBackward[curState] = backwardLayer.CloneHiddenLayer();
                     }
@@ -124,7 +126,7 @@ namespace RNNSharp
         /// <param name="forwardLayer"></param>
         /// <param name="backwardLayer"></param>
         /// <returns></returns>
-        private SimpleLayer[] ComputeBottomLayer(Sequence pSequence, SimpleLayer forwardLayer, SimpleLayer backwardLayer)
+        private SimpleLayer[] ComputeBottomLayer(Sequence pSequence, SimpleLayer forwardLayer, SimpleLayer backwardLayer, RunningMode runningMode)
         {
             var numStates = pSequence.States.Length;
             SimpleLayer[] mForward = null;
@@ -132,12 +134,13 @@ namespace RNNSharp
             Parallel.Invoke(() =>
             {
                 //Computing forward RNN
-                forwardLayer.Reset(false);
+                forwardLayer.Reset();
                 mForward = new SimpleLayer[numStates];
                 for (var curState = 0; curState < numStates; curState++)
                 {
                     var state = pSequence.States[curState];
                     SetRuntimeFeatures(state, curState, numStates, null);
+                    forwardLayer.SetRunningMode(runningMode);
                     forwardLayer.ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
                     mForward[curState] = forwardLayer.CloneHiddenLayer();
                 }
@@ -145,12 +148,13 @@ namespace RNNSharp
                 () =>
                 {
                     //Computing backward RNN
-                    backwardLayer.Reset(false);
+                    backwardLayer.Reset();
                     mBackward = new SimpleLayer[numStates];
                     for (var curState = numStates - 1; curState >= 0; curState--)
                     {
                         var state = pSequence.States[curState];
                         SetRuntimeFeatures(state, curState, numStates, null, false);
+                        backwardLayer.SetRunningMode(runningMode);
                         backwardLayer.ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
                         //compute probability distribution
 
@@ -195,7 +199,7 @@ namespace RNNSharp
         }
 
         private SimpleLayer[] ComputeTopLayer(Sequence pSequence, SimpleLayer[] lastLayer,
-            out Matrix<float> rawOutputLayer, bool isTraining, bool outputRawScore, out int[] seqBestOutput)
+            out Matrix<float> rawOutputLayer, RunningMode runningMode, bool outputRawScore, out int[] seqBestOutput)
         {
             var numStates = lastLayer.Length;
             seqBestOutput = new int[numStates];
@@ -225,19 +229,20 @@ namespace RNNSharp
                 var state = pSequence.States[curState];
                 var outputCells = (SimpleLayer)seqFinalOutput.GetValue(curState);
                 outputCells.LabelShortList = labelSet;
-                outputCells.ForwardPass(state.SparseFeature, lastLayer[curState].Cell, isTraining);
+                outputCells.SetRunningMode(runningMode);
+                outputCells.ForwardPass(state.SparseFeature, lastLayer[curState].Cell);
 
                 if (outputRawScore)
                 {
                     outputCells.Cell.CopyTo(tmp_rawOutputLayer[curState], 0);
                 }
-                outputCells.Softmax(isTraining);
+                outputCells.Softmax(runningMode == RunningMode.Training);
             });
             var tmpSeqFinalOutput = new SimpleLayer[numStates];
             for (var i = 0; i < numStates; i++)
             {
                 tmpSeqFinalOutput[i] = (SimpleLayer)seqFinalOutput.GetValue(i);
-                seqBestOutput[i] = tmpSeqFinalOutput[i].GetBestOutputIndex(isTraining);
+                seqBestOutput[i] = tmpSeqFinalOutput[i].GetBestOutputIndex(runningMode == RunningMode.Training);
             }
 
             rawOutputLayer = tmp_rawOutputLayer;
@@ -252,10 +257,10 @@ namespace RNNSharp
 
         public override List<float[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
         {
-            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0]);
+            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], RunningMode.Test);
             for (var i = 1; i < forwardHiddenLayers.Count; i++)
             {
-                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
+                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i], RunningMode.Test);
             }
             var outputs = new List<float[]>(layer.Length);
             outputs.AddRange(layer.Select(t => t.Cell));
@@ -270,27 +275,27 @@ namespace RNNSharp
         /// <param name="layerList"></param>
         /// <param name="rawOutputLayer"></param>
         /// <returns></returns>
-        private SimpleLayer[] ComputeLayers(Sequence pSequence, bool isTraining, out List<SimpleLayer[]> layerList,
+        private SimpleLayer[] ComputeLayers(Sequence pSequence, RunningMode runningMode, out List<SimpleLayer[]> layerList,
             out Matrix<float> rawOutputLayer, bool outputRawScore, out int[] seqBestOutput)
         {
             layerList = new List<SimpleLayer[]>();
 
-            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0]);
-            if (isTraining)
+            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], runningMode);
+            if (runningMode == RunningMode.Training)
             {
                 layerList.Add(layer);
             }
 
             for (var i = 1; i < forwardHiddenLayers.Count; i++)
             {
-                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i]);
-                if (isTraining)
+                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i], runningMode);
+                if (runningMode == RunningMode.Training)
                 {
                     layerList.Add(layer);
                 }
             }
 
-            return ComputeTopLayer(pSequence, layer, out rawOutputLayer, isTraining, outputRawScore, out seqBestOutput);
+            return ComputeTopLayer(pSequence, layer, out rawOutputLayer, runningMode, outputRawScore, out seqBestOutput);
         }
 
         /// <summary>
@@ -379,7 +384,7 @@ namespace RNNSharp
             {
                 for (var curState = 0; curState < numStates; curState++)
                 {
-                    seqOutput[curState].BackwardPass(numStates, curState);
+                    seqOutput[curState].BackwardPass();
                 }
             },
                 () =>
@@ -389,26 +394,28 @@ namespace RNNSharp
                         Parallel.Invoke(() =>
                         {
                             var forwardLayer = forwardHiddenLayers[i];
-                            forwardLayer.Reset(true);
+                            forwardLayer.Reset();
                             for (var curState = 0; curState < numStates; curState++)
                             {
+                                forwardLayer.SetRunningMode(RunningMode.Training);
                                 forwardLayer.ForwardPass(layerList[i][curState].SparseFeature,
-                                    layerList[i][curState].DenseFeature, true);
+                                    layerList[i][curState].DenseFeature);
                                 forwardLayer.Err = fErrLayers[i][curState];
-                                forwardLayer.BackwardPass(numStates, curState);
+                                forwardLayer.BackwardPass();
                             }
                         },
                             () =>
                             {
                                 var backwardLayer = backwardHiddenLayers[i];
-                                backwardLayer.Reset(true);
+                                backwardLayer.Reset();
                                 for (var curState = 0; curState < numStates; curState++)
                                 {
                                     var curState2 = numStates - curState - 1;
+                                    backwardLayer.SetRunningMode(RunningMode.Training);
                                     backwardLayer.ForwardPass(layerList[i][curState2].SparseFeature,
-                                        layerList[i][curState2].DenseFeature, true);
+                                        layerList[i][curState2].DenseFeature);
                                     backwardLayer.Err = bErrLayers[i][curState2];
-                                    backwardLayer.BackwardPass(numStates, curState);
+                                    backwardLayer.BackwardPass();
                                 }
                             });
                     });
@@ -428,7 +435,7 @@ namespace RNNSharp
 
             //Forward process from bottom layer to top layer
             int[] seqBestOutput;
-            var seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Training, out layerList,
+            var seqOutput = ComputeLayers(pSequence, runningMode, out layerList,
                 out rawOutputLayer,
                 outputRawScore, out seqBestOutput);
 
@@ -467,7 +474,7 @@ namespace RNNSharp
             Matrix<float> rawOutputLayer;
 
             int[] seqBestOutput;
-            var seqOutput = ComputeLayers(pSequence, runningMode == RunningMode.Training, out layerList,
+            var seqOutput = ComputeLayers(pSequence, runningMode, out layerList,
                 out rawOutputLayer,
                 true, out seqBestOutput);
 
@@ -504,17 +511,8 @@ namespace RNNSharp
             {
                 var fo = new BinaryWriter(sw.BaseStream);
 
-                if (forwardHiddenLayers[0] is BPTTLayer)
-                {
-                    fo.Write((int)LAYERTYPE.BPTT);
-                }
-                else
-                {
-                    fo.Write((int)LAYERTYPE.LSTM);
-                }
-
+                fo.Write((int)LAYERTYPE.LSTM);
                 fo.Write(IsCRFTraining);
-
                 fo.Write(forwardHiddenLayers.Count);
                 //Save forward layers
                 foreach (var layer in forwardHiddenLayers)
@@ -554,16 +552,9 @@ namespace RNNSharp
                 for (var i = 0; i < layerSize; i++)
                 {
                     SimpleLayer layer;
-                    if (layerType == LAYERTYPE.BPTT)
-                    {
-                        Logger.WriteLine("Create BPTT hidden layer");
-                        layer = new BPTTLayer();
-                    }
-                    else
-                    {
-                        Logger.WriteLine("Create LSTM hidden layer");
-                        layer = new LSTMLayer();
-                    }
+
+                    Logger.WriteLine("Create LSTM hidden layer");
+                    layer = new LSTMLayer();
 
                     layer.Load(br);
                     forwardHiddenLayers.Add(layer);
@@ -574,16 +565,8 @@ namespace RNNSharp
                 for (var i = 0; i < layerSize; i++)
                 {
                     SimpleLayer layer;
-                    if (layerType == LAYERTYPE.BPTT)
-                    {
-                        Logger.WriteLine("Create BPTT hidden layer");
-                        layer = new BPTTLayer();
-                    }
-                    else
-                    {
-                        Logger.WriteLine("Create LSTM hidden layer");
-                        layer = new LSTMLayer();
-                    }
+                    Logger.WriteLine("Create LSTM hidden layer");
+                    layer = new LSTMLayer();
 
                     layer.Load(br);
                     backwardHiddenLayers.Add(layer);

@@ -10,7 +10,6 @@
     {
         Softmax,
         NCESoftmax,
-        BPTT,
         LSTM,
         DropOut,
         None

@@ -106,7 +106,7 @@ namespace RNNSharp
             LayerConfig = new LayerConfig();
         }
 
-        public void AllocateMemoryForLSTMCells()
+        private void AllocateMemoryForLSTMCells()
         {
             cell = new LSTMCell[LayerSize];
             for (var i = 0; i < LayerSize; i++)
@@ -554,7 +554,7 @@ namespace RNNSharp
         }
 
         // forward process. output layer consists of tag value
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
+        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
@@ -690,7 +690,7 @@ namespace RNNSharp
             }
         }
 
-        private void UpdateGateWeights(int curState, LSTMGateWeight gateWeight, int i, float featureDerivate, float c_yForget, float err)
+        private void UpdateGateWeights(LSTMGateWeight gateWeight, int i, float featureDerivate, float c_yForget, float err)
         {
             var j = 0;
             float[] deri_i = gateWeight.deri[i];
@@ -700,11 +700,8 @@ namespace RNNSharp
             {
                 var feature = new Vector<float>(DenseFeature, j);
                 var wd = feature * featureDerivate;
-                if (curState > 0)
-                {
-                    var wd_i = new Vector<float>(deri_i, j);
-                    wd += wd_i * c_yForget;
-                }
+                var wd_i = new Vector<float>(deri_i, j);
+                wd += wd_i * c_yForget;
                 wd.CopyTo(deri_i, j);
 
                 Vector<float> vecDelta = wd * err;
@@ -724,10 +721,7 @@ namespace RNNSharp
             while (j < DenseFeatureSize)
             {
                 var wd = DenseFeature[j] * featureDerivate;
-                if (curState > 0)
-                {
-                    wd += deri_i[j] * c_yForget;
-                }
+                wd += deri_i[j] * c_yForget;
                 deri_i[j] = wd;
 
                 float delta = wd * err;
@@ -742,7 +736,7 @@ namespace RNNSharp
             }
         }
 
-        public override void BackwardPass(int numStates, int curState)
+        public override void BackwardPass()
         {
             //put variables for derivaties in weight class and cell class
             Parallel.For(0, LayerSize, parallelOption, i =>
@@ -780,11 +774,8 @@ namespace RNNSharp
                     foreach (var entry in SparseFeature)
                     {
                         var wd = vecDerivate * entry.Value;
-                        if (curState > 0)
-                        {
-                            //Adding historical information
-                            wd += wd_i[entry.Key] * c_yForget;
-                        }
+                        //Adding historical information
+                        wd += wd_i[entry.Key] * c_yForget;
                         wd_i[entry.Key] = wd;
 
                         //Computing final err delta
@@ -800,9 +791,9 @@ namespace RNNSharp
 
                 if (DenseFeatureSize > 0)
                 {
-                    UpdateGateWeights(curState, wDenseInputGate, i, vecDerivate.X, c_yForget, cellStateError);
-                    UpdateGateWeights(curState, wDenseForgetGate, i, vecDerivate.Y, c_yForget, cellStateError);
-                    UpdateGateWeights(curState, wDenseCellGate, i, vecDerivate.Z, c_yForget, cellStateError);
+                    UpdateGateWeights(wDenseInputGate, i, vecDerivate.X, c_yForget, cellStateError);
+                    UpdateGateWeights(wDenseForgetGate, i, vecDerivate.Y, c_yForget, cellStateError);
+                    UpdateGateWeights(wDenseCellGate, i, vecDerivate.Z, c_yForget, cellStateError);
                     UpdateOutputGateWeights(wDenseOutputGate, i, gradientOutputGate);
                 }
 
@@ -911,7 +902,7 @@ namespace RNNSharp
             }
         }
 
-        public override void Reset(bool updateNet = false)
+        public override void Reset()
         {
             for (var i = 0; i < LayerSize; i++)
             {
@@ -968,43 +959,35 @@ namespace RNNSharp
 
     public class LSTMCell
     {
+        //The following fields are only for forward
+        public double previousCellState;
         public double cellState;
-        public double dSWCellForget;
 
-        public double dSWCellIn;
-        public double dSWCellState;
-        public double dSWPeepholeForget;
-
-        //partial derivatives
-        public double dSWPeepholeIn;
-
-        //cell state
         public double netCellState;
-
-        //forget gate
         public double netForget;
-
-        //input gate
         public double netIn;
-
-        //output gate
         public double netOut;
 
-        public double previousCellState;
-        public double wCellForget;
-
-        public double wCellIn;
-        public double wCellOut;
-        public double wCellState;
-        public double wPeepholeForget;
-
-        //internal weights and deltas
-        public double wPeepholeIn;
-
-        public double wPeepholeOut;
         public double yCellState;
         public double yForget;
         public double yIn;
         public double yOut;
+
+        //The following fields are for both forward and backward
+        public double dSWCellForget;
+        public double dSWCellIn;
+        public double dSWCellState;
+        public double dSWPeepholeForget;
+        public double dSWPeepholeIn;
+
+        //Weights for each gate
+        public double wCellForget;
+        public double wCellIn;
+        public double wCellOut;
+        public double wCellState;
+        public double wPeepholeForget;
+        public double wPeepholeIn;
+        public double wPeepholeOut;
+
     }
 }

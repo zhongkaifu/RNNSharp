@@ -18,6 +18,7 @@ namespace RNNSharp
 
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected float[] previousCellOutput;
+        protected RunningMode runningMode;
 
         public SimpleLayer(LayerConfig config)
         {
@@ -79,6 +80,11 @@ namespace RNNSharp
             }
 
             return m;
+        }
+
+        public void SetRunningMode(RunningMode mode)
+        {
+            runningMode = mode;
         }
 
         public virtual void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
@@ -165,7 +171,7 @@ namespace RNNSharp
             DenseWeightsLearningRate = new Matrix<float>(LayerSize, DenseFeatureSize);
         }
 
-        public virtual void ForwardPass(SparseVector sparseFeature, float[] denseFeature, bool isTrain = true)
+        public virtual void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
             if (DenseFeatureSize > 0)
             {
@@ -190,7 +196,7 @@ namespace RNNSharp
             }
         }
 
-        public virtual void BackwardPass(int numStates, int curState)
+        public virtual void BackwardPass()
         {
             if (DenseFeatureSize > 0)
             {
@@ -237,7 +243,7 @@ namespace RNNSharp
             }
         }
 
-        public virtual void Reset(bool updateNet = false)
+        public virtual void Reset()
         {
         }
 
