@@ -67,6 +67,8 @@ namespace RNNSharp
     public class LSTMLayer : SimpleLayer
     {
         public LSTMCell[] cell;
+
+        public LSTMCellWeight[] cellWeights;
         protected Vector4[] cellLearningRate;
         protected Vector3[] peepholeLearningRate;
 
@@ -120,7 +122,7 @@ namespace RNNSharp
             SparseFeatureSize = sparseFeatureSize;
             DenseFeatureSize = denseFeatureSize;
 
-            CreateCell(null);
+            InitializeCellWeights(null);
 
             if (SparseFeatureSize > 0)
             {
@@ -154,21 +156,21 @@ namespace RNNSharp
                 SparseFeatureSize, DenseFeatureSize, RNNHelper.rand.NextDouble());
         }
 
-        private void CreateCell(BinaryReader br)
+        private void InitializeCellWeights(BinaryReader br)
         {
             if (br != null)
             {
                 //Load weight from input file
                 for (var i = 0; i < LayerSize; i++)
                 {
-                    cell[i].wPeepholeIn = br.ReadDouble();
-                    cell[i].wPeepholeForget = br.ReadDouble();
-                    cell[i].wPeepholeOut = br.ReadDouble();
+                    cellWeights[i].wPeepholeIn = br.ReadDouble();
+                    cellWeights[i].wPeepholeForget = br.ReadDouble();
+                    cellWeights[i].wPeepholeOut = br.ReadDouble();
 
-                    cell[i].wCellIn = br.ReadDouble();
-                    cell[i].wCellForget = br.ReadDouble();
-                    cell[i].wCellState = br.ReadDouble();
-                    cell[i].wCellOut = br.ReadDouble();
+                    cellWeights[i].wCellIn = br.ReadDouble();
+                    cellWeights[i].wCellForget = br.ReadDouble();
+                    cellWeights[i].wCellState = br.ReadDouble();
+                    cellWeights[i].wCellOut = br.ReadDouble();
                 }
             }
             else
@@ -177,14 +179,14 @@ namespace RNNSharp
                 for (var i = 0; i < LayerSize; i++)
                 {
                     //internal weights, also important
-                    cell[i].wPeepholeIn = RNNHelper.RandInitWeight();
-                    cell[i].wPeepholeForget = RNNHelper.RandInitWeight();
-                    cell[i].wPeepholeOut = RNNHelper.RandInitWeight();
+                    cellWeights[i].wPeepholeIn = RNNHelper.RandInitWeight();
+                    cellWeights[i].wPeepholeForget = RNNHelper.RandInitWeight();
+                    cellWeights[i].wPeepholeOut = RNNHelper.RandInitWeight();
 
-                    cell[i].wCellIn = RNNHelper.RandInitWeight();
-                    cell[i].wCellForget = RNNHelper.RandInitWeight();
-                    cell[i].wCellState = RNNHelper.RandInitWeight();
-                    cell[i].wCellOut = RNNHelper.RandInitWeight();
+                    cellWeights[i].wCellIn = RNNHelper.RandInitWeight();
+                    cellWeights[i].wCellForget = RNNHelper.RandInitWeight();
+                    cellWeights[i].wCellState = RNNHelper.RandInitWeight();
+                    cellWeights[i].wCellOut = RNNHelper.RandInitWeight();
                 }
             }
         }
@@ -223,18 +225,18 @@ namespace RNNSharp
             return Sigmoid(x) * (1.0 - Sigmoid(x));
         }
 
-        private void SaveHiddenLayerWeights(BinaryWriter fo)
+        private void SaveCellWeights(BinaryWriter fo)
         {
             for (var i = 0; i < LayerSize; i++)
             {
-                fo.Write(cell[i].wPeepholeIn);
-                fo.Write(cell[i].wPeepholeForget);
-                fo.Write(cell[i].wPeepholeOut);
+                fo.Write(cellWeights[i].wPeepholeIn);
+                fo.Write(cellWeights[i].wPeepholeForget);
+                fo.Write(cellWeights[i].wPeepholeOut);
 
-                fo.Write(cell[i].wCellIn);
-                fo.Write(cell[i].wCellForget);
-                fo.Write(cell[i].wCellState);
-                fo.Write(cell[i].wCellOut);
+                fo.Write(cellWeights[i].wCellIn);
+                fo.Write(cellWeights[i].wCellForget);
+                fo.Write(cellWeights[i].wCellState);
+                fo.Write(cellWeights[i].wCellOut);
             }
         }
 
@@ -461,7 +463,7 @@ namespace RNNSharp
             Logger.WriteLine(
                 $"Saving LSTM layer, size = '{LayerSize}', sparse feature size = '{SparseFeatureSize}', dense feature size = '{DenseFeatureSize}'");
 
-            SaveHiddenLayerWeights(fo);
+            SaveCellWeights(fo);
 
             if (SparseFeatureSize > 0)
             {
@@ -492,7 +494,7 @@ namespace RNNSharp
             AllocateMemoryForLSTMCells();
 
             //Create cells of each layer
-            CreateCell(br);
+            InitializeCellWeights(br);
 
             //Load weight matrix between each two layer pairs
             //weight input->hidden
@@ -564,6 +566,7 @@ namespace RNNSharp
             Parallel.For(0, LayerSize, parallelOption, j =>
             {
                 var cell_j = cell[j];
+                var cellWeight_j = cellWeights[j];
 
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
@@ -626,23 +629,23 @@ namespace RNNSharp
                 var cell_j_previousCellOutput = previousCellOutput[j];
 
                 //include internal connection multiplied by the previous cell state
-                cell_j.netIn += cell_j.previousCellState * cell_j.wPeepholeIn + cell_j_previousCellOutput * cell_j.wCellIn;
+                cell_j.netIn += cell_j.previousCellState * cellWeight_j.wPeepholeIn + cell_j_previousCellOutput * cellWeight_j.wCellIn;
                 //squash input
                 cell_j.yIn = Sigmoid(cell_j.netIn);
 
                 //include internal connection multiplied by the previous cell state
-                cell_j.netForget += cell_j.previousCellState * cell_j.wPeepholeForget +
-                                    cell_j_previousCellOutput * cell_j.wCellForget;
+                cell_j.netForget += cell_j.previousCellState * cellWeight_j.wPeepholeForget +
+                                    cell_j_previousCellOutput * cellWeight_j.wCellForget;
                 cell_j.yForget = Sigmoid(cell_j.netForget);
 
-                cell_j.netCellState += cell_j_previousCellOutput * cell_j.wCellState;
+                cell_j.netCellState += cell_j_previousCellOutput * cellWeight_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
 
                 //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
                 cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * cell_j.yCellState;
 
                 ////include the internal connection multiplied by the CURRENT cell state
-                cell_j.netOut += cell_j.cellState * cell_j.wPeepholeOut + cell_j_previousCellOutput * cell_j.wCellOut;
+                cell_j.netOut += cell_j.cellState * cellWeight_j.wPeepholeOut + cell_j_previousCellOutput * cellWeight_j.wCellOut;
 
                 //squash output gate
                 cell_j.yOut = Sigmoid(cell_j.netOut);
@@ -742,13 +745,14 @@ namespace RNNSharp
             Parallel.For(0, LayerSize, parallelOption, i =>
             {
                 var c = cell[i];
+                var cellWeight = cellWeights[i];
 
                 //using the error find the gradient of the output gate
                 var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * Err[i]);
 
                 //internal cell state error
                 var cellStateError =
-                    (float)(c.yOut * Err[i] * TanHDerivative(c.cellState) + gradientOutputGate * c.wPeepholeOut);
+                    (float)(c.yOut * Err[i] * TanHDerivative(c.cellState) + gradientOutputGate * cellWeight.wPeepholeOut);
 
                 var vecErr = new Vector4(cellStateError, cellStateError, cellStateError, gradientOutputGate);
 
@@ -799,15 +803,15 @@ namespace RNNSharp
 
                 //Update peephols weights
                 //partial derivatives for internal connections
-                c.dSWPeepholeIn = c.dSWPeepholeIn * c.yForget +
+                cellWeight.dSWPeepholeIn = cellWeight.dSWPeepholeIn * c.yForget +
                                   Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellState;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWPeepholeForget = c.dSWPeepholeForget * c.yForget +
+                cellWeight.dSWPeepholeForget = cellWeight.dSWPeepholeForget * c.yForget +
                                       ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellState;
 
                 //update internal weights
-                var vecCellDelta = new Vector3((float)c.dSWPeepholeIn, (float)c.dSWPeepholeForget, (float)c.cellState);
+                var vecCellDelta = new Vector3((float)cellWeight.dSWPeepholeIn, (float)cellWeight.dSWPeepholeForget, (float)c.cellState);
                 var vecErr3 = new Vector3(cellStateError, cellStateError, gradientOutputGate);
 
                 vecCellDelta = vecErr3 * vecCellDelta;
@@ -820,24 +824,24 @@ namespace RNNSharp
 
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
-                c.wPeepholeIn += vecCellDelta.X;
-                c.wPeepholeForget += vecCellDelta.Y;
-                c.wPeepholeOut += vecCellDelta.Z;
+                cellWeight.wPeepholeIn += vecCellDelta.X;
+                cellWeight.wPeepholeForget += vecCellDelta.Y;
+                cellWeight.wPeepholeOut += vecCellDelta.Z;
 
                 //Update cells weights
                 var c_previousCellOutput = previousCellOutput[i];
                 //partial derivatives for internal connections
-                c.dSWCellIn = c.dSWCellIn * c.yForget +
+                cellWeight.dSWCellIn = cellWeight.dSWCellIn * c.yForget +
                               Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c_previousCellOutput;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
-                c.dSWCellForget = c.dSWCellForget * c.yForget +
+                cellWeight.dSWCellForget = cellWeight.dSWCellForget * c.yForget +
                                   ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c_previousCellOutput;
 
-                c.dSWCellState = c.dSWCellState * c.yForget +
+                cellWeight.dSWCellState = cellWeight.dSWCellState * c.yForget +
                                  Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c_previousCellOutput;
 
-                var vecCellDelta4 = new Vector4((float)c.dSWCellIn, (float)c.dSWCellForget, (float)c.dSWCellState,
+                var vecCellDelta4 = new Vector4((float)cellWeight.dSWCellIn, (float)cellWeight.dSWCellForget, (float)cellWeight.dSWCellState,
                     c_previousCellOutput);
                 vecCellDelta4 = vecErr * vecCellDelta4;
 
@@ -849,10 +853,10 @@ namespace RNNSharp
 
                 vecCellDelta4 = vecCellLearningRate4 * vecCellDelta4;
 
-                c.wCellIn += vecCellDelta4.X;
-                c.wCellForget += vecCellDelta4.Y;
-                c.wCellState += vecCellDelta4.Z;
-                c.wCellOut += vecCellDelta4.W;
+                cellWeight.wCellIn += vecCellDelta4.X;
+                cellWeight.wCellForget += vecCellDelta4.Y;
+                cellWeight.wCellState += vecCellDelta4.Z;
+                cellWeight.wCellOut += vecCellDelta4.W;
 
                 cell[i] = c;
             });
@@ -907,22 +911,22 @@ namespace RNNSharp
             for (var i = 0; i < LayerSize; i++)
             {
                 Cell[i] = 0;
-                InitializeLSTMCell(cell[i]);
+                InitializeLSTMCell(cell[i], cellWeights[i]);
             }
         }
 
-        private void InitializeLSTMCell(LSTMCell c)
+        private void InitializeLSTMCell(LSTMCell c, LSTMCellWeight cw)
         {
             c.previousCellState = 0;
             c.cellState = 0;
 
             //partial derivatives
-            c.dSWPeepholeIn = 0;
-            c.dSWPeepholeForget = 0;
+            cw.dSWPeepholeIn = 0;
+            cw.dSWPeepholeForget = 0;
 
-            c.dSWCellIn = 0;
-            c.dSWCellForget = 0;
-            c.dSWCellState = 0;
+            cw.dSWCellIn = 0;
+            cw.dSWCellForget = 0;
+            cw.dSWCellState = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -957,22 +961,8 @@ namespace RNNSharp
         }
     }
 
-    public class LSTMCell
+    public class LSTMCellWeight
     {
-        //The following fields are only for forward
-        public double previousCellState;
-        public double cellState;
-
-        public double netCellState;
-        public double netForget;
-        public double netIn;
-        public double netOut;
-
-        public double yCellState;
-        public double yForget;
-        public double yIn;
-        public double yOut;
-
         //The following fields are for both forward and backward
         public double dSWCellForget;
         public double dSWCellIn;
@@ -988,6 +978,22 @@ namespace RNNSharp
         public double wPeepholeForget;
         public double wPeepholeIn;
         public double wPeepholeOut;
+    }
 
+    public class LSTMCell
+    {
+        //The following fields are only for forward
+        public double previousCellState;
+        public double cellState;
+
+        public double netCellState;
+        public double netForget;
+        public double netIn;
+        public double netOut;
+
+        public double yCellState;
+        public double yForget;
+        public double yIn;
+        public double yOut;
     }
 }
