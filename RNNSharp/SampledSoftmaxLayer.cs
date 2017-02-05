@@ -7,18 +7,13 @@ using System.Threading.Tasks;
 
 namespace RNNSharp
 {
-    internal class NCEOutputLayer : SimpleLayer
+    internal class SampledSoftmaxLayer : SoftmaxLayer
     {
         private readonly int NegativeSampleSize = 10;
         public HashSet<int> negativeSampleWordList = new HashSet<int>();
         public Random rand = new Random();
 
-        public NCEOutputLayer()
-        {
-            LayerConfig = new LayerConfig();
-        }
-
-        public NCEOutputLayer(NCELayerConfig config) : base(config)
+        public SampledSoftmaxLayer(SampledSoftmaxLayerConfig config) : base(config)
         {
             NegativeSampleSize = config.NegativeSampleSize;
             if (NegativeSampleSize > LayerSize)
@@ -52,8 +47,7 @@ namespace RNNSharp
                 if (DenseFeatureSize > 0)
                 {
                     DenseFeature = denseFeature;
-                    RNNHelper.matrixXvectorADD(Cell, denseFeature, DenseWeights, negativeSampleWordList,
-                        DenseFeatureSize, true);
+                    RNNHelper.matrixXvectorADD(Cells, denseFeature, DenseWeights, negativeSampleWordList, DenseFeatureSize);
                 }
 
                 if (SparseFeatureSize > 0)
@@ -68,8 +62,25 @@ namespace RNNSharp
                         {
                             score += pair.Value * vector_b[pair.Key];
                         }
-                        Cell[b] += score;
+                        Cells[b] += score;
                     });
+                }
+
+                //Softmax
+                double sum = 0;
+                foreach (var c in negativeSampleWordList)
+                {
+                    var cell = Cells[c];
+                    if (cell > 50) cell = 50;
+                    if (cell < -50) cell = -50;
+                    var val = (float)Math.Exp(cell);
+                    sum += val;
+                    Cells[c] = val;
+                }
+
+                foreach (var c in negativeSampleWordList)
+                {
+                    Cells[c] /= (float)sum;
                 }
             }
             else
@@ -78,47 +89,24 @@ namespace RNNSharp
             }
         }
 
-        public override int GetBestOutputIndex(bool isTrain)
+        public override int GetBestOutputIndex()
         {
-            if (isTrain)
+            if (runningMode == RunningMode.Training)
             {
                 var imax = 0;
                 var dmax = double.MinValue;
-                foreach (var k in negativeSampleWordList.Where(k => Cell[k] > dmax))
+                foreach (var k in negativeSampleWordList.Where(k => Cells[k] > dmax))
                 {
-                    dmax = Cell[k];
+                    dmax = Cells[k];
                     imax = k;
                 }
                 return imax;
             }
-            return base.GetBestOutputIndex(isTrain);
-        }
-
-        public override void Softmax(bool isTrain)
-        {
-            if (isTrain)
-            {
-                double sum = 0;
-                foreach (var c in negativeSampleWordList)
-                {
-                    var cell = Cell[c];
-                    if (cell > 50) cell = 50;
-                    if (cell < -50) cell = -50;
-                    var val = (float)Math.Exp(cell);
-                    sum += val;
-                    Cell[c] = val;
-                }
-
-                foreach (var c in negativeSampleWordList)
-                {
-                    Cell[c] /= (float)sum;
-                }
-            }
             else
             {
-                base.Softmax(isTrain);
+                return base.GetBestOutputIndex();
             }
-        }
+        } 
 
         public override void BackwardPass()
         {
@@ -127,7 +115,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    var err = Err[c];
+                    var err = Errs[c];
                     var featureWeightCol = DenseWeights[c];
                     var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
                     var j = 0;
@@ -153,7 +141,7 @@ namespace RNNSharp
                 //Update hidden-output weights
                 Parallel.ForEach(negativeSampleWordList, c =>
                 {
-                    var er2 = Err[c];
+                    var er2 = Errs[c];
                     var vector_c = SparseWeights[c];
                     foreach (var pair in SparseFeature)
                     {
@@ -167,17 +155,10 @@ namespace RNNSharp
             }
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
-        {
-            //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, negativeSampleWordList,
-                nextLayer.LayerSize);
-        }
-
         public override void ComputeLayerErr(SimpleLayer nextLayer)
         {
             //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(Err, nextLayer.Err, nextLayer.DenseWeights, negativeSampleWordList,
+            RNNHelper.matrixXvectorADDErr(Errs, nextLayer.Errs, nextLayer.DenseWeights, negativeSampleWordList,
                 nextLayer.LayerSize);
         }
 
@@ -188,18 +169,18 @@ namespace RNNSharp
                 //For RNN-CRF, use joint probability of output layer nodes and transition between contigous nodes
                 foreach (var c in negativeSampleWordList)
                 {
-                    Err[c] = -CRFSeqOutput[timeat][c];
+                    Errs[c] = -CRFSeqOutput[timeat][c];
                 }
-                Err[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
+                Errs[state.Label] = (float)(1.0 - CRFSeqOutput[timeat][state.Label]);
             }
             else
             {
                 //For standard RNN
                 foreach (var c in negativeSampleWordList)
                 {
-                    Err[c] = -Cell[c];
+                    Errs[c] = -Cells[c];
                 }
-                Err[state.Label] = (float)(1.0 - Cell[state.Label]);
+                Errs[state.Label] = (float)(1.0 - Cells[state.Label]);
             }
         }
     }

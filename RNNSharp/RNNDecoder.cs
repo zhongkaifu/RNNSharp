@@ -60,13 +60,13 @@ namespace RNNSharp
             return predicted;
         }
 
-        public List<float[]> ComputeTopHiddenLayerOutput(Sentence sent)
+        public float[][] ComputeTopHiddenLayerOutput(Sentence sent)
         {
             var seq = Config.BuildSequence(sent);
             return rnn.ComputeTopHiddenLayerOutput(seq);
         }
 
-        public List<float[]> ComputeTopHiddenLayerOutput(Sequence seq)
+        public float[][] ComputeTopHiddenLayerOutput(Sequence seq)
         {
             return rnn.ComputeTopHiddenLayerOutput(seq);
         }

@@ -9,9 +9,10 @@
     public enum LayerType
     {
         Softmax,
-        NCESoftmax,
+        SampledSoftmax,
         LSTM,
         DropOut,
+        Simple,
         None
     }
 

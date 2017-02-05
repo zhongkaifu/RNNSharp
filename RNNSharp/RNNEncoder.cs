@@ -186,17 +186,23 @@ namespace RNNSharp
 
                 switch (outputLayerConfig.LayerType)
                 {
-                    case LayerType.NCESoftmax:
-                        Logger.WriteLine("Create NCESoftmax layer as output layer");
-                        var nceOutputLayer = new NCEOutputLayer(outputLayerConfig as NCELayerConfig);
-                        nceOutputLayer.InitializeWeights(0,
+                    case LayerType.SampledSoftmax:
+                        Logger.WriteLine("Create sampled softmax layer as output layer");
+                        outputLayer = new SampledSoftmaxLayer(outputLayerConfig as SampledSoftmaxLayerConfig);
+                        outputLayer.InitializeWeights(0,
                             GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
-                        outputLayer = nceOutputLayer;
                         break;
 
                     case LayerType.Softmax:
-                        Logger.WriteLine("Create Softmax layer as output layer.");
-                        outputLayer = new SimpleLayer(outputLayerConfig);
+                        Logger.WriteLine("Create softmax layer as output layer.");
+                        outputLayer = new SoftmaxLayer(outputLayerConfig as SoftmaxLayerConfig);
+                        outputLayer.InitializeWeights(sparseFeatureSize,
+                            GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
+                        break;
+
+                    case LayerType.Simple:
+                        Logger.WriteLine("Create simple layer as output layer.");
+                        outputLayer = new SimpleLayer(outputLayerConfig as SimpleLayerConfig);
                         outputLayer.InitializeWeights(sparseFeatureSize,
                             GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
                         break;
@@ -226,27 +232,26 @@ namespace RNNSharp
                             break;
 
                         case LayerType.DropOut:
-                            var forwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                            DropoutLayerConfig dropoutLayerConfig = hiddenLayersConfig[i] as DropoutLayerConfig;
+                            dropoutLayerConfig.LayerSize = hiddenLayersConfig[i - 1].LayerSize * 2;
+
+                            var forwardDropoutLayer = new DropoutLayer(dropoutLayerConfig);
                             forwardLayer = forwardDropoutLayer;
-                            var backwardDropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                            var backwardDropoutLayer = new DropoutLayer(dropoutLayerConfig);
                             backwardLayer = backwardDropoutLayer;
 
                             Logger.WriteLine("Create Dropout layer.");
                             break;
                     }
 
-                    if (i == 0)
+                    int denseFeatureSize = TrainingSet.DenseFeatureSize;
+                    if (i > 0)
                     {
-                        forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, TrainingSet.DenseFeatureSize);
-                        backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, TrainingSet.DenseFeatureSize);
+                        denseFeatureSize = forwardHiddenLayers[i - 1].LayerSize * 2;
                     }
-                    else
-                    {
-                        forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
-                            forwardHiddenLayers[i - 1].LayerSize);
-                        backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
-                            backwardHiddenLayers[i - 1].LayerSize);
-                    }
+
+                    forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
+                    backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
 
                     Logger.WriteLine(
                         $"Create hidden layer {i}: size = {forwardLayer.LayerSize}, sparse feature size = {forwardLayer.SparseFeatureSize}, dense feature size = {forwardLayer.DenseFeatureSize}");
@@ -259,18 +264,24 @@ namespace RNNSharp
                 outputLayerConfig.LayerSize = TrainingSet.TagSize;
                 switch (outputLayerConfig.LayerType)
                 {
-                    case LayerType.NCESoftmax:
-                        Logger.WriteLine("Create NCESoftmax layer as output layer.");
-                        var nceOutputLayer = new NCEOutputLayer(outputLayerConfig as NCELayerConfig);
-                        nceOutputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
-                        outputLayer = nceOutputLayer;
+                    case LayerType.SampledSoftmax:
+                        Logger.WriteLine("Create sampled Softmax layer as output layer.");
+                        outputLayer = new SampledSoftmaxLayer(outputLayerConfig as SampledSoftmaxLayerConfig);
+                        outputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
                         break;
 
                     case LayerType.Softmax:
                         Logger.WriteLine("Create Softmax layer as output layer.");
-                        outputLayer = new SimpleLayer(outputLayerConfig);
+                        outputLayer = new SoftmaxLayer(outputLayerConfig as SoftmaxLayerConfig);
                         outputLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
-                            forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+                            forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
+                        break;
+
+                    case LayerType.Simple:
+                        Logger.WriteLine("Create simple layer as output layer.");
+                        outputLayer = new SimpleLayer(outputLayerConfig as SimpleLayerConfig);
+                        outputLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
+                            forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
                         break;
                 }
 

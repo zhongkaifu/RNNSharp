@@ -182,7 +182,7 @@ namespace RNNSharp
         }
 
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-            int SrcSize, bool cleanDest = true)
+            int SrcSize)
         {
             Parallel.For(0, DestSize, i =>
             {
@@ -205,18 +205,11 @@ namespace RNNSharp
                     j++;
                 }
 
-                if (cleanDest)
-                {
-                    dest[i] = cellOutput;
-                }
-                else
-                {
-                    dest[i] += cellOutput;
-                }
+                dest[i] = cellOutput;
             });
         }
 
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, 
             int SrcSize)
         {
             Parallel.For(0, DestSize, i =>
@@ -272,7 +265,7 @@ namespace RNNSharp
         }
 
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
-            HashSet<int> setSkipSampling, int SrcSize, bool cleanDest = true)
+            HashSet<int> setSkipSampling, int SrcSize)
         {
             Parallel.ForEach(setSkipSampling, i =>
             {
@@ -294,14 +287,7 @@ namespace RNNSharp
                     j++;
                 }
 
-                if (cleanDest)
-                {
-                    dest[i] = cellOutput;
-                }
-                else
-                {
-                    dest[i] += cellOutput;
-                }
+                dest[i] = cellOutput;
             });
         }
 

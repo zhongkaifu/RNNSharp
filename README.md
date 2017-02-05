@@ -129,18 +129,19 @@ MODEL_DIRECTION = BiDirectional
 \#Model file path  
 MODEL_FILEPATH = Data\Models\ParseORG_CHS\model.bin  
 
-\#Hidden layers settings. BPTT, LSTM, Dropout are supported. Here are examples of these layer types  
-\#BPTT: 200:BPTT:5 -- Layer size is 200, BPTT value is 5  
-\#Dropout: 200:Dropout:0.5 -- Layer size is 200, Drop out ratio is 0.5  
+\#Hidden layers settings. LSTM and Dropout are supported. Here are examples of these layer types.  
+\#Dropout: Dropout:0.5 -- Drop out ratio is 0.5 and layer size is the same as previous layer.  
 \#If the model has more than one hidden layer, each layer settings are separated by comma. For example:  
-\#"300:LSTM, 200:LSTM" means the model has two LSTM layers. The first layer size is 300, and the second layer size is 200  
-HIDDEN_LAYER = 200:LSTM  
+\#"LSTM:300, LSTM:200" means the model has two LSTM layers. The first layer size is 300, and the second layer size is 200.  
+HIDDEN_LAYER = LSTM:200  
 
-\#Output layer settings. Softmax ands NCESoftmax are supported. Here is an example of NCESoftmax:  
-\#"NCESoftmax:20" means the output layer is NCESoftmax layer and its negative sample size is 20  
-OUTPUT_LAYER = Softmax  
+\#Output layer settings. Simple, Softmax ands sampled softmax are supported. Here is an example of sampled softmax:  
+\#"SampledSoftmax:20" means the output layer is sampled softmax layer and its negative sample size is 20.  
+\#"Simple" means the output is raw result from output layer. "Softmax" means the result is based on "Simple" result and run softmax.  
+OUTPUT_LAYER = Simple  
 
 \#CRF layer settings  
+\#If this option is true, output layer type must be "Simple" type.  
 CRF_LAYER = True  
 
 \#The file name for template feature set  

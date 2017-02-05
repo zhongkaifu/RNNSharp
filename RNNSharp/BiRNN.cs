@@ -18,7 +18,7 @@ namespace RNNSharp
         private List<SimpleLayer> backwardHiddenLayers = new List<SimpleLayer>();
         private List<SimpleLayer> forwardHiddenLayers = new List<SimpleLayer>();
 
-        private Array seqFinalOutput;
+        private SimpleLayer[] seqFinalOutput;
 
         public BiRNN(List<SimpleLayer> s_forwardRNN, List<SimpleLayer> s_backwardRNN, SimpleLayer outputLayer)
         {
@@ -48,167 +48,174 @@ namespace RNNSharp
             OutputLayer.CleanLearningRate();
         }
 
-        private SimpleLayer[] ComputeMiddleLayers(Sequence pSequence, SimpleLayer[] lastLayers, SimpleLayer forwardLayer,
-            SimpleLayer backwardLayer, RunningMode runningMode)
+        private float[][] ComputeMiddleLayers(Sequence pSequence, float[][] lastLayerOutputs, SimpleLayer forwardLayer,
+            SimpleLayer backwardLayer, RunningMode runningMode, out Neuron[] forwardNeuron, out Neuron[] backwardNeuron)
         {
-            var numStates = lastLayers.Length;
+            var numStates = lastLayerOutputs.Length;
+            Neuron[] tmpForwardNeuron = null;
+            Neuron[] tmpBackwardNeuron = null;
 
-            SimpleLayer[] mForward = null;
-            SimpleLayer[] mBackward = null;
             Parallel.Invoke(() =>
             {
                 //Computing forward RNN
                 forwardLayer.Reset();
-                mForward = new SimpleLayer[lastLayers.Length];
-                for (var curState = 0; curState < lastLayers.Length; curState++)
+                tmpForwardNeuron = new Neuron[numStates];
+                for (var curState = 0; curState < numStates; curState++)
                 {
                     var state = pSequence.States[curState];
                     forwardLayer.SetRunningMode(runningMode);
-                    forwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
-                    mForward[curState] = forwardLayer.CloneHiddenLayer();
+                    forwardLayer.ForwardPass(state.SparseFeature, lastLayerOutputs[curState]);
+                    tmpForwardNeuron[curState] = forwardLayer.CopyNeuronTo();
                 }
             },
                 () =>
                 {
                     //Computing backward RNN
                     backwardLayer.Reset();
-                    mBackward = new SimpleLayer[lastLayers.Length];
-                    for (var curState = lastLayers.Length - 1; curState >= 0; curState--)
+                    tmpBackwardNeuron = new Neuron[numStates];
+                    for (var curState = numStates - 1; curState >= 0; curState--)
                     {
                         var state = pSequence.States[curState];
-                        forwardLayer.SetRunningMode(runningMode);
-                        backwardLayer.ForwardPass(state.SparseFeature, lastLayers[curState].Cell);
-                        mBackward[curState] = backwardLayer.CloneHiddenLayer();
+                        backwardLayer.SetRunningMode(runningMode);
+                        backwardLayer.ForwardPass(state.SparseFeature, lastLayerOutputs[curState]);
+                        tmpBackwardNeuron[curState] = backwardLayer.CopyNeuronTo();
                     }
                 });
 
             //Merge forward and backward
-            var mergedLayer = new SimpleLayer[numStates];
+            float[][] stateOutputs = new float[numStates][];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
-                var state = pSequence.States[curState];
-                mergedLayer[curState] = new SimpleLayer(forwardLayer.LayerConfig)
-                {
-                    SparseFeature = state.SparseFeature,
-                    DenseFeature = lastLayers[curState].Cell
-                };
+                stateOutputs[curState] = new float[forwardLayer.LayerSize * 2];
 
-                var forwardCells = mForward[curState];
-                var backwardCells = mBackward[curState];
+                var forwardCells = tmpForwardNeuron[curState].Cells;
+                var backwardCells = tmpBackwardNeuron[curState].Cells;
+                var mergedLayer = stateOutputs[curState];
 
                 var i = 0;
+            //    var vDiv2 = new Vector<float>(2.0f);
                 while (i < forwardLayer.LayerSize - Vector<float>.Count)
                 {
-                    var v1 = new Vector<float>(forwardCells.Cell, i);
-                    var v2 = new Vector<float>(backwardCells.Cell, i);
-                    var v = (v1 + v2) / vecConst2;
+                    var v1 = new Vector<float>(forwardCells, i);
+                    var v2 = new Vector<float>(backwardCells, i);
+                    //      var v = (v1 + v2) / vDiv2;
 
-                    v.CopyTo(mergedLayer[curState].Cell, i);
+                    //    v.CopyTo(mergedLayer, i);
+
+                    v1.CopyTo(mergedLayer, i);
+                    v2.CopyTo(mergedLayer, forwardLayer.LayerSize + i);
 
                     i += Vector<float>.Count;
                 }
 
                 while (i < forwardLayer.LayerSize)
                 {
-                    mergedLayer[curState].Cell[i] =
-                        (float)((forwardCells.Cell[i] + backwardCells.Cell[i]) / 2.0);
+                    mergedLayer[i] = forwardCells[i];
+                    mergedLayer[forwardLayer.LayerSize + i] = backwardCells[i];
+                   // mergedLayer[i] = (forwardCells[i] + backwardCells[i]) / 2.0f;
                     i++;
                 }
             });
 
-            return mergedLayer;
+            forwardNeuron = tmpForwardNeuron;
+            backwardNeuron = tmpBackwardNeuron;
+
+            return stateOutputs;
         }
 
         /// <summary>
         ///     Compute the output of bottom layer
         /// </summary>
-        /// <param name="pSequence"></param>
+        /// <param name="sequence"></param>
         /// <param name="forwardLayer"></param>
         /// <param name="backwardLayer"></param>
         /// <returns></returns>
-        private SimpleLayer[] ComputeBottomLayer(Sequence pSequence, SimpleLayer forwardLayer, SimpleLayer backwardLayer, RunningMode runningMode)
+        private float[][] ComputeBottomLayer(Sequence sequence, SimpleLayer forwardLayer, SimpleLayer backwardLayer, RunningMode runningMode, 
+            out Neuron[] forwardNeurons, out Neuron[] backwardNeurons)
         {
-            var numStates = pSequence.States.Length;
-            SimpleLayer[] mForward = null;
-            SimpleLayer[] mBackward = null;
+            var numStates = sequence.States.Length;
+            Neuron[] tmpForwardNeurons = null;
+            Neuron[] tmpBackwardNeurons = null;
             Parallel.Invoke(() =>
             {
                 //Computing forward RNN
                 forwardLayer.Reset();
-                mForward = new SimpleLayer[numStates];
+                tmpForwardNeurons = new Neuron[numStates];
                 for (var curState = 0; curState < numStates; curState++)
                 {
-                    var state = pSequence.States[curState];
+                    var state = sequence.States[curState];
                     SetRuntimeFeatures(state, curState, numStates, null);
                     forwardLayer.SetRunningMode(runningMode);
                     forwardLayer.ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
-                    mForward[curState] = forwardLayer.CloneHiddenLayer();
+                    tmpForwardNeurons[curState] = forwardLayer.CopyNeuronTo();
                 }
             },
                 () =>
                 {
                     //Computing backward RNN
                     backwardLayer.Reset();
-                    mBackward = new SimpleLayer[numStates];
+                    tmpBackwardNeurons = new Neuron[numStates];
                     for (var curState = numStates - 1; curState >= 0; curState--)
                     {
-                        var state = pSequence.States[curState];
+                        var state = sequence.States[curState];
                         SetRuntimeFeatures(state, curState, numStates, null, false);
                         backwardLayer.SetRunningMode(runningMode);
                         backwardLayer.ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
-                        //compute probability distribution
-
-                        mBackward[curState] = backwardLayer.CloneHiddenLayer();
+                        tmpBackwardNeurons[curState] = backwardLayer.CopyNeuronTo();
                     }
                 });
 
-            var mergedLayer = new SimpleLayer[numStates];
+            float[][] stateOutputs = new float[numStates][];
             Parallel.For(0, numStates, parallelOption, curState =>
             {
-                var state = pSequence.States[curState];
-                mergedLayer[curState] = new SimpleLayer(forwardLayer.LayerConfig)
-                {
-                    SparseFeature = state.SparseFeature,
-                    DenseFeature = state.DenseFeature.CopyTo()
-                };
+                stateOutputs[curState] = new float[forwardLayer.LayerSize * 2];
 
-                var forwardCells = mForward[curState];
-                var backwardCells = mBackward[curState];
+                var forwardCells = tmpForwardNeurons[curState].Cells;
+                var backwardCells = tmpBackwardNeurons[curState].Cells;
+                var mergedLayer = stateOutputs[curState];
 
                 var i = 0;
+            //    var vDiv2 = new Vector<float>(2.0f);
                 while (i < forwardLayer.LayerSize - Vector<float>.Count)
                 {
-                    var v1 = new Vector<float>(forwardCells.Cell, i);
-                    var v2 = new Vector<float>(backwardCells.Cell, i);
-                    var v = (v1 + v2) / vecConst2;
+                    var v1 = new Vector<float>(forwardCells, i);
+                    var v2 = new Vector<float>(backwardCells, i);
+                    //      var v = (v1 + v2) / vDiv2;
 
-                    v.CopyTo(mergedLayer[curState].Cell, i);
+                    v1.CopyTo(mergedLayer, i);
+                    v2.CopyTo(mergedLayer, forwardLayer.LayerSize + i);
+
+
+//                    v.CopyTo(mergedLayer, i);
 
                     i += Vector<float>.Count;
                 }
 
                 while (i < forwardLayer.LayerSize)
                 {
-                    mergedLayer[curState].Cell[i] =
-                        (float)((forwardCells.Cell[i] + backwardCells.Cell[i]) / 2.0);
+                    mergedLayer[i] = forwardCells[i];
+                    mergedLayer[forwardLayer.LayerSize + i] = backwardCells[i];
+                  //  mergedLayer[i] = (forwardCells[i] + backwardCells[i]) / 2.0f;
                     i++;
                 }
             });
 
-            return mergedLayer;
+            forwardNeurons = tmpForwardNeurons;
+            backwardNeurons = tmpBackwardNeurons;
+
+            return stateOutputs;
         }
 
-        private SimpleLayer[] ComputeTopLayer(Sequence pSequence, SimpleLayer[] lastLayer,
-            out Matrix<float> rawOutputLayer, RunningMode runningMode, bool outputRawScore, out int[] seqBestOutput)
+        private SimpleLayer[] ComputeTopLayer(Sequence pSequence, float[][] lastLayerOutputs,
+            out Matrix<float> rawOutputLayer, RunningMode runningMode, bool outputRawScore)
         {
-            var numStates = lastLayer.Length;
-            seqBestOutput = new int[numStates];
+            var numStates = lastLayerOutputs.Length;
 
             //Calculate output layer
-            Matrix<float> tmp_rawOutputLayer = null;
+            Matrix<float> tmpOutputResult = null;
             if (outputRawScore)
             {
-                tmp_rawOutputLayer = new Matrix<float>(numStates, OutputLayer.LayerSize);
+                tmpOutputResult = new Matrix<float>(numStates, OutputLayer.LayerSize);
             }
 
             var labelSet = pSequence.States.Select(state => state.Label).ToList();
@@ -216,38 +223,30 @@ namespace RNNSharp
             //Initialize output layer or reallocate it
             if (seqFinalOutput == null || seqFinalOutput.Length < numStates)
             {
-                seqFinalOutput = Array.CreateInstance(OutputLayer.GetType(), numStates);
+                seqFinalOutput = new SimpleLayer[numStates];
                 for (var i = 0; i < numStates; i++)
                 {
                     seqFinalOutput.SetValue(Activator.CreateInstance(OutputLayer.GetType(), OutputLayer.LayerConfig), i);
-                    OutputLayer.ShallowCopyWeightTo((SimpleLayer)seqFinalOutput.GetValue(i));
+                    OutputLayer.ShallowCopyWeightTo(seqFinalOutput[i]);
                 }
             }
 
             Parallel.For(0, numStates, parallelOption, curState =>
             {
                 var state = pSequence.States[curState];
-                var outputCells = (SimpleLayer)seqFinalOutput.GetValue(curState);
+                var outputCells = seqFinalOutput[curState];
                 outputCells.LabelShortList = labelSet;
                 outputCells.SetRunningMode(runningMode);
-                outputCells.ForwardPass(state.SparseFeature, lastLayer[curState].Cell);
+                outputCells.ForwardPass(state.SparseFeature, lastLayerOutputs[curState]);
 
                 if (outputRawScore)
                 {
-                    outputCells.Cell.CopyTo(tmp_rawOutputLayer[curState], 0);
+                    outputCells.Cells.CopyTo(tmpOutputResult[curState], 0);
                 }
-                outputCells.Softmax(runningMode == RunningMode.Training);
             });
-            var tmpSeqFinalOutput = new SimpleLayer[numStates];
-            for (var i = 0; i < numStates; i++)
-            {
-                tmpSeqFinalOutput[i] = (SimpleLayer)seqFinalOutput.GetValue(i);
-                seqBestOutput[i] = tmpSeqFinalOutput[i].GetBestOutputIndex(runningMode == RunningMode.Training);
-            }
 
-            rawOutputLayer = tmp_rawOutputLayer;
-
-            return tmpSeqFinalOutput;
+            rawOutputLayer = tmpOutputResult;
+            return seqFinalOutput;
         }
 
         public override int GetTopHiddenLayerSize()
@@ -255,16 +254,17 @@ namespace RNNSharp
             return forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize;
         }
 
-        public override List<float[]> ComputeTopHiddenLayerOutput(Sequence pSequence)
+        public override float[][] ComputeTopHiddenLayerOutput(Sequence pSequence)
         {
-            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], RunningMode.Test);
+            Neuron[] forwardCell;
+            Neuron[] backwardCell;
+            var layerOutputs = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], RunningMode.Test, out forwardCell, out backwardCell);
             for (var i = 1; i < forwardHiddenLayers.Count; i++)
             {
-                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i], RunningMode.Test);
+                layerOutputs = ComputeMiddleLayers(pSequence, layerOutputs, forwardHiddenLayers[i], backwardHiddenLayers[i], RunningMode.Test, out forwardCell, out backwardCell);
             }
-            var outputs = new List<float[]>(layer.Length);
-            outputs.AddRange(layer.Select(t => t.Cell));
-            return outputs;
+
+            return layerOutputs;
         }
 
         /// <summary>
@@ -275,27 +275,35 @@ namespace RNNSharp
         /// <param name="layerList"></param>
         /// <param name="rawOutputLayer"></param>
         /// <returns></returns>
-        private SimpleLayer[] ComputeLayers(Sequence pSequence, RunningMode runningMode, out List<SimpleLayer[]> layerList,
-            out Matrix<float> rawOutputLayer, bool outputRawScore, out int[] seqBestOutput)
+        private SimpleLayer[] ComputeLayers(Sequence pSequence, RunningMode runningMode, out List<float[][]> layerList,
+            out Matrix<float> rawOutputLayer, bool outputRawScore, out List<Neuron[]> forwardCellList, out List<Neuron[]> backwardCellList)
         {
-            layerList = new List<SimpleLayer[]>();
+            layerList = new List<float[][]>();
+            forwardCellList = new List<Neuron[]>();
+            backwardCellList = new List<Neuron[]>();
 
-            var layer = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], runningMode);
+            Neuron[] forwardCell;
+            Neuron[] backwardCell;
+            var layerOutputs = ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], runningMode, out forwardCell, out backwardCell);
             if (runningMode == RunningMode.Training)
             {
-                layerList.Add(layer);
+                layerList.Add(layerOutputs);
+                forwardCellList.Add(forwardCell);
+                backwardCellList.Add(backwardCell);
             }
 
             for (var i = 1; i < forwardHiddenLayers.Count; i++)
             {
-                layer = ComputeMiddleLayers(pSequence, layer, forwardHiddenLayers[i], backwardHiddenLayers[i], runningMode);
+                layerOutputs = ComputeMiddleLayers(pSequence, layerOutputs, forwardHiddenLayers[i], backwardHiddenLayers[i], runningMode, out forwardCell, out backwardCell);
                 if (runningMode == RunningMode.Training)
                 {
-                    layerList.Add(layer);
+                    layerList.Add(layerOutputs);
+                    forwardCellList.Add(forwardCell);
+                    backwardCellList.Add(backwardCell);
                 }
             }
 
-            return ComputeTopLayer(pSequence, layer, out rawOutputLayer, runningMode, outputRawScore, out seqBestOutput);
+            return ComputeTopLayer(pSequence, layerOutputs, out rawOutputLayer, runningMode, outputRawScore);
         }
 
         /// <summary>
@@ -304,8 +312,8 @@ namespace RNNSharp
         /// <param name="pSequence"></param>
         /// <param name="seqFinalOutput"></param>
         /// <returns></returns>
-        private void ComputeDeepErr(Sequence pSequence, SimpleLayer[] seqFinalOutput, out List<float[][]> fErrLayers,
-            out List<float[][]> bErrLayers)
+        private void ComputeDeepErr(Sequence pSequence, SimpleLayer[] seqFinalOutput, out List<float[][]> forwardErrLayers,
+            out List<float[][]> backwardErrLayers, List<Neuron[]> forwardNeuronsList, List<Neuron[]> backwardNeuronsList)
         {
             var numStates = pSequence.States.Length;
             var numLayers = forwardHiddenLayers.Count;
@@ -319,8 +327,8 @@ namespace RNNSharp
             }
 
             //Now we already have err in output layer, let's pass them back to other layers
-            fErrLayers = new List<float[][]>();
-            bErrLayers = new List<float[][]>();
+            List<float[][]> fErrLayers = new List<float[][]>();
+            List<float[][]> bErrLayers = new List<float[][]>();
             for (var i = 0; i < numLayers; i++)
             {
                 fErrLayers.Add(null);
@@ -329,52 +337,84 @@ namespace RNNSharp
 
             //Pass error from i+1 to i layer
             var forwardLayer = forwardHiddenLayers[numLayers - 1];
-            SimpleLayer backwardLayer;
+            var backwardLayer = backwardHiddenLayers[numLayers - 1];
 
-            var errLayer = new float[numStates][];
-            Parallel.For(0, numStates, parallelOption, curState =>
-            {
-                errLayer[curState] = new float[forwardLayer.LayerSize];
-                forwardLayer.ComputeLayerErr(seqFinalOutput[curState], errLayer[curState], seqFinalOutput[curState].Err);
-            });
-            fErrLayers[numLayers - 1] = errLayer;
-            bErrLayers[numLayers - 1] = errLayer;
+            var errLayer1 = new float[numStates][];
+            var errLayer2 = new float[numStates][];
+            var fNeuron = forwardNeuronsList[numLayers - 1];
+            var bNeuron = backwardNeuronsList[numLayers - 1];
 
-            // Forward
-            for (var i = numLayers - 2; i >= 0; i--)
+            Parallel.Invoke(() =>
             {
-                forwardLayer = forwardHiddenLayers[i];
-                errLayer = new float[numStates][];
-                var srcErrLayer = fErrLayers[i + 1];
                 Parallel.For(0, numStates, parallelOption, curState =>
                 {
                     var curState2 = numStates - curState - 1;
-
-                    errLayer[curState2] = new float[forwardLayer.LayerSize];
-                    forwardLayer.ComputeLayerErr(forwardHiddenLayers[i + 1], errLayer[curState2], srcErrLayer[curState2]);
+                    errLayer1[curState2] = new float[forwardLayer.LayerSize];
+                    forwardLayer.ComputeLayerErr(seqFinalOutput[curState2], errLayer1[curState2], seqFinalOutput[curState2].Errs, fNeuron[curState2]);
                 });
 
-                fErrLayers[i] = errLayer;
-            }
-
-            // Backward
-            for (var i = numLayers - 2; i >= 0; i--)
+            },
+            () =>
             {
-                backwardLayer = backwardHiddenLayers[i];
-                errLayer = new float[numStates][];
-                var srcErrLayer = bErrLayers[i + 1];
                 Parallel.For(0, numStates, parallelOption, curState =>
-                {
-                    errLayer[curState] = new float[backwardLayer.LayerSize];
-                    backwardLayer.ComputeLayerErr(backwardHiddenLayers[i + 1], errLayer[curState], srcErrLayer[curState]);
+                {         
+                    errLayer2[curState] = new float[backwardLayer.LayerSize];
+                    backwardLayer.ComputeLayerErr(seqFinalOutput[curState], errLayer2[curState], seqFinalOutput[curState].Errs, bNeuron[curState]);
                 });
 
-                bErrLayers[i] = errLayer;
-            }
+            });
+
+
+            fErrLayers[numLayers - 1] = errLayer1;
+            bErrLayers[numLayers - 1] = errLayer2;
+
+            Parallel.Invoke(() =>
+            {
+                // Forward
+                for (var i = numLayers - 2; i >= 0; i--)
+                {
+                    forwardLayer = forwardHiddenLayers[i];
+                    var lastForwardLayer = forwardHiddenLayers[i + 1];
+                    var errLayer = new float[numStates][];
+                    var srcErrLayer = fErrLayers[i + 1];
+                    var neurons = forwardNeuronsList[i];
+                    Parallel.For(0, numStates, parallelOption, curState =>
+                    {
+                        var curState2 = numStates - curState - 1;
+
+                        errLayer[curState2] = new float[forwardLayer.LayerSize];
+                        forwardLayer.ComputeLayerErr(lastForwardLayer, errLayer[curState2], srcErrLayer[curState2], neurons[curState2]);
+                    });
+
+                    fErrLayers[i] = errLayer;
+                }
+            },
+            () =>
+            {
+                // Backward
+                for (var i = numLayers - 2; i >= 0; i--)
+                {
+                    backwardLayer = backwardHiddenLayers[i];
+                    var lastBackwardLayer = backwardHiddenLayers[i + 1];
+                    var errLayer = new float[numStates][];
+                    var srcErrLayer = bErrLayers[i + 1];
+                    var neurons = backwardNeuronsList[i];
+                    Parallel.For(0, numStates, parallelOption, curState =>
+                    {
+                        errLayer[curState] = new float[backwardLayer.LayerSize];
+                        backwardLayer.ComputeLayerErr(lastBackwardLayer, errLayer[curState], srcErrLayer[curState], neurons[curState]);
+                    });
+
+                    bErrLayers[i] = errLayer;
+                }
+            });
+
+            forwardErrLayers = fErrLayers;
+            backwardErrLayers = bErrLayers;
         }
 
         private void DeepLearningNet(Sequence pSequence, SimpleLayer[] seqOutput, List<float[][]> fErrLayers,
-            List<float[][]> bErrLayers, List<SimpleLayer[]> layerList)
+            List<float[][]> bErrLayers, List<float[][]> layerOutputs, List<Neuron[]> forwardNeuronsList, List<Neuron[]> backwardNeuronsList)
         {
             var numStates = pSequence.States.Length;
             var numLayers = forwardHiddenLayers.Count;
@@ -391,30 +431,38 @@ namespace RNNSharp
                 {
                     Parallel.For(0, numLayers, parallelOption, i =>
                     {
+                        float[][] layerOutputs_i = (i > 0) ? layerOutputs[i - 1] : null;
+
                         Parallel.Invoke(() =>
                         {
+                            Neuron[] forwardNeurons = forwardNeuronsList[i];
+                            float[][] forwardErrs = fErrLayers[i];
                             var forwardLayer = forwardHiddenLayers[i];
                             forwardLayer.Reset();
                             for (var curState = 0; curState < numStates; curState++)
                             {
-                                forwardLayer.SetRunningMode(RunningMode.Training);
-                                forwardLayer.ForwardPass(layerList[i][curState].SparseFeature,
-                                    layerList[i][curState].DenseFeature);
-                                forwardLayer.Err = fErrLayers[i][curState];
+                                State state = pSequence.States[curState];
+
+                                forwardLayer.SparseFeature = state.SparseFeature;
+                                forwardLayer.DenseFeature = (i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState];
+                                forwardLayer.PreUpdateWeights(forwardNeurons[curState], forwardErrs[curState]);
                                 forwardLayer.BackwardPass();
                             }
                         },
                             () =>
                             {
+                                Neuron[] backwardNeurons = backwardNeuronsList[i];
+                                float[][] backwardErrs = bErrLayers[i];
                                 var backwardLayer = backwardHiddenLayers[i];
                                 backwardLayer.Reset();
                                 for (var curState = 0; curState < numStates; curState++)
                                 {
                                     var curState2 = numStates - curState - 1;
-                                    backwardLayer.SetRunningMode(RunningMode.Training);
-                                    backwardLayer.ForwardPass(layerList[i][curState2].SparseFeature,
-                                        layerList[i][curState2].DenseFeature);
-                                    backwardLayer.Err = bErrLayers[i][curState2];
+                                    State state = pSequence.States[curState2];
+ 
+                                    backwardLayer.SparseFeature = state.SparseFeature;
+                                    backwardLayer.DenseFeature = (i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState2];
+                                    backwardLayer.PreUpdateWeights(backwardNeurons[curState2], backwardErrs[curState2]);
                                     backwardLayer.BackwardPass();
                                 }
                             });
@@ -431,20 +479,28 @@ namespace RNNSharp
         public override int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore,
             out Matrix<float> rawOutputLayer)
         {
-            List<SimpleLayer[]> layerList;
+            List<float[][]> layerList;
+            List<Neuron[]> forwardCellList;
+            List<Neuron[]> backwardCellList;
 
             //Forward process from bottom layer to top layer
             int[] seqBestOutput;
             var seqOutput = ComputeLayers(pSequence, runningMode, out layerList,
-                out rawOutputLayer,
-                outputRawScore, out seqBestOutput);
+                out rawOutputLayer, outputRawScore, out forwardCellList, out backwardCellList);
+
+            //Get best output result of each state
+            var numStates = pSequence.States.Length;
+            seqBestOutput = new int[numStates];
+            Parallel.For(0, numStates, parallelOption, curState =>
+            {
+                seqBestOutput[curState] = seqOutput[curState].GetBestOutputIndex();
+            });
 
             if (runningMode != RunningMode.Test)
             {
-                var numStates = pSequence.States.Length;
                 for (var curState = 0; curState < numStates; curState++)
                 {
-                    logp += Math.Log10(seqOutput[curState].Cell[pSequence.States[curState].Label] + 0.0001);
+                    logp += Math.Log10(seqOutput[curState].Cells[pSequence.States[curState].Label] + 0.0001);
                 }
             }
 
@@ -453,8 +509,8 @@ namespace RNNSharp
                 //In training mode, we calculate each layer's error and update their net weights
                 List<float[][]> fErrLayers;
                 List<float[][]> bErrLayers;
-                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers);
-                DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList);
+                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers, forwardCellList, backwardCellList);
+                DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList, forwardCellList, backwardCellList);
             }
 
             return seqBestOutput;
@@ -470,13 +526,13 @@ namespace RNNSharp
         {
             //Reset the network
             var numStates = pSequence.States.Length;
-            List<SimpleLayer[]> layerList;
+            List<float[][]> layerList;
             Matrix<float> rawOutputLayer;
+            List<Neuron[]> forwardCellList;
+            List<Neuron[]> backwardCellList;
 
-            int[] seqBestOutput;
             var seqOutput = ComputeLayers(pSequence, runningMode, out layerList,
-                out rawOutputLayer,
-                true, out seqBestOutput);
+                out rawOutputLayer, true, out forwardCellList, out backwardCellList);
 
             ForwardBackward(numStates, rawOutputLayer);
 
@@ -497,8 +553,8 @@ namespace RNNSharp
 
                 List<float[][]> fErrLayers;
                 List<float[][]> bErrLayers;
-                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers);
-                DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList);
+                ComputeDeepErr(pSequence, seqOutput, out fErrLayers, out bErrLayers, forwardCellList, backwardCellList);
+                DeepLearningNet(pSequence, seqOutput, fErrLayers, bErrLayers, layerList, forwardCellList, backwardCellList);
             }
 
             return predict;
@@ -510,21 +566,22 @@ namespace RNNSharp
             using (var sw = new StreamWriter(filename))
             {
                 var fo = new BinaryWriter(sw.BaseStream);
-
-                fo.Write((int)LAYERTYPE.LSTM);
                 fo.Write(IsCRFTraining);
                 fo.Write(forwardHiddenLayers.Count);
                 //Save forward layers
                 foreach (var layer in forwardHiddenLayers)
                 {
+                    fo.Write((int)layer.LayerType);
                     layer.Save(fo);
                 }
                 //Save backward layers
                 foreach (var layer in backwardHiddenLayers)
                 {
+                    fo.Write((int)layer.LayerType);
                     layer.Save(fo);
                 }
                 //Save output layer
+                fo.Write((int)OutputLayer.LayerType);
                 OutputLayer.Save(fo);
 
                 if (IsCRFTraining)
@@ -543,38 +600,29 @@ namespace RNNSharp
             {
                 var br = new BinaryReader(sr.BaseStream);
 
-                var layerType = (LAYERTYPE)br.ReadInt32();
                 IsCRFTraining = br.ReadBoolean();
-
                 var layerSize = br.ReadInt32();
+                LayerType layerType = LayerType.None;
+
                 //Load forward layers from file
                 forwardHiddenLayers = new List<SimpleLayer>();
                 for (var i = 0; i < layerSize; i++)
                 {
-                    SimpleLayer layer;
-
-                    Logger.WriteLine("Create LSTM hidden layer");
-                    layer = new LSTMLayer();
-
-                    layer.Load(br);
-                    forwardHiddenLayers.Add(layer);
+                    layerType = (LayerType)br.ReadInt32();
+                    forwardHiddenLayers.Add(Load(layerType, br));
                 }
 
                 //Load backward layers from file
                 backwardHiddenLayers = new List<SimpleLayer>();
                 for (var i = 0; i < layerSize; i++)
                 {
-                    SimpleLayer layer;
-                    Logger.WriteLine("Create LSTM hidden layer");
-                    layer = new LSTMLayer();
-
-                    layer.Load(br);
-                    backwardHiddenLayers.Add(layer);
+                    layerType = (LayerType)br.ReadInt32();
+                    backwardHiddenLayers.Add(Load(layerType, br));
                 }
 
                 Logger.WriteLine("Create output layer");
-                OutputLayer = new SimpleLayer();
-                OutputLayer.Load(br);
+                layerType = (LayerType)br.ReadInt32();
+                OutputLayer = Load(layerType, br);
 
                 if (IsCRFTraining)
                 {

@@ -1,6 +1,7 @@
 ﻿using AdvUtils;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
 
@@ -37,7 +38,7 @@ namespace RNNSharp
 
         public abstract void LoadModel(string filename);
 
-        public abstract List<float[]> ComputeTopHiddenLayerOutput(Sequence pSequence);
+        public abstract float[][] ComputeTopHiddenLayerOutput(Sequence pSequence);
 
         public abstract int GetTopHiddenLayerSize();
 
@@ -576,6 +577,25 @@ namespace RNNSharp
             Matrix<float> ys;
             ProcessSequence(seq, RunningMode.Test, true, out ys);
             return Viterbi(ys, seq.States.Length);
+        }
+
+        public static SimpleLayer Load(LayerType layerType, BinaryReader br)
+        {
+            switch (layerType)
+            {
+                case LayerType.LSTM:
+                    return LSTMLayer.Load(br, LayerType.LSTM);
+                case LayerType.DropOut:
+                    return DropoutLayer.Load(br, LayerType.DropOut);
+                case LayerType.Softmax:
+                    return SoftmaxLayer.Load(br, LayerType.Softmax);
+                case LayerType.SampledSoftmax:
+                    return SampledSoftmaxLayer.Load(br, LayerType.SampledSoftmax);
+                case LayerType.Simple:
+                    return SimpleLayer.Load(br, LayerType.Simple);
+            }
+
+            return null;
         }
     }
 }

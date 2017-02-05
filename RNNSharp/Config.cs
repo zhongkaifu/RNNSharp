@@ -34,13 +34,13 @@ namespace RNNSharp
         }
     }
 
-    public class NCELayerConfig : LayerConfig
+    public class SampledSoftmaxLayerConfig : SoftmaxLayerConfig
     {
         public int NegativeSampleSize;
 
-        public NCELayerConfig()
+        public SampledSoftmaxLayerConfig()
         {
-            LayerType = LayerType.NCESoftmax;
+            LayerType = LayerType.SampledSoftmax;
         }
     }
 
@@ -49,6 +49,14 @@ namespace RNNSharp
         public SoftmaxLayerConfig()
         {
             LayerType = LayerType.Softmax;
+        }
+    }
+
+    public class SimpleLayerConfig : LayerConfig
+    {
+        public SimpleLayerConfig()
+        {
+            LayerType = LayerType.Simple;
         }
     }
 
@@ -161,17 +169,17 @@ namespace RNNSharp
 
             featureContext = new Dictionary<string, List<int>>();
 
-            SetHiddenLayers();
-            SetOutputLayers();
-            SetPretrainedModel();
-            SetTFeatures();
-
             var isCRFTraining = config.GetValueOptional(CRF_LAYER);
             IsCRFTraining = false;
             if (string.IsNullOrEmpty(isCRFTraining) == false)
             {
                 IsCRFTraining = bool.Parse(isCRFTraining);
             }
+
+            SetHiddenLayers();
+            SetOutputLayers();
+            SetPretrainedModel();
+            SetTFeatures();
 
             //Load model type
             ModelType = config.GetValueRequired(MODEL_TYPE)
@@ -316,21 +324,29 @@ namespace RNNSharp
                 break;
             }
 
+            if (IsCRFTraining == true && outputLayerType != LayerType.Simple)
+            {
+                throw new ArgumentException($"For RNN-CRF model, its output layer type must be simple layer.");
+            }
+
             switch (outputLayerType)
             {
                 case LayerType.Softmax:
-                    var softmaxLayerConfig = new SoftmaxLayerConfig();
-                    OutputLayerConfig = softmaxLayerConfig;
-
+                    OutputLayerConfig = new SoftmaxLayerConfig();
                     Logger.WriteLine("Initialize configuration for softmax layer.");
                     break;
 
-                case LayerType.NCESoftmax:
-                    var nceLayerConfig = new NCELayerConfig { NegativeSampleSize = int.Parse(items[1]) };
-                    OutputLayerConfig = nceLayerConfig;
+                case LayerType.SampledSoftmax:
+                    var sampledSoftmaxLayerConfig = new SampledSoftmaxLayerConfig { NegativeSampleSize = int.Parse(items[1]) };
+                    OutputLayerConfig = sampledSoftmaxLayerConfig;
 
                     Logger.WriteLine(
-                        $"Initialize configuration for NCESoftmax layer. Negative sample size = '{nceLayerConfig.NegativeSampleSize}'");
+                        $"Initialize configuration for sampled Softmax layer. Negative sample size = '{sampledSoftmaxLayerConfig.NegativeSampleSize}'");
+                    break;
+
+                case LayerType.Simple:
+                    OutputLayerConfig = new SimpleLayerConfig();
+                    Logger.WriteLine("Initialize configuration for simple layer.");
                     break;
             }
         }
@@ -338,18 +354,14 @@ namespace RNNSharp
         private void SetHiddenLayers()
         {
             //Get hidden layer settings
+            //Example: LSTM:200, Dropout:0.5
             HiddenLayersConfig = new List<LayerConfig>();
             var hiddenLayers = config.GetValueRequired(HIDDEN_LAYER);
             foreach (var layer in hiddenLayers.Split(','))
             {
                 var items = layer.Split(':');
-                var sLayerSize = items[0].Trim();
-                var sLayerType = items[1].Trim();
-
-                //Parse layer size and type
-                var layerSize = int.Parse(sLayerSize);
+                var sLayerType = items[0].Trim();
                 var layerType = LayerType.None;
-
                 foreach (
                     var type in
                         Enum.GetValues(typeof(LayerType))
@@ -368,14 +380,17 @@ namespace RNNSharp
                     case LayerType.LSTM:
                         {
                             var layerConfig = new LSTMLayerConfig();
+                            layerConfig.LayerSize = int.Parse(items[1]);
+                            layerConfig.LayerType = layerType;
                             baseLayerConfig = layerConfig;
-                            Logger.WriteLine("Initialize configuration for LSTM layer.");
+                            Logger.WriteLine($"Initialize configuration for LSTM layer. Layer size = {layerConfig.LayerSize}");
                         }
                         break;
 
                     case LayerType.DropOut:
                         {
-                            var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[2])};
+                            var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[1])};
+                            layerConfig.LayerType = layerType;
                             baseLayerConfig = layerConfig;
                             Logger.WriteLine(
                                 $"Initialize configuration for Dropout layer. Dropout ratio = '{layerConfig.DropoutRatio}'");
@@ -385,9 +400,6 @@ namespace RNNSharp
                     default:
                         throw new ArgumentException($"Invalidated layer type: {sLayerType}");
                 }
-
-                baseLayerConfig.LayerType = layerType;
-                baseLayerConfig.LayerSize = layerSize;
 
                 HiddenLayersConfig.Add(baseLayerConfig);
             }
