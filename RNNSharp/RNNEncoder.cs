@@ -50,7 +50,34 @@ namespace RNNSharp
         {
             //Create neural net work
             Logger.WriteLine("Create a new network according settings in configuration file.");
-            var rnn = CreateNetwork();
+            RNN<T> rnn = null;
+
+            if (ModelSettings.IncrementalTrain)
+            {
+                if (modelDirection == MODELDIRECTION.Forward)
+                {
+                    rnn = new ForwardRNN<T>();
+                }
+                else
+                {
+                    rnn = new BiRNN<T>();
+                }
+
+                Logger.WriteLine($"Loading previous trained model from {modelFilePath}.");
+                rnn.LoadModel(modelFilePath, true);
+            }
+            else
+            {
+                Logger.WriteLine("Create a new network.");
+                rnn = CreateNetwork();
+
+                //Create tag-bigram transition probability matrix only for sequence RNN mode
+                if (IsCRFTraining)
+                {
+                    Logger.WriteLine("Initialize bigram transition for CRF output layer.");
+                    rnn.setTagBigramTransition(TrainingSet.CRFLabelBigramTransition);
+                }
+            }
 
             //Assign model settings to RNN
             rnn.bVQ = ModelSettings.VQ != 0 ? true : false;
@@ -67,13 +94,6 @@ namespace RNNSharp
             RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
 
             RNNHelper.IsConstAlpha = ModelSettings.IsConstAlpha;
-
-            //Create tag-bigram transition probability matrix only for sequence RNN mode
-            if (IsCRFTraining)
-            {
-                Logger.WriteLine("Initialize bigram transition for CRF output layer.");
-                rnn.setTagBigramTransition(TrainingSet.CRFLabelBigramTransition);
-            }
 
             Logger.WriteLine("");
 
@@ -165,7 +185,10 @@ namespace RNNSharp
                             break;
 
                         case LayerType.DropOut:
-                            var dropoutLayer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                            DropoutLayerConfig dropoutLayerConfig = hiddenLayersConfig[i] as DropoutLayerConfig;
+                            dropoutLayerConfig.LayerSize = hiddenLayersConfig[i - 1].LayerSize;
+
+                            var dropoutLayer = new DropoutLayer(dropoutLayerConfig);
                             layer = dropoutLayer;
                             Logger.WriteLine("Create Dropout layer.");
                             break;

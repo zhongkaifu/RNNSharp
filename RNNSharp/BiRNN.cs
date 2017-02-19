@@ -33,6 +33,26 @@ namespace RNNSharp
         {
         }
 
+        public override RNN<T> Clone()
+        {
+            List<SimpleLayer> forwardLayers = new List<SimpleLayer>();
+            List<SimpleLayer> backwardLayers = new List<SimpleLayer>();
+
+            foreach (SimpleLayer layer in forwardHiddenLayers)
+            {
+                forwardLayers.Add(layer.CreateLayerSharedWegiths());
+            }
+
+            foreach (SimpleLayer layer in backwardHiddenLayers)
+            {
+                backwardLayers.Add(layer.CreateLayerSharedWegiths());
+            }
+
+            BiRNN<T> rnn = new BiRNN<T>(forwardLayers, backwardLayers, OutputLayer.CreateLayerSharedWegiths());
+
+            return rnn;
+        }
+
         public override void CleanStatus()
         {
             foreach (var layer in forwardHiddenLayers)
@@ -592,7 +612,7 @@ namespace RNNSharp
             }
         }
 
-        public override void LoadModel(string filename)
+        public override void LoadModel(string filename, bool bTrain = false)
         {
             Logger.WriteLine(Logger.Level.info, "Loading bi-directional model: {0}", filename);
 
@@ -610,6 +630,15 @@ namespace RNNSharp
                 {
                     layerType = (LayerType)br.ReadInt32();
                     forwardHiddenLayers.Add(Load(layerType, br));
+
+                    if (bTrain)
+                    {
+                        SimpleLayer layer = forwardHiddenLayers[forwardHiddenLayers.Count - 1];
+                        if (layer is LSTMLayer)
+                        {
+                            ((LSTMLayer)layer).InitializeDeri();
+                        }
+                    }
                 }
 
                 //Load backward layers from file
@@ -618,6 +647,15 @@ namespace RNNSharp
                 {
                     layerType = (LayerType)br.ReadInt32();
                     backwardHiddenLayers.Add(Load(layerType, br));
+
+                    if (bTrain)
+                    {
+                        SimpleLayer layer = backwardHiddenLayers[backwardHiddenLayers.Count - 1];
+                        if (layer is LSTMLayer)
+                        {
+                            ((LSTMLayer)layer).InitializeDeri();
+                        }
+                    }
                 }
 
                 Logger.WriteLine("Create output layer");

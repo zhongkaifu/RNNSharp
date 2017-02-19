@@ -36,11 +36,13 @@ namespace RNNSharp
 
         public abstract void SaveModel(string filename);
 
-        public abstract void LoadModel(string filename);
+        public abstract void LoadModel(string filename, bool bTrain = false);
 
         public abstract float[][] ComputeTopHiddenLayerOutput(Sequence pSequence);
 
         public abstract int GetTopHiddenLayerSize();
+
+        public abstract RNN<T> Clone();
 
         public void SetRuntimeFeatures(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {

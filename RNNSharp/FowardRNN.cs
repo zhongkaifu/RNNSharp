@@ -37,6 +37,22 @@ namespace RNNSharp
 
         public List<SimpleLayer> HiddenLayerList { get; set; }
 
+
+        public override RNN<T> Clone()
+        {
+            List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
+
+            foreach (SimpleLayer layer in HiddenLayerList)
+            {
+                hiddenLayers.Add(layer.CreateLayerSharedWegiths());
+            }
+
+
+            ForwardRNN<T> rnn = new ForwardRNN<T>(hiddenLayers, OutputLayer.CreateLayerSharedWegiths());
+
+            return rnn;
+        }
+
         public override int GetTopHiddenLayerSize()
         {
             return HiddenLayerList[HiddenLayerList.Count - 1].LayerSize;
@@ -475,7 +491,7 @@ namespace RNNSharp
             fo.Close();
         }
 
-        public override void LoadModel(string filename)
+        public override void LoadModel(string filename, bool bTrain = false)
         {
             Logger.WriteLine("Loading SimpleRNN model: {0}", filename);
 
@@ -492,6 +508,15 @@ namespace RNNSharp
             {
                 layerType = (LayerType)br.ReadInt32();
                 HiddenLayerList.Add(Load(layerType, br));
+
+                if (bTrain)
+                {
+                    SimpleLayer layer = HiddenLayerList[HiddenLayerList.Count - 1];
+                    if (layer is LSTMLayer)
+                    {
+                        ((LSTMLayer)layer).InitializeDeri();
+                    }
+                }
             }
 
             Logger.WriteLine("Create output layer");

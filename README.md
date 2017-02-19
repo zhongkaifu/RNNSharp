@@ -4,13 +4,13 @@ RNNSharp is a toolkit of deep recurrent neural network which is widely used for 
 This page introduces what is RNNSharp, how it works and how to use it. To get the demo package, you can access release page.
 
 ## Overview
-RNNSharp supports many different types of deep recurrent neural network (aka DeepRNN) structures. In terms of historical memory, it supports BPTT(BackPropagation Through Time) and LSTM(Long Short-Term Memory) structures. And in respect of output layer structure, RNNSharp supports softmax, negative sampling softmax and recurrent CRFs[1]. In additional, RNNSharp also supports forward RNN and bi-directional RNN structures.
+RNNSharp supports many different types of deep recurrent neural network (aka DeepRNN) structures.  
 
-For BPTT and LSTM, BPTT-RNN is usually called as "simple RNN", since the structure of its hidden layer node is very simple. It's not good at preserving long time historical memory. LSTM-RNN is more complex than BPTT-RNN, since its hidden layer node has inner-structure for very long time historical memory. In general, LSTM has better performance than BPTT on longer sequences.
+For network structure, it supports forward RNN and bi-directional RNN. Forward RNN considers histrocial information before current token, however, bi-directional RNN considers both histrocial information and information in future.  
 
-For output layer, softmax output layer is the tranditional type which is widely used in online sequence labeling tasks, such as speech recognition, auto suggestion and so on. Negative sampling softmax output layer is especially used for the tasks with large output vocabulary, such as sequence generation tasks (sequence-to-sequence model). For recurrent CRF, based on softmax outputs and tags transition, RNNSharp computes CRF output for entire sequence. Compred with native RNN, RNN-CRF has better performance for many different types of sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on. With the similar feature set, it has better performance than linear CRF.
+For hidden layer structure, it supports LSTM and Dropout. Compared to BPTT, LSTM is very good at keeping long term memory, since it has some gates to contorl information flow. Dropout is used to add noise during training in order to avoid overfitting.  
 
-For bi-directional RNN, the output result combines the result of both forward RNN and backward RNN. It usually has better performance than single-directional RNN.
+In terms of output layer structure, simple, softmax,  sampled softmax and recurrent CRFs[1] are supported. Softmax is the tranditional type which is widely used in many kinds of tasks. Sampled softmax is especially used for the tasks with large output vocabulary, such as sequence generation tasks (sequence-to-sequence model). Simple type is usually used with recurrent CRF together. For recurrent CRF, based on simple outputs and tags transition, it computes CRF output for entire sequence. For sequence labeling tasks in offline, such as word segmentation, named entity recognition and so on, recurrent CRF has better performance than softmax, sampled softmax and linear CRF.  
 
 Here is an example of deep bi-directional RNN-CRF network. It contains 3 hidden layers, 1 native RNN output layer and 1 CRF output layer.  
 ![](https://github.com/zhongkaifu/RNNSharp/blob/master/RNNSharpOverview.jpg)
@@ -261,13 +261,14 @@ In this mode, the console tool can encode a RNN model by given feature set and t
 
 RNNSharpConsole.exe -mode train <parameters>  
  Parameters for training RNN based model  
--trainfile <string>: training corpus file  
--validfile <string>: validated corpus for training  
--cfgfile <string>: configuration file  
--tagfile <string>: output tag or vocabulary file  
--alpha <float>: learning rate, default is 0.1  
--maxiter <int>: maximum iteration for training. 0 is no limition, default is 20  
--savestep <int>: save temporary model after every <int> sentence, default is 0  
+-trainfile <string>: Training corpus file  
+-validfile <string>: Validated corpus for training  
+-cfgfile <string>: Configuration file  
+-tagfile <string>: Output tag or vocabulary file  
+-inctrain <boolean>: Incremental training. Starting from output model specified in configuration file. Default is false  
+-alpha <float>: Learning rate, default is 0.1  
+-maxiter <int>: Maximum iteration for training. 0 is no limition, default is 20  
+-savestep <int>: Save temporary model after every <int> sentence, default is 0  
 -vq <int> : Model vector quantization, 0 is disable, 1 is enable. default is 0  
 
 Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K -vq 0 -grad 15.0  
@@ -347,7 +348,7 @@ Example: TFeatureBin.exe -mode index -template template.txt -inputfile features.
 In above example, according templates, the raw text feature set, features.txt, will be indexed as features.bin file in binary format.  
 
 ## Performance
-Here is peformance results on Chinese named entity recognizer task. You could get corpus, configuration and parameter files from RNNSharp demo package file in [release section](https://github.com/zhongkaifu/RNNSharp/releases). The result is based on bi-directional BPTT-RNN model. The first hidden layer size is 200, and the second hidden layer size is 100. The result in below is from test corpus.
+Here is peformance results on Chinese named entity recognizer task. You could get corpus, configuration and parameter files from RNNSharp demo package file in [release section](https://github.com/zhongkaifu/RNNSharp/releases). The result is based on bi-directional model. The first hidden layer size is 200, and the second hidden layer size is 100. The result in below is from test corpus.
 
 Parameter               | Token Error  | Sentence Error
 ------------------------|--------------|----

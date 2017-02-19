@@ -14,8 +14,10 @@ namespace RNNSharp
             MaxIteration = 20;
             LearningRate = 0.1f;
             GradientCutoff = 15.0f;
+            IncrementalTrain = false;
         }
 
+        public bool IncrementalTrain { get; set; }
         public float LearningRate { get; set; }
         public int MaxIteration { get; set; }
         public bool IsConstAlpha { get; set; }
@@ -25,17 +27,18 @@ namespace RNNSharp
 
         public void DumpSetting()
         {
-            Logger.WriteLine("Use const learning rate: {0}", IsConstAlpha);
-            Logger.WriteLine("Starting learning rate: {0}", LearningRate);
-            Logger.WriteLine("Max Iteration: {0}", MaxIteration);
-            Logger.WriteLine("SIMD: {0}, Size: {1}bits", Vector.IsHardwareAccelerated,
-                Vector<float>.Count * sizeof(float) * 8);
-            Logger.WriteLine("Gradient cut-off: {0}", GradientCutoff);
+            Logger.WriteLine($"Use const learning rate: {IsConstAlpha}");
+            Logger.WriteLine($"Starting learning rate: {LearningRate}");
+            Logger.WriteLine($"Max Iteration: {MaxIteration}");
+            Logger.WriteLine($"SIMD: {Vector.IsHardwareAccelerated}, Size: {Vector<float>.Count * sizeof(float) * 8}bits");
+            Logger.WriteLine($"Gradient cut-off: {GradientCutoff}");
 
             if (SaveStep > 0)
             {
-                Logger.WriteLine("Save temporary model after every {0} sentences", SaveStep);
+                Logger.WriteLine($"Save temporary model after every {SaveStep} sentences");
             }
+
+            Logger.WriteLine($"Incremental training: {IncrementalTrain}");
         }
     }
 }

@@ -20,6 +20,7 @@ namespace RNNSharpConsole
         private static string configFilePath = "";
         private static string trainFilePath = "";
         private static string validFilePath = "";
+        private static bool incrementalTrain = false;
         private static int maxIter = 20;
         private static long savestep;
         private static float alpha = 0.1f;
@@ -57,6 +58,9 @@ namespace RNNSharpConsole
 
             Console.WriteLine(" -tagfile <string>");
             Console.WriteLine("\tSupported output tagid-name list file");
+
+            Console.WriteLine(" -inctrain <boolean>");
+            Console.WriteLine("\tincremental training. Starting from output model specified in configuration file. Default is false");
 
             Console.WriteLine(" -alpha <float>");
             Console.WriteLine("\tInitializing learning rate. Default is 0.1");
@@ -115,6 +119,7 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-outfile", args)) >= 0) outputFilePath = args[i + 1];
             if ((i = ArgPos("-tagfile", args)) >= 0) tagFilePath = args[i + 1];
             if ((i = ArgPos("-cfgfile", args)) >= 0) configFilePath = args[i + 1];
+            if ((i = ArgPos("-inctrain", args)) >= 0) incrementalTrain = bool.Parse(args[i + 1]);
             if ((i = ArgPos("-maxiter", args)) >= 0) maxIter = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
@@ -483,7 +488,8 @@ namespace RNNSharpConsole
                 SaveStep = savestep,
                 LearningRate = alpha,
                 GradientCutoff = gradientCutoff,
-                IsConstAlpha = constAlpha
+                IsConstAlpha = constAlpha,
+                IncrementalTrain = incrementalTrain
             };
 
             //Dump RNN setting on console

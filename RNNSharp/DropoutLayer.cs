@@ -14,14 +14,23 @@ namespace RNNSharp
         private readonly float dropoutRatio;
         private readonly Random rnd;
         private bool[] mask;
+        DropoutLayerConfig config;
 
         public DropoutLayer(DropoutLayerConfig config) : base(config)
         {
+            this.config = config;
             dropoutRatio = config.DropoutRatio;
             mask = new bool[LayerSize];
             rnd = new Random();
         }
 
+        public override SimpleLayer CreateLayerSharedWegiths()
+        {
+            DropoutLayer layer = new DropoutLayer(config);
+            ShallowCopyWeightTo(layer);
+
+            return layer;
+        }
 
         public override Neuron CopyNeuronTo()
         {

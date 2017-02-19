@@ -72,6 +72,15 @@ namespace RNNSharp
             return neuron;
         }
 
+        public virtual SimpleLayer CreateLayerSharedWegiths()
+        {
+            SimpleLayer layer = new SimpleLayer(LayerConfig);
+            ShallowCopyWeightTo(layer);
+
+            return layer;
+        }
+
+
         public virtual void PreUpdateWeights(Neuron neuron, float[] errs)
         {
             Cells = neuron.Cells;
@@ -252,15 +261,15 @@ namespace RNNSharp
             }
             else
             {
-                var lsmLayer = nextLayer as LSTMLayer;
-                if (lsmLayer != null)
+                var lstmLayer = nextLayer as LSTMLayer;
+                if (lstmLayer != null)
                 {
                         Parallel.For(0, LayerSize, parallelOption, i =>
                         {
                             var err = 0.0f;
                             for (var k = 0; k < nextLayer.LayerSize; k++)
                             {
-                                err += srcErrLayer[k] * lsmLayer.wDenseOutputGate.weights[k][i];
+                                err += srcErrLayer[k] * lstmLayer.wDenseOutputGate.weights[k][i];
                             }
                             destErrLayer[i] = RNNHelper.NormalizeGradient(err);
                         });
@@ -283,8 +292,24 @@ namespace RNNSharp
             }
             else
             {
-                //error output->hidden for words from specific class
-                RNNHelper.matrixXvectorADDErr(Errs, nextLayer.Errs, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+                var lstmLayer = nextLayer as LSTMLayer;
+                if (lstmLayer != null)
+                {
+                    Parallel.For(0, LayerSize, parallelOption, i =>
+                    {
+                        var err = 0.0f;
+                        for (var k = 0; k < nextLayer.LayerSize; k++)
+                        {
+                            err += lstmLayer.Errs[k] * lstmLayer.wDenseOutputGate.weights[k][i];
+                        }
+                        Errs[i] = RNNHelper.NormalizeGradient(err);
+                    });
+                }
+                else
+                {
+                    //error output->hidden for words from specific class
+                    RNNHelper.matrixXvectorADDErr(Errs, nextLayer.Errs, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
+                }
             }
         }
 
