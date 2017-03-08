@@ -28,30 +28,26 @@ namespace RNNSharp
         {
             DropoutLayer layer = new DropoutLayer(config);
             ShallowCopyWeightTo(layer);
+            layer.InitializeInternalTrainingParameters();
 
             return layer;
         }
 
-        public override Neuron CopyNeuronTo()
+        public override Neuron CopyNeuronTo(Neuron neuron)
         {
-            DropoutNeuron neuron = new DropoutNeuron();
-            neuron.mask = new bool[mask.Length];
-            mask.CopyTo(neuron.mask, 0);
+            DropoutNeuron dropoutNeuron = neuron as DropoutNeuron;
+            mask.CopyTo(dropoutNeuron.mask, 0);
+            Cells.CopyTo(dropoutNeuron.Cells, 0);
+            previousCellOutputs.CopyTo(dropoutNeuron.PrevCellOutputs, 0);
 
-            neuron.Cells = new float[Cells.Length];
-            neuron.PrevCellOutputs = new float[previousCellOutputs.Length];
-            Cells.CopyTo(neuron.Cells, 0);
-            previousCellOutputs.CopyTo(neuron.PrevCellOutputs, 0);
-
-            return neuron;
+            return dropoutNeuron;
         }
 
         public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
         {
             if (denseFeatureSize > 0)
             {
-                Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize,
-                    denseFeatureSize);
+                Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);
                 DenseFeatureSize = denseFeatureSize;
                 DenseWeights = new Matrix<float>(LayerSize, denseFeatureSize);
                 for (var i = 0; i < DenseWeights.Height; i++)
@@ -65,8 +61,7 @@ namespace RNNSharp
 
             if (sparseFeatureSize > 0)
             {
-                Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize,
-                    sparseFeatureSize);
+                Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize, sparseFeatureSize);
                 SparseFeatureSize = sparseFeatureSize;
                 SparseWeights = new Matrix<float>(LayerSize, SparseFeatureSize);
                 for (var i = 0; i < SparseWeights.Height; i++)
@@ -77,6 +72,8 @@ namespace RNNSharp
                     }
                 }
             }
+
+            InitializeInternalTrainingParameters();
         }
         public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {

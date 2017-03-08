@@ -9,7 +9,7 @@ using System.Text;
 
 namespace RNNSharp
 {
-    public class Sentence
+    public class Sentence : ISentence
     {
         public Sentence(List<string[]> tokensList, bool addSentBE = true)
         {

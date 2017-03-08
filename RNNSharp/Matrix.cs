@@ -1,7 +1,8 @@
-﻿/// <summary>
+﻿
+using System;
+/// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
 /// </summary>
-
 namespace RNNSharp
 {
     public class Matrix<T> where T : struct
@@ -26,6 +27,14 @@ namespace RNNSharp
         {
             get { return m_saData[i]; }
             set { m_saData[i] = value; }
+        }
+
+        public void Clean()
+        {
+            for (var i = 0; i < Height; i++)
+            {
+                Array.Clear(m_saData[i], 0, Width);
+            }
         }
     }
 }

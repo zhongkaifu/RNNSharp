@@ -23,16 +23,12 @@
         None
     }
 
-    public enum MODELDIRECTION
+    public enum NETWORKTYPE
     {
         Forward = 0,
-        BiDirectional
-    }
-
-    public enum MODELTYPE
-    {
-        SeqLabel = 0,
-        Seq2Seq
+        ForwardSeq2Seq,
+        BiDirectional,
+        BiDirectionalAverage
     }
 
     public enum LAYERTYPE

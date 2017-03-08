@@ -1,6 +1,10 @@
 ﻿using AdvUtils;
+using RNNSharp.Networks;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -19,7 +23,7 @@ namespace RNNSharp
             this.featurizer = featurizer;
         }
 
-        private MODELDIRECTION modelDirection => featurizer.ModelDirection;
+        private NETWORKTYPE networkType => featurizer.NetworkType;
 
         private string modelFilePath => featurizer.ModelFilePath;
 
@@ -28,8 +32,7 @@ namespace RNNSharp
         private LayerConfig outputLayerConfig => featurizer.OutputLayerConfig;
 
         public bool IsCRFTraining => featurizer.IsCRFTraining;
-
-        public MODELTYPE ModelType => featurizer.ModelType;
+        private int maxSequenceLength => featurizer.MaxSequenceLength;
 
         public DataSet<T> TrainingSet { get; set; }
         public DataSet<T> ValidationSet { get; set; }
@@ -37,7 +40,7 @@ namespace RNNSharp
         private int GetCurrentLayerDenseFeatureSize(int inputDenseFeatureSize)
         {
             //If current training is for sequence-to-sequence, we append features from source sequence to standard features.
-            if (ModelType == MODELTYPE.Seq2Seq)
+            if (networkType == NETWORKTYPE.ForwardSeq2Seq)
             {
                 //[Dense feature set of each state in target sequence][Dense feature set of entire source sequence]
                 inputDenseFeatureSize += featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
@@ -46,31 +49,123 @@ namespace RNNSharp
             return inputDenseFeatureSize;
         }
 
+
+        int processedSequence = 0;
+        int processedWordCnt = 0;
+        int tknErrCnt = 0;
+        int sentErrCnt = 0;
+
+        public void Process(RNN<T> rnn, DataSet<T> trainingSet, RunningMode runningMode)
+        {
+            //Shffle training corpus
+            trainingSet.Shuffle();
+
+            for (var i = 0; i < trainingSet.SequenceList.Count; i++)
+            {
+                var pSequence = trainingSet.SequenceList[i];           
+
+                int wordCnt = 0;
+                if (pSequence is Sequence)
+                {
+                    wordCnt = (pSequence as Sequence).States.Length;
+                }
+                else
+                {
+                    SequencePair sp = pSequence as SequencePair;
+                    if (sp.srcSentence.TokensList.Count > rnn.MaxSeqLength)
+                    {
+                        continue;
+                    }
+
+                    wordCnt = sp.tgtSequence.States.Length;
+                    
+                }
+
+                if (wordCnt > rnn.MaxSeqLength)
+                {
+                    continue;
+                }
+
+                Interlocked.Add(ref processedWordCnt, wordCnt);
+
+                int[] predicted;
+                if (IsCRFTraining)
+                {
+                    predicted = rnn.ProcessSequenceCRF(pSequence as Sequence, runningMode);
+                }
+                else
+                {
+                    Matrix<float> m;
+                    predicted = rnn.ProcessSequence(pSequence, runningMode, false, out m);
+                }
+
+                int newTknErrCnt;
+                if (pSequence is Sequence)
+                {
+                    newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
+                }
+                else
+                {
+                    newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
+                }
+
+                Interlocked.Add(ref tknErrCnt, newTknErrCnt);
+                if (newTknErrCnt > 0)
+                {
+                    Interlocked.Increment(ref sentErrCnt);
+                }
+
+                Interlocked.Increment(ref processedSequence);
+
+                if (processedSequence % 1000 == 0)
+                {
+                    Logger.WriteLine("Progress = {0} ", processedSequence / 1000 + "K/" + TrainingSet.SequenceList.Count / 1000.0 + "K");
+                    Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)processedWordCnt * 100.0);
+                    Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)processedSequence * 100.0);
+                }
+
+                if (ModelSettings.SaveStep > 0 && processedSequence % ModelSettings.SaveStep == 0)
+                {
+                    //After processed every m_SaveStep sentences, save current model into a temporary file
+                    Logger.WriteLine("Saving temporary model into file...");
+                    rnn.SaveModel("model.tmp");
+                }
+
+                
+            }
+        }
+
+        private int GetErrorTokenNum(Sequence seq, int[] predicted)
+        {
+            var tknErrCnt = 0;
+            var numStates = seq.States.Length;
+            for (var curState = 0; curState < numStates; curState++)
+            {
+                if (predicted[curState] != seq.States[curState].Label)
+                {
+                    tknErrCnt++;
+                }
+            }
+
+            return tknErrCnt;
+        }
+
         public void Train()
         {
             //Create neural net work
             Logger.WriteLine("Create a new network according settings in configuration file.");
-            RNN<T> rnn = null;
+            Logger.WriteLine($"Processor Count = {Environment.ProcessorCount}");
 
+            RNN<T> rnn = RNN<T>.CreateRNN(networkType);
             if (ModelSettings.IncrementalTrain)
             {
-                if (modelDirection == MODELDIRECTION.Forward)
-                {
-                    rnn = new ForwardRNN<T>();
-                }
-                else
-                {
-                    rnn = new BiRNN<T>();
-                }
-
                 Logger.WriteLine($"Loading previous trained model from {modelFilePath}.");
                 rnn.LoadModel(modelFilePath, true);
             }
             else
             {
                 Logger.WriteLine("Create a new network.");
-                rnn = CreateNetwork();
-
+                rnn.CreateNetwork(hiddenLayersConfig, outputLayerConfig, TrainingSet, featurizer);
                 //Create tag-bigram transition probability matrix only for sequence RNN mode
                 if (IsCRFTraining)
                 {
@@ -79,11 +174,28 @@ namespace RNNSharp
                 }
             }
 
-            //Assign model settings to RNN
-            rnn.bVQ = ModelSettings.VQ != 0 ? true : false;
-            rnn.SaveStep = ModelSettings.SaveStep;
-            rnn.MaxIter = ModelSettings.MaxIteration;
-            rnn.IsCRFTraining = IsCRFTraining;
+            rnn.MaxSeqLength = maxSequenceLength;
+            int N = Environment.ProcessorCount;
+            List<DataSet<T>> dataSets = TrainingSet.Split(N);
+            List<RNN<T>> rnns = new List<RNN<T>>();
+            rnns.Add(rnn);
+
+            for (int i = 1; i < N; i++)
+            {
+                rnns.Add(rnn.Clone());
+            }
+
+            for (int i = 0; i < N; i++)
+            {
+                if (IsCRFTraining)
+                {
+                    dataSets[i].BuildLabelBigramTransition();
+                }
+
+                //Assign model settings to RNN
+                rnns[i].bVQ = ModelSettings.VQ != 0 ? true : false;
+                rnns[i].IsCRFTraining = IsCRFTraining;
+            }
 
             //Initialize RNNHelper
             RNNHelper.LearningRate = ModelSettings.LearningRate;
@@ -98,220 +210,94 @@ namespace RNNSharp
             Logger.WriteLine("");
 
             Logger.WriteLine("Iterative training begins ...");
-            var lastPPL = double.MaxValue;
+            var bestTrainTknErrCnt = long.MaxValue;
+            var bestValidTknErrCnt = long.MaxValue;
             var lastAlpha = RNNHelper.LearningRate;
             var iter = 0;
+            ParallelOptions parallelOption = new ParallelOptions();
+            parallelOption.MaxDegreeOfParallelism = -1;
             while (true)
             {
-                Logger.WriteLine("Cleaning training status...");
-                rnn.CleanStatus();
+                processedSequence = 0;
+                processedWordCnt = 0;
+                tknErrCnt = 0;
+                sentErrCnt = 0;
 
-                if (rnn.MaxIter > 0 && iter > rnn.MaxIter)
+                if (ModelSettings.MaxIteration > 0 && iter > ModelSettings.MaxIteration)
                 {
                     Logger.WriteLine("We have trained this model {0} iteration, exit.");
                     break;
+
                 }
 
-                //Start to train model
-                var ppl = rnn.TrainNet(TrainingSet, iter);
-                if (ppl >= lastPPL && lastAlpha != RNNHelper.LearningRate)
+                Logger.WriteLine($"Start to training {iter} iteration. learning rate = {RNNHelper.LearningRate}");
+                Parallel.For(0, N, i =>
+                {
+                    rnns[i].CleanStatus();
+                    Process(rnns[i], dataSets[i], RunningMode.Training);
+                });
+
+                Logger.WriteLine($"End {iter} iteration.");
+                Logger.WriteLine("");
+
+                if (tknErrCnt >= bestTrainTknErrCnt && lastAlpha != RNNHelper.LearningRate)
                 {
                     //Although we reduce alpha value, we still cannot get better result.
                     Logger.WriteLine(
-                        "Current perplexity({0}) is larger than the previous one({1}). End training early.", ppl,
-                        lastPPL);
+                        $"Current token error count({(double)tknErrCnt / (double)processedWordCnt * 100.0}%) is larger than the previous one({(double)bestTrainTknErrCnt / (double)processedWordCnt * 100.0}%) on training set. End training early.");
                     Logger.WriteLine("Current alpha: {0}, the previous alpha: {1}", RNNHelper.LearningRate, lastAlpha);
                     break;
                 }
                 lastAlpha = RNNHelper.LearningRate;
 
+                int trainTknErrCnt = tknErrCnt;
                 //Validate the model by validated corpus
                 if (ValidationSet != null)
                 {
+                    processedSequence = 0;
+                    processedWordCnt = 0;
+                    tknErrCnt = 0;
+                    sentErrCnt = 0;
+
                     Logger.WriteLine("Verify model on validated corpus.");
-                    if (rnn.ValidateNet(ValidationSet, iter))
+                    Process(rnn, ValidationSet, RunningMode.Validate);
+                    Logger.WriteLine("End model verification.");
+                    Logger.WriteLine("");
+
+                    if (tknErrCnt < bestValidTknErrCnt)
                     {
                         //We got better result on validated corpus, save this model
-                        Logger.WriteLine("Saving better model into file {0}...", modelFilePath);
+                        Logger.WriteLine($"Saving better model into file {modelFilePath}, since we got a better result on validation set.");
+                        Logger.WriteLine($"Error token percent: {(double)tknErrCnt / (double)processedWordCnt * 100.0}%, Error sequence percent: {(double)sentErrCnt / (double)processedSequence * 100.0}%");
+                        Logger.WriteLine("");
+
                         rnn.SaveModel(modelFilePath);
+                        bestValidTknErrCnt = tknErrCnt;
                     }
                 }
-                else if (ppl < lastPPL)
+                else if (trainTknErrCnt < bestTrainTknErrCnt)
                 {
                     //We don't have validate corpus, but we get a better result on training corpus
                     //We got better result on validated corpus, save this model
-                    Logger.WriteLine("Saving better model into file {0}...", modelFilePath);
+                    Logger.WriteLine($"Saving better model into file {modelFilePath}, although validation set doesn't exist, we have better result on training set.");
+                    Logger.WriteLine($"Error token percent: {(double)trainTknErrCnt / (double)processedWordCnt * 100.0}%, Error sequence percent: {(double)sentErrCnt / (double)processedSequence * 100.0}%");
+                    Logger.WriteLine("");
+
                     rnn.SaveModel(modelFilePath);
                 }
-
-                if (ppl >= lastPPL)
+                
+                if (trainTknErrCnt >= bestTrainTknErrCnt)
                 {
-                    //We cannot get a better result on training corpus, so reduce learning rate
+                    //We don't have better result on training set, so reduce learning rate
                     RNNHelper.LearningRate = RNNHelper.LearningRate / 2.0f;
                 }
-
-                lastPPL = ppl;
+                else
+                {
+                    bestTrainTknErrCnt = trainTknErrCnt;
+                }
 
                 iter++;
             }
-        }
-
-        private RNN<T> CreateNetwork()
-        {
-            RNN<T> rnn;
-
-            if (modelDirection == MODELDIRECTION.Forward)
-            {
-                var sparseFeatureSize = TrainingSet.SparseFeatureSize;
-                if (ModelType == MODELTYPE.Seq2Seq)
-                {
-                    //[Sparse feature set of each state in target sequence][Sparse feature set of entire source sequence]
-                    sparseFeatureSize += featurizer.Seq2SeqAutoEncoder.Config.SparseFeatureSize;
-                    Logger.WriteLine("Sparse Feature Format: [{0}][{1}] = {2}",
-                        TrainingSet.SparseFeatureSize, featurizer.Seq2SeqAutoEncoder.Config.SparseFeatureSize,
-                        sparseFeatureSize);
-                }
-
-                var hiddenLayers = new List<SimpleLayer>();
-                for (var i = 0; i < hiddenLayersConfig.Count; i++)
-                {
-                    SimpleLayer layer = null;
-                    switch (hiddenLayersConfig[i].LayerType)
-                    {
-                        case LayerType.LSTM:
-                            var lstmLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
-                            layer = lstmLayer;
-                            Logger.WriteLine("Create LSTM layer.");
-                            break;
-
-                        case LayerType.DropOut:
-                            DropoutLayerConfig dropoutLayerConfig = hiddenLayersConfig[i] as DropoutLayerConfig;
-                            dropoutLayerConfig.LayerSize = hiddenLayersConfig[i - 1].LayerSize;
-
-                            var dropoutLayer = new DropoutLayer(dropoutLayerConfig);
-                            layer = dropoutLayer;
-                            Logger.WriteLine("Create Dropout layer.");
-                            break;
-                    }
-
-                    layer.InitializeWeights(sparseFeatureSize,
-                        i == 0
-                            ? GetCurrentLayerDenseFeatureSize(TrainingSet.DenseFeatureSize)
-                            : GetCurrentLayerDenseFeatureSize(hiddenLayers[i - 1].LayerSize));
-
-                    Logger.WriteLine(
-                        $"Create hidden layer {i}: size = {layer.LayerSize}, sparse feature size = {layer.SparseFeatureSize}, dense feature size = {layer.DenseFeatureSize}");
-                    hiddenLayers.Add(layer);
-                }
-
-                SimpleLayer outputLayer = null;
-                outputLayerConfig.LayerSize = TrainingSet.TagSize;
-
-                switch (outputLayerConfig.LayerType)
-                {
-                    case LayerType.SampledSoftmax:
-                        Logger.WriteLine("Create sampled softmax layer as output layer");
-                        outputLayer = new SampledSoftmaxLayer(outputLayerConfig as SampledSoftmaxLayerConfig);
-                        outputLayer.InitializeWeights(0,
-                            GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
-                        break;
-
-                    case LayerType.Softmax:
-                        Logger.WriteLine("Create softmax layer as output layer.");
-                        outputLayer = new SoftmaxLayer(outputLayerConfig as SoftmaxLayerConfig);
-                        outputLayer.InitializeWeights(sparseFeatureSize,
-                            GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
-                        break;
-
-                    case LayerType.Simple:
-                        Logger.WriteLine("Create simple layer as output layer.");
-                        outputLayer = new SimpleLayer(outputLayerConfig as SimpleLayerConfig);
-                        outputLayer.InitializeWeights(sparseFeatureSize,
-                            GetCurrentLayerDenseFeatureSize(hiddenLayers[hiddenLayers.Count - 1].LayerSize));
-                        break;
-                }
-
-                rnn = new ForwardRNN<T>(hiddenLayers, outputLayer);
-            }
-            else
-            {
-                var forwardHiddenLayers = new List<SimpleLayer>();
-                var backwardHiddenLayers = new List<SimpleLayer>();
-                for (var i = 0; i < hiddenLayersConfig.Count; i++)
-                {
-                    SimpleLayer forwardLayer = null;
-                    SimpleLayer backwardLayer = null;
-                    switch (hiddenLayersConfig[i].LayerType)
-                    {
-                        case LayerType.LSTM:
-                            //For LSTM layer
-                            var forwardLSTMLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
-                            forwardLayer = forwardLSTMLayer;
-
-                            var backwardLSTMLayer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
-                            backwardLayer = backwardLSTMLayer;
-
-                            Logger.WriteLine("Create LSTM layer.");
-                            break;
-
-                        case LayerType.DropOut:
-                            DropoutLayerConfig dropoutLayerConfig = hiddenLayersConfig[i] as DropoutLayerConfig;
-                            dropoutLayerConfig.LayerSize = hiddenLayersConfig[i - 1].LayerSize * 2;
-
-                            var forwardDropoutLayer = new DropoutLayer(dropoutLayerConfig);
-                            forwardLayer = forwardDropoutLayer;
-                            var backwardDropoutLayer = new DropoutLayer(dropoutLayerConfig);
-                            backwardLayer = backwardDropoutLayer;
-
-                            Logger.WriteLine("Create Dropout layer.");
-                            break;
-                    }
-
-                    int denseFeatureSize = TrainingSet.DenseFeatureSize;
-                    if (i > 0)
-                    {
-                        denseFeatureSize = forwardHiddenLayers[i - 1].LayerSize * 2;
-                    }
-
-                    forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
-                    backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
-
-                    Logger.WriteLine(
-                        $"Create hidden layer {i}: size = {forwardLayer.LayerSize}, sparse feature size = {forwardLayer.SparseFeatureSize}, dense feature size = {forwardLayer.DenseFeatureSize}");
-
-                    forwardHiddenLayers.Add(forwardLayer);
-                    backwardHiddenLayers.Add(backwardLayer);
-                }
-
-                SimpleLayer outputLayer = null;
-                outputLayerConfig.LayerSize = TrainingSet.TagSize;
-                switch (outputLayerConfig.LayerType)
-                {
-                    case LayerType.SampledSoftmax:
-                        Logger.WriteLine("Create sampled Softmax layer as output layer.");
-                        outputLayer = new SampledSoftmaxLayer(outputLayerConfig as SampledSoftmaxLayerConfig);
-                        outputLayer.InitializeWeights(0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
-                        break;
-
-                    case LayerType.Softmax:
-                        Logger.WriteLine("Create Softmax layer as output layer.");
-                        outputLayer = new SoftmaxLayer(outputLayerConfig as SoftmaxLayerConfig);
-                        outputLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
-                            forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
-                        break;
-
-                    case LayerType.Simple:
-                        Logger.WriteLine("Create simple layer as output layer.");
-                        outputLayer = new SimpleLayer(outputLayerConfig as SimpleLayerConfig);
-                        outputLayer.InitializeWeights(TrainingSet.SparseFeatureSize,
-                            forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2);
-                        break;
-                }
-
-                rnn = new BiRNN<T>(forwardHiddenLayers, backwardHiddenLayers, outputLayer);
-            }
-
-            return rnn;
         }
     }
 }

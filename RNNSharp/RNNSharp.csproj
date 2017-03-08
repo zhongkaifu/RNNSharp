@@ -51,16 +51,19 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BiRNN.cs" />
+    <Compile Include="ISentence.cs" />
+    <Compile Include="Networks\BiRNN.cs" />
     <Compile Include="ConfigUtils.cs" />
-    <Compile Include="DropoutLayer.cs" />
+    <Compile Include="Layers\DropoutLayer.cs" />
     <Compile Include="Enums.cs" />
     <Compile Include="ISequence.cs" />
-    <Compile Include="SampledSoftmaxLayer.cs" />
-    <Compile Include="RNN.cs" />
-    <Compile Include="LSTMLayer.cs" />
+    <Compile Include="Layers\SampledSoftmaxLayer.cs" />
+    <Compile Include="Networks\BiRNNAvg.cs" />
+    <Compile Include="Networks\ForwardRNNSeq2Seq.cs" />
+    <Compile Include="Networks\RNN.cs" />
+    <Compile Include="Layers\LSTMLayer.cs" />
     <Compile Include="ModelSetting.cs" />
-    <Compile Include="FowardRNN.cs" />
+    <Compile Include="Networks\FowardRNN.cs" />
     <Compile Include="RNNHelper.cs" />
     <Compile Include="DataSet.cs" />
     <Compile Include="RNNDecoder.cs" />
@@ -73,8 +76,8 @@
     <Compile Include="SentencePair.cs" />
     <Compile Include="Sequence.cs" />
     <Compile Include="SequencePair.cs" />
-    <Compile Include="SimpleLayer.cs" />
-    <Compile Include="SoftmaxLayer.cs" />
+    <Compile Include="Layers\SimpleLayer.cs" />
+    <Compile Include="Layers\SoftmaxLayer.cs" />
     <Compile Include="TagSet.cs" />
     <Compile Include="SparseVector.cs" />
     <Compile Include="State.cs" />
@@ -85,6 +88,7 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

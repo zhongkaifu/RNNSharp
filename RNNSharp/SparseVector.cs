@@ -48,5 +48,11 @@ namespace RNNSharp
                 kvData.Add(pair);
             }
         }
+
+        public void Clean()
+        {
+            kvData.Clear();
+            length = 0;
+        }
     }
 }

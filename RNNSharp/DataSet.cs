@@ -36,6 +36,23 @@ namespace RNNSharp
             }
         }
 
+
+        public List<DataSet<T>> Split(int n)
+        {
+            List<DataSet<T>> dataSets = new List<DataSet<T>>();
+            for (int i = 0; i < n; i++)
+            {
+                dataSets.Add(new DataSet<T>(TagSize));
+            }
+
+            for (int i = 0; i < SequenceList.Count; i++)
+            {
+                dataSets[i % n].SequenceList.Add(SequenceList[i]);
+            }
+
+            return dataSets;
+        }
+
         public void BuildLabelBigramTransition(float smooth = 1.0f)
         {
             CRFLabelBigramTransition = new List<List<float>>();

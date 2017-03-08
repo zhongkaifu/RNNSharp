@@ -1,5 +1,6 @@
 ﻿using AdvUtils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -62,9 +63,6 @@ namespace RNNSharp
 
     public class Config
     {
-        //Settings for model type
-        private static readonly string MODEL_TYPE = "MODEL_TYPE";
-
         //Settings for current directory
         private static readonly string CURRENT_DIRECTORY = "CURRENT_DIRECTORY";
 
@@ -109,7 +107,9 @@ namespace RNNSharp
         private static readonly string SEQ2SEQ_AUTOENCODER_CONFIG = "SEQ2SEQ_AUTOENCODER_CONFIG";
 
         //Settings for model direction type
-        private static readonly string MODEL_DIRECTION = "MODEL_DIRECTION";
+        private static readonly string NETWORK_TYPE = "NETWORK_TYPE";
+
+        private static readonly string MAX_SEQUENCE_LENGTH = "MAX_SEQUENCE_LENGTH";
 
         //Raw configuration
         private static ConfigUtils config;
@@ -128,6 +128,7 @@ namespace RNNSharp
         public int SparseFeatureSize;
         private TFEATURE_WEIGHT_TYPE_ENUM tFeatureWeightType;
         private TemplateFeaturizer tFeaturizer;
+        public int MaxSequenceLength = 1024;
 
         public Config(string strFeatureConfigFileName, TagSet tagSet)
         {
@@ -137,11 +138,10 @@ namespace RNNSharp
         }
 
         public TagSet TagSet { get; set; }
-        public MODELTYPE ModelType { get; set; }
         private string currentDirectory { get; set; }
         public List<LayerConfig> HiddenLayersConfig { get; set; }
         public string ModelFilePath { get; set; }
-        public MODELDIRECTION ModelDirection { get; set; }
+        public NETWORKTYPE NetworkType { get; set; }
 
         private string GetFilePath(string currentDirectory, string filePath)
         {
@@ -176,26 +176,43 @@ namespace RNNSharp
                 IsCRFTraining = bool.Parse(isCRFTraining);
             }
 
+            var maxSeqLength = config.GetValueOptional(MAX_SEQUENCE_LENGTH);
+            if (String.IsNullOrEmpty(maxSeqLength) == false)
+            {
+                MaxSequenceLength = int.Parse(maxSeqLength);
+            }
+
+            //Load network type
+            string networkType = config.GetValueRequired(NETWORK_TYPE);
+            if (networkType.Equals(NETWORKTYPE.Forward.ToString(), StringComparison.InvariantCultureIgnoreCase))
+            {
+                NetworkType = NETWORKTYPE.Forward;
+            }
+            else if (networkType.Equals(NETWORKTYPE.ForwardSeq2Seq.ToString(), StringComparison.InvariantCultureIgnoreCase))
+            {
+                NetworkType = NETWORKTYPE.ForwardSeq2Seq;
+            }
+            else if (networkType.Equals(NETWORKTYPE.BiDirectional.ToString(), StringComparison.InvariantCultureIgnoreCase))
+            {
+                NetworkType = NETWORKTYPE.BiDirectional;
+            }
+            else if (networkType.Equals(NETWORKTYPE.BiDirectionalAverage.ToString(), StringComparison.InvariantCultureIgnoreCase))
+            {
+                NetworkType = NETWORKTYPE.BiDirectionalAverage;
+            }
+            else
+            {
+                throw new ArgumentException($"Invalidated network type: {networkType}");
+            }
+            Logger.WriteLine($"Network type: {NetworkType}");
+
             SetHiddenLayers();
             SetOutputLayers();
             SetPretrainedModel();
             SetTFeatures();
 
-            //Load model type
-            ModelType = config.GetValueRequired(MODEL_TYPE)
-                .Equals(MODELTYPE.SeqLabel.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                ? MODELTYPE.SeqLabel
-                : MODELTYPE.Seq2Seq;
-            Logger.WriteLine($"Model type: {ModelType}");
-
-            ModelDirection = config.GetValueRequired(MODEL_DIRECTION)
-                .Equals(MODELDIRECTION.Forward.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                ? MODELDIRECTION.Forward
-                : MODELDIRECTION.BiDirectional;
-            Logger.WriteLine($"Model direction: {ModelDirection}");
-
             //Load auto-encoder model for sequence-to-sequence. This model is used to encode source sequence
-            if (ModelType == MODELTYPE.Seq2Seq)
+            if (NetworkType == NETWORKTYPE.ForwardSeq2Seq)
             {
                 var seqAutoEncoderConfigFilePath = GetFilePath(currentDirectory,
                     config.GetValueRequired(SEQ2SEQ_AUTOENCODER_CONFIG));
@@ -211,12 +228,7 @@ namespace RNNSharp
 
         private void CheckSettings()
         {
-            if (ModelDirection == MODELDIRECTION.BiDirectional && ModelType == MODELTYPE.Seq2Seq)
-            {
-                throw new Exception("Bi-directional RNN model doesn't support sequence-to-sequence model.");
-            }
-
-            if (IsRunTimeFeatureUsed() && ModelDirection == MODELDIRECTION.BiDirectional)
+            if (IsRunTimeFeatureUsed() && (NetworkType == NETWORKTYPE.BiDirectional || NetworkType == NETWORKTYPE.BiDirectionalAverage))
             {
                 throw new Exception("Run time feature is not available for bi-directional model.");
             }
@@ -390,6 +402,7 @@ namespace RNNSharp
                     case LayerType.DropOut:
                         {
                             var layerConfig = new DropoutLayerConfig { DropoutRatio = float.Parse(items[1])};
+                            layerConfig.LayerSize = (NetworkType == NETWORKTYPE.BiDirectional) ? HiddenLayersConfig[HiddenLayersConfig.Count - 1].LayerSize * 2 : HiddenLayersConfig[HiddenLayersConfig.Count - 1].LayerSize;
                             layerConfig.LayerType = layerType;
                             baseLayerConfig = layerConfig;
                             Logger.WriteLine(
@@ -570,7 +583,7 @@ namespace RNNSharp
             return new SingleVector();
         }
 
-        public SequencePair ExtractFeatures(SentencePair sentence)
+        public SequencePair BuildSequence(SentencePair sentence)
         {
             var sPair = new SequencePair
             {

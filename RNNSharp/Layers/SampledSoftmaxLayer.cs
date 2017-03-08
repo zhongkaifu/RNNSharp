@@ -12,9 +12,11 @@ namespace RNNSharp
         private readonly int NegativeSampleSize = 10;
         public HashSet<int> negativeSampleWordList = new HashSet<int>();
         public Random rand = new Random();
+        SampledSoftmaxLayerConfig config;
 
         public SampledSoftmaxLayer(SampledSoftmaxLayerConfig config) : base(config)
         {
+            this.config = config;
             NegativeSampleSize = config.NegativeSampleSize;
             if (NegativeSampleSize > LayerSize)
             {
@@ -22,6 +24,16 @@ namespace RNNSharp
                     $"The size of negative sampling('{NegativeSampleSize}') cannot be greater than the hidden layer size('{LayerSize}').");
             }
         }
+
+        public override SimpleLayer CreateLayerSharedWegiths()
+        {
+            SampledSoftmaxLayer layer = new SampledSoftmaxLayer(config);
+            ShallowCopyWeightTo(layer);
+            layer.InitializeInternalTrainingParameters();
+
+            return layer;
+        }
+
 
         public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
@@ -54,7 +66,8 @@ namespace RNNSharp
                 {
                     //Apply sparse features
                     SparseFeature = sparseFeature;
-                    Parallel.ForEach(negativeSampleWordList, b =>
+
+                    foreach(var b in negativeSampleWordList)
                     {
                         float score = 0;
                         var vector_b = SparseWeights[b];
@@ -63,7 +76,7 @@ namespace RNNSharp
                             score += pair.Value * vector_b[pair.Key];
                         }
                         Cells[b] += score;
-                    });
+                    }
                 }
 
                 //Softmax
@@ -113,7 +126,7 @@ namespace RNNSharp
             if (DenseFeatureSize > 0)
             {
                 //Update hidden-output weights
-                Parallel.ForEach(negativeSampleWordList, c =>
+                foreach (var c in negativeSampleWordList)
                 {
                     var err = Errs[c];
                     var featureWeightCol = DenseWeights[c];
@@ -121,8 +134,8 @@ namespace RNNSharp
                     var j = 0;
                     while (j < DenseFeatureSize - Vector<float>.Count)
                     {
-                        RNNHelper.UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol,
-                            err, j);
+                        UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol,
+                            err, j, c);
                         j += Vector<float>.Count;
                     }
 
@@ -130,16 +143,18 @@ namespace RNNSharp
                     {
                         var delta = RNNHelper.NormalizeGradient(err * DenseFeature[j]);
                         var newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, c, j, delta);
-                        featureWeightCol[j] += newLearningRate * delta;
+
+                        RNNHelper.LockFreeAdd(featureWeightCol, j, newLearningRate * delta);
+
                         j++;
                     }
-                });
+                }
             }
 
             if (SparseFeatureSize > 0)
             {
                 //Update hidden-output weights
-                Parallel.ForEach(negativeSampleWordList, c =>
+                foreach (var c in negativeSampleWordList)
                 {
                     var er2 = Errs[c];
                     var vector_c = SparseWeights[c];
@@ -149,9 +164,10 @@ namespace RNNSharp
                         var val = pair.Value;
                         var delta = RNNHelper.NormalizeGradient(er2 * val);
                         var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
-                        vector_c[pos] += newLearningRate * delta;
+
+                        RNNHelper.LockFreeAdd(vector_c, pos, newLearningRate * delta);
                     }
-                });
+                }
             }
         }
 

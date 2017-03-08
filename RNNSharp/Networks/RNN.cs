@@ -5,32 +5,25 @@ using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
 
-namespace RNNSharp
+namespace RNNSharp.Networks
 {
     public abstract class RNN<T> where T : ISequence
     {
         protected Matrix<float> CRFSeqOutput;
-        public double logp;
-        protected double minTknErrRatio = double.MaxValue;
-
-        protected ParallelOptions parallelOption = new ParallelOptions();
         public virtual bool IsCRFTraining { get; set; }
         public virtual bool bVQ { get; set; }
-
-        public virtual int MaxIter { get; set; }
-        public virtual long SaveStep { get; set; }
         public Matrix<float> CRFTagTransWeights { get; set; }
-
         public SimpleLayer OutputLayer { get; set; }
+
+        public int MaxSeqLength = 1024;
+
+        public abstract void CreateNetwork(List<LayerConfig> hiddenLayersConfig, LayerConfig outputLayerConfig, DataSet<T> TrainingSet, Config featurizer);
 
         public abstract int[] ProcessSequenceCRF(Sequence pSequence, RunningMode runningMode);
 
-        public abstract int[] ProcessSequence(Sequence pSequence, RunningMode runningMode, bool outputRawScore,
-            out Matrix<float> m);
+        public abstract int[] ProcessSequence(ISequence sequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m);
 
-        public abstract int[] ProcessSeq2Seq(SequencePair pSequence, RunningMode runningMode);
-
-        public abstract int[] TestSeq2Seq(Sentence srcSentence, Config featurizer);
+        public abstract int[] ProcessSequence(ISentence sentence, Config featurizer, RunningMode runningMode, bool outputRawScore, out Matrix<float> m);
 
         public abstract void CleanStatus();
 
@@ -43,6 +36,81 @@ namespace RNNSharp
         public abstract int GetTopHiddenLayerSize();
 
         public abstract RNN<T> Clone();
+
+        public static RNN<T> CreateRNN(NETWORKTYPE networkType)
+        {
+            RNN<T> rnn = null;
+            switch (networkType)
+            {
+                case NETWORKTYPE.Forward:
+                    rnn = new ForwardRNN<T>();
+                    break;
+                case NETWORKTYPE.ForwardSeq2Seq:
+                    rnn = new ForwardRNNSeq2Seq<T>();
+                    break;
+                case NETWORKTYPE.BiDirectional:
+                    rnn = new BiRNN<T>();
+                    break;
+                case NETWORKTYPE.BiDirectionalAverage:
+                    rnn = new BiRNNAvg<T>();
+                    break;
+
+            }
+            return rnn;
+        }
+
+        protected SimpleLayer CreateOutputLayer(LayerConfig outputLayerConfig, int sparseFeatureSize, int denseFeatureSize)
+        {
+            SimpleLayer outputLayer = null;
+            switch (outputLayerConfig.LayerType)
+            {
+                case LayerType.SampledSoftmax:
+                    Logger.WriteLine("Create sampled softmax layer as output layer");
+                    outputLayer = new SampledSoftmaxLayer(outputLayerConfig as SampledSoftmaxLayerConfig);
+                    outputLayer.InitializeWeights(0, denseFeatureSize);
+                    break;
+
+                case LayerType.Softmax:
+                    Logger.WriteLine("Create softmax layer as output layer.");
+                    outputLayer = new SoftmaxLayer(outputLayerConfig as SoftmaxLayerConfig);
+                    outputLayer.InitializeWeights(sparseFeatureSize, denseFeatureSize);
+                    break;
+
+                case LayerType.Simple:
+                    Logger.WriteLine("Create simple layer as output layer.");
+                    outputLayer = new SimpleLayer(outputLayerConfig as SimpleLayerConfig);
+                    outputLayer.InitializeWeights(sparseFeatureSize, denseFeatureSize);
+                    break;
+            }
+            outputLayer.LabelShortList = new List<int>();
+
+            return outputLayer;
+        }
+
+        protected virtual List<SimpleLayer> CreateLayers(List<LayerConfig> hiddenLayersConfig)
+        {
+            var hiddenLayers = new List<SimpleLayer>();
+            for (var i = 0; i < hiddenLayersConfig.Count; i++)
+            {
+                SimpleLayer layer = null;
+                switch (hiddenLayersConfig[i].LayerType)
+                {
+                    case LayerType.LSTM:
+                        layer = new LSTMLayer(hiddenLayersConfig[i] as LSTMLayerConfig);
+                        Logger.WriteLine("Create LSTM layer.");
+                        break;
+
+                    case LayerType.DropOut:
+                        layer = new DropoutLayer(hiddenLayersConfig[i] as DropoutLayerConfig);
+                        Logger.WriteLine("Create Dropout layer.");
+                        break;
+                }
+
+                hiddenLayers.Add(layer);
+            }
+
+            return hiddenLayers;
+        }
 
         public void SetRuntimeFeatures(State state, int curState, int numStates, int[] predicted, bool forward = true)
         {
@@ -73,8 +141,7 @@ namespace RNNSharp
             var betaSet = new double[numStates][];
             var OutputLayerSize = OutputLayer.LayerSize;
 
-            Parallel.Invoke(() =>
-            {
+
                 for (var i = 0; i < numStates; i++)
                 {
                     alphaSet[i] = new double[OutputLayerSize];
@@ -95,9 +162,7 @@ namespace RNNSharp
                         alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
                     }
                 }
-            },
-                () =>
-                {
+
                     //backward
                     for (var i = numStates - 1; i >= 0; i--)
                     {
@@ -119,7 +184,7 @@ namespace RNNSharp
                             betaSet[i][j] = dscore0 + m_RawOutput[i][j];
                         }
                     }
-                });
+
 
             //Z_
             double Z_ = 0.0f;
@@ -284,200 +349,13 @@ namespace RNNSharp
             }
         }
 
-        public double TrainNet(DataSet<T> trainingSet, int iter)
-        {
-            var start = DateTime.Now;
-            Logger.WriteLine("Iter " + iter + " begins with learning rate alpha = " + RNNHelper.LearningRate + " ...");
-
-            //Initialize varibles
-            logp = 0;
-
-            //Shffle training corpus
-            trainingSet.Shuffle();
-
-            var numSequence = trainingSet.SequenceList.Count;
-            var wordCnt = 0;
-            var tknErrCnt = 0;
-            var sentErrCnt = 0;
-            Logger.WriteLine("Progress = 0/" + numSequence / 1000.0 + "K\r");
-            for (var curSequence = 0; curSequence < numSequence; curSequence++)
-            {
-                var pSequence = trainingSet.SequenceList[curSequence];
-
-                if (pSequence is Sequence)
-                {
-                    wordCnt += (pSequence as Sequence).States.Length;
-                }
-                else
-                {
-                    wordCnt += (pSequence as SequencePair).tgtSequence.States.Length;
-                }
-
-                int[] predicted;
-                if (IsCRFTraining)
-                {
-                    predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Training);
-                }
-                else if (pSequence is SequencePair)
-                {
-                    predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Training);
-                }
-                else
-                {
-                    Matrix<float> m;
-                    predicted = ProcessSequence(pSequence as Sequence, RunningMode.Training, false, out m);
-                }
-
-                int newTknErrCnt;
-
-                if (pSequence is Sequence)
-                {
-                    newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
-                }
-                else
-                {
-                    newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
-                }
-
-                tknErrCnt += newTknErrCnt;
-                if (newTknErrCnt > 0)
-                {
-                    sentErrCnt++;
-                }
-
-                if ((curSequence + 1) % 1000 == 0)
-                {
-                    Logger.WriteLine("Progress = {0} ", (curSequence + 1) / 1000 + "K/" + numSequence / 1000.0 + "K");
-                    Logger.WriteLine(" Train cross-entropy = {0} ", -logp / Math.Log10(2.0) / wordCnt);
-                    Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)wordCnt * 100.0);
-                    Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)curSequence * 100.0);
-                }
-
-                if (SaveStep > 0 && (curSequence + 1) % SaveStep == 0)
-                {
-                    //After processed every m_SaveStep sentences, save current model into a temporary file
-                    Logger.WriteLine("Saving temporary model into file...");
-                    SaveModel("model.tmp");
-                }
-            }
-
-            var now = DateTime.Now;
-            var duration = now.Subtract(start);
-
-            var entropy = -logp / Math.Log10(2.0) / wordCnt;
-            var ppl = exp_10(-logp / wordCnt);
-            Logger.WriteLine("Iter " + iter + " completed");
-            Logger.WriteLine("Sentences = " + numSequence + ", time escape = " + duration + "s, speed = " +
-                             numSequence / duration.TotalSeconds);
-            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy +
-                             ", perplexity = " + ppl);
-
-            return ppl;
-        }
-
-        public double exp_10(double num)
-        {
-            return Math.Exp(num * 2.302585093);
-        }
-
-        public bool ValidateNet(DataSet<T> validationSet, int iter)
-        {
-            Logger.WriteLine("Start validation ...");
-            var wordcn = 0;
-            var tknErrCnt = 0;
-            var sentErrCnt = 0;
-
-            //Initialize varibles
-            logp = 0;
-            var numSequence = validationSet.SequenceList.Count;
-            for (var curSequence = 0; curSequence < numSequence; curSequence++)
-            {
-                var pSequence = validationSet.SequenceList[curSequence];
-                if (pSequence is Sequence)
-                {
-                    wordcn += (pSequence as Sequence).States.Length;
-                }
-                else
-                {
-                    wordcn += (pSequence as SequencePair).tgtSequence.States.Length;
-                }
-
-                int[] predicted;
-                if (IsCRFTraining)
-                {
-                    predicted = ProcessSequenceCRF(pSequence as Sequence, RunningMode.Validate);
-                }
-                else if (pSequence is SequencePair)
-                {
-                    predicted = ProcessSeq2Seq(pSequence as SequencePair, RunningMode.Validate);
-                }
-                else
-                {
-                    Matrix<float> m;
-                    predicted = ProcessSequence(pSequence as Sequence, RunningMode.Validate, false, out m);
-                }
-
-                int newTknErrCnt;
-                if (pSequence is Sequence)
-                {
-                    newTknErrCnt = GetErrorTokenNum(pSequence as Sequence, predicted);
-                }
-                else
-                {
-                    newTknErrCnt = GetErrorTokenNum((pSequence as SequencePair).tgtSequence, predicted);
-                }
-
-                tknErrCnt += newTknErrCnt;
-                if (newTknErrCnt > 0)
-                {
-                    sentErrCnt++;
-                }
-            }
-
-            var entropy = -logp / Math.Log10(2.0) / wordcn;
-            var ppl = exp_10(-logp / wordcn);
-            var tknErrRatio = tknErrCnt / (double)wordcn * 100.0;
-            var sentErrRatio = sentErrCnt / (double)numSequence * 100.0;
-
-            Logger.WriteLine("In validation: error token ratio = {0}% error sentence ratio = {1}%", tknErrRatio,
-                sentErrRatio);
-            Logger.WriteLine("In training: log probability = " + logp + ", cross-entropy = " + entropy +
-                             ", perplexity = " + ppl);
-            Logger.WriteLine("");
-
-            var bUpdate = false;
-            if (tknErrRatio < minTknErrRatio)
-            {
-                //We have better result on validated set, save this model
-                bUpdate = true;
-                minTknErrRatio = tknErrRatio;
-            }
-
-            return bUpdate;
-        }
-
-        private int GetErrorTokenNum(Sequence seq, int[] predicted)
-        {
-            var tknErrCnt = 0;
-            var numStates = seq.States.Length;
-            for (var curState = 0; curState < numStates; curState++)
-            {
-                if (predicted[curState] != seq.States[curState].Label)
-                {
-                    tknErrCnt++;
-                }
-            }
-
-            return tknErrCnt;
-        }
-
-        public int[][] DecodeNBestCRF(Sequence seq, int N)
+        public int[][] DecodeNBestCRF(Sentence sent, Config config, int N)
         {
             //ys contains the output of RNN for each word
             Matrix<float> ys;
-            ProcessSequence(seq, RunningMode.Test, true, out ys);
+            ProcessSequence(sent, config, RunningMode.Test, true, out ys);
 
-            var n = seq.States.Length;
+            var n = sent.TokensList.Count;
             var K = OutputLayer.LayerSize;
             var STP = CRFTagTransWeights;
             var vPath = new PAIR<int, int>[n, K, N];
@@ -562,23 +440,18 @@ namespace RNNSharp
             return vTagOutput;
         }
 
-        public int[] DecodeNN(Sequence seq)
+        public int[] DecodeNN(Sentence sent, Config config)
         {
             Matrix<float> ys;
-            return ProcessSequence(seq, RunningMode.Test, false, out ys);
+            return ProcessSequence(sent, config, RunningMode.Test, false, out ys);
         }
 
-        public int[] DecodeSeq2Seq(Sentence srcSent, Config feature)
-        {
-            return TestSeq2Seq(srcSent, feature);
-        }
-
-        public int[] DecodeCRF(Sequence seq)
+        public int[] DecodeCRF(Sentence sent, Config config)
         {
             //ys contains the output of RNN for each word
             Matrix<float> ys;
-            ProcessSequence(seq, RunningMode.Test, true, out ys);
-            return Viterbi(ys, seq.States.Length);
+            ProcessSequence(sent, config, RunningMode.Test, true, out ys);
+            return Viterbi(ys, sent.TokensList.Count);
         }
 
         public static SimpleLayer Load(LayerType layerType, BinaryReader br)

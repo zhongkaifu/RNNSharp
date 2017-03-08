@@ -1,6 +1,6 @@
 ﻿namespace RNNSharp
 {
-    public class SentencePair
+    public class SentencePair :ISentence
     {
         public Sentence srcSentence;
         public Sentence tgtSentence;

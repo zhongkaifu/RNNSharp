@@ -216,7 +216,7 @@ namespace RNNSharpConsole
                     break;
                 }
 
-                var seq = featurizer.ExtractFeatures(sentPair);
+                var seq = featurizer.BuildSequence(sentPair);
                 if (seq.tgtSequence.SetLabel(sentPair.tgtSentence, featurizer.TagSet))
                 {
                     dataSet.SequenceList.Add(seq);
@@ -388,26 +388,27 @@ namespace RNNSharpConsole
                 if (nBest == 1)
                 {
                     //Output decoded result
-                    if (decoder.ModelType == MODELTYPE.SeqLabel)
+                    var output = decoder.Process(sent);
+                    if (decoder.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
                     {
                         //Append the decoded result into the end of feature set of each token
-                        var output = decoder.Process(sent);
-                        var sb = new StringBuilder();
-                        for (var i = 0; i < sent.TokensList.Count; i++)
+                        if (output != null)
                         {
-                            var tokens = string.Join("\t", sent.TokensList[i]);
-                            sb.Append(tokens);
-                            sb.Append("\t");
-                            sb.Append(tagSet.GetTagName(output[i]));
-                            sb.AppendLine();
+                            var sb = new StringBuilder();
+                            for (var i = 0; i < sent.TokensList.Count; i++)
+                            {
+                                var tokens = string.Join("\t", sent.TokensList[i]);
+                                sb.Append(tokens);
+                                sb.Append("\t");
+                                sb.Append(tagSet.GetTagName(output[i]));
+                                sb.AppendLine();
+                            }
+                            sw.WriteLine(sb.ToString());
                         }
-
-                        sw.WriteLine(sb.ToString());
                     }
                     else
                     {
                         //Print out source sentence at first, and then generated result sentence
-                        var output = decoder.ProcessSeq2Seq(sent);
                         var sb = new StringBuilder();
                         for (var i = 0; i < sent.TokensList.Count; i++)
                         {
@@ -513,7 +514,7 @@ namespace RNNSharpConsole
                 return;
             }
 
-            if (config.ModelType == MODELTYPE.SeqLabel)
+            if (config.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
             {
                 //Create RNN encoder and save necessary parameters
                 var encoder = new RNNEncoder<Sequence>(RNNConfig, config)

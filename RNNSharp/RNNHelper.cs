@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RNNSharp
@@ -51,28 +52,7 @@ namespace RNNSharp
             return v;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void UpdateFeatureWeights(float[] feature, float[] featureWeight, float[] learningRateWeight,
-            float err, int idx)
-        {
-            //Computing error delta
-            var vecDenseFeature = new Vector<float>(feature, idx);
-            var vecDelta = vecDenseFeature * err;
-
-            vecDelta = NormalizeGradient(vecDelta);
-
-            //Computing learning rate
-            var vecDenseWeightLearningRateCol = new Vector<float>(learningRateWeight, idx);
-            vecDenseWeightLearningRateCol += vecDelta * vecDelta;
-            vecDenseWeightLearningRateCol.CopyTo(learningRateWeight, idx);
-
-            var vecNewLearningRate = vecNormalLearningRate /
-                                     (Vector<float>.One + Vector.SquareRoot(vecDenseWeightLearningRateCol));
-
-            var vecVector_C = new Vector<float>(featureWeight, idx);
-            vecVector_C += vecNewLearningRate * vecDelta;
-            vecVector_C.CopyTo(featureWeight, idx);
-        }
+       
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector<float> UpdateLearningRate(Vector<float> vecDelta, ref Vector<float> vecLearningRateWeights)
@@ -161,30 +141,44 @@ namespace RNNSharp
             }
         }
 
-        public static float[] ConcatenateVector(VectorBase src1, float[] src2)
+        public static void LockFreeAdd(float[] expected, long exp_offset, float addValue)
         {
-            var dest = new float[src1.Length + src2.Length];
-            Parallel.Invoke(() => { src1.CopyTo().CopyTo(dest, 0); }
-                ,
-                () => { src2.CopyTo(dest, src1.Length); });
-
-            return dest;
+            float initialValue;
+            float newValue;
+            do
+            {
+                initialValue = expected[exp_offset]; // read current value
+                newValue = initialValue + addValue;  //calculate new value
+            }
+            while (initialValue != Interlocked.CompareExchange(ref expected[exp_offset], newValue, initialValue));
         }
 
-        public static float[] ConcatenateVector(float[] src1, float[] src2)
+        public static void LockFreeAssign(float[] expected, long exp_offset, float value)
         {
-            var dest = new float[src1.Length + src2.Length];
-            Parallel.Invoke(() => { src1.CopyTo(dest, 0); }
-                ,
-                () => { src2.CopyTo(dest, src1.Length); });
+            float initialValue;
+            do
+            {
+                initialValue = expected[exp_offset]; // read current value
+            }
+            while (initialValue != Interlocked.CompareExchange(ref expected[exp_offset], value, initialValue));
+        }
 
-            return dest;
+        public static void LockFreeAdd(ref double src, double addValue)
+        {
+            double initialValue;
+            double newValue;
+            do
+            {
+                initialValue = src;
+                newValue = src + addValue;
+            }
+            while (initialValue != Interlocked.CompareExchange(ref src, newValue, initialValue));
         }
 
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             int SrcSize)
         {
-            Parallel.For(0, DestSize, i =>
+            for (var i = 0;i < DestSize;i++)
             {
                 var vector_i = srcmatrix[i];
                 float cellOutput = 0;
@@ -206,13 +200,13 @@ namespace RNNSharp
                 }
 
                 dest[i] = cellOutput;
-            });
+            }
         }
 
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, 
             int SrcSize)
         {
-            Parallel.For(0, DestSize, i =>
+            for (var i = 0;i <DestSize;i++)
             {
                 float er = 0;
                 for (var j = 0; j < SrcSize; j++)
@@ -221,7 +215,7 @@ namespace RNNSharp
                 }
 
                 dest[i] = NormalizeGradient(er);
-            });
+            }
         }
 
         public static Matrix<float> LoadMatrix(BinaryReader br)
@@ -267,7 +261,7 @@ namespace RNNSharp
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
             HashSet<int> setSkipSampling, int SrcSize)
         {
-            Parallel.ForEach(setSkipSampling, i =>
+            foreach(var i in setSkipSampling)
             {
                 float cellOutput = 0;
                 var vector_i = srcmatrix[i];
@@ -288,13 +282,13 @@ namespace RNNSharp
                 }
 
                 dest[i] = cellOutput;
-            });
+            }
         }
 
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
             HashSet<int> setSkipSampling, int SrcSize)
         {
-            Parallel.ForEach(setSkipSampling, i =>
+            foreach(var i in setSkipSampling)
             {
                 float er = 0;
                 for (var j = 0; j < SrcSize; j++)
@@ -303,18 +297,18 @@ namespace RNNSharp
                 }
 
                 dest[i] = NormalizeGradient(er);
-            });
+            }
         }
 
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             HashSet<int> setSkipSampling)
         {
-            Parallel.For(0, DestSize, i =>
+            for (var i = 0;i <DestSize;i++)
             {
                 var er = setSkipSampling.Sum(j => srcvec[j] * srcmatrix[j][i]);
 
                 dest[i] = NormalizeGradient(er);
-            });
+            }
         }
     }
 }
