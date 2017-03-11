@@ -37,19 +37,6 @@ namespace RNNSharp
         public DataSet<T> TrainingSet { get; set; }
         public DataSet<T> ValidationSet { get; set; }
 
-        private int GetCurrentLayerDenseFeatureSize(int inputDenseFeatureSize)
-        {
-            //If current training is for sequence-to-sequence, we append features from source sequence to standard features.
-            if (networkType == NETWORKTYPE.ForwardSeq2Seq)
-            {
-                //[Dense feature set of each state in target sequence][Dense feature set of entire source sequence]
-                inputDenseFeatureSize += featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
-            }
-
-            return inputDenseFeatureSize;
-        }
-
-
         int processedSequence = 0;
         int processedWordCnt = 0;
         int tknErrCnt = 0;

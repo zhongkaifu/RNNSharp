@@ -19,10 +19,6 @@ namespace RNNSharp
         protected ParallelOptions parallelOption = new ParallelOptions();
         public object[] locker;
 
-        //  public float[][] delta;
-        //    public object glocker;
-
-
         public LSTMGateWeight CloneSharedWeights()
         {
             LSTMGateWeight gateWeight = new LSTMGateWeight();
@@ -30,7 +26,6 @@ namespace RNNSharp
             gateWeight.weights = weights;
             gateWeight.learningRate = learningRate;
             gateWeight.locker = locker;
-      //      gateWeight.glocker = glocker;
 
             return gateWeight;
         }
@@ -64,16 +59,13 @@ namespace RNNSharp
 
         public void InitInternaTrainingParameters(bool hasDeri = true)
         {
-            locker = new object[layerSize];
-            for (var i = 0; i < layerSize; i++)
+            if (learningRate == null)
             {
-                locker[i] = new object();
-            }
-
-            learningRate = new float[layerSize][];
-            for (var i = 0; i < layerSize; i++)
-            {
-                learningRate[i] = new float[denseFeatureSize];
+                learningRate = new float[layerSize][];
+                for (var i = 0; i < layerSize; i++)
+                {
+                    learningRate[i] = new float[denseFeatureSize];
+                }
             }
 
             if (hasDeri)
@@ -85,49 +77,15 @@ namespace RNNSharp
                 }
             }
 
-            //     glocker = new object();
-            //delta = new float[layerSize][];
-            //for (var i = 0; i < layerSize; i++)
-            //{
-            //    delta[i] = new float[denseFeatureSize];
-            //}
-
-
+            if (locker == null)
+            {
+                locker = new object[layerSize];
+                for (var i = 0; i < layerSize; i++)
+                {
+                    locker[i] = new object();
+                }
+            }
         }
-
-        //public void FlushDelta()
-        //{
-        //    lock (glocker)
-        //    {
-        //        for (var i = 0; i < layerSize; i++)
-        //        {
-        //            var j = 0;
-        //            float[] delta_i = delta[i];
-        //            float[] weights_i = weights[i];
-        //            while (j < denseFeatureSize - Vector<float>.Count)
-        //            {
-        //                Vector<float> vecDelta = new Vector<float>(delta_i, j);
-        //                Vector<float> vecWeights = new Vector<float>(weights_i, j);
-
-        //                vecWeights += vecDelta;
-        //                vecWeights.CopyTo(weights_i, j);
-
-        //                vecDelta = new Vector<float>(0);
-        //                vecDelta.CopyTo(delta_i, j);
-
-        //                j += Vector<float>.Count;
-        //            }
-
-        //            while (j < denseFeatureSize)
-        //            {
-        //                weights_i[j] += delta_i[j];
-        //                delta_i[j] = 0;
-
-        //                j++;
-        //            }
-        //        }
-        //    }
-        //}
     }
 
     public class LSTMNeuron : Neuron
@@ -156,8 +114,10 @@ namespace RNNSharp
         //Z - wInputCell
         //W - wInputOutputGate
         protected Vector4[][] sparseFeatureWeights;
-        protected Vector3[][] sparseFeatureToHiddenDeri;
+      //  protected Vector3[][] sparseFeatureToHiddenDeri;
         protected Vector4[][] sparseFeatureToHiddenLearningRate;
+
+        protected Dictionary<int, Vector3>[] sparseFeatureToHiddenDeri;
 
 
         private Vector4 vecMaxGrad;
@@ -186,7 +146,6 @@ namespace RNNSharp
         {
             LSTMLayer layer = new LSTMLayer(config);
             ShallowCopyWeightTo(layer);
-            layer.InitializeInternalTrainingParameters();
 
             return layer;
         }
@@ -236,19 +195,37 @@ namespace RNNSharp
             layer.CellWeights = CellWeights;
 
             layer.lockerDenseFeature = lockerDenseFeature;
-            layer.locakerSparseFeature = locakerSparseFeature;
+            layer.lockerSparseFeature = lockerSparseFeature;
+
+            layer.InitializeInternalTrainingParameters();
         }
 
         public override void InitializeInternalTrainingParameters()
         {
             if (SparseFeatureSize > 0)
             {
-                sparseFeatureToHiddenDeri = new Vector3[LayerSize][];
-                sparseFeatureToHiddenLearningRate = new Vector4[LayerSize][];
+                //sparseFeatureToHiddenDeri = new Vector3[LayerSize][];
+                //for (var i = 0; i < LayerSize; i++)
+                //{
+                //    sparseFeatureToHiddenDeri[i] = new Vector3[SparseFeatureSize];
+                //}
+
+                sparseFeatureToHiddenDeri = new Dictionary<int, Vector3>[LayerSize];
                 for (var i = 0; i < LayerSize; i++)
                 {
-                    sparseFeatureToHiddenDeri[i] = new Vector3[SparseFeatureSize];
-                    sparseFeatureToHiddenLearningRate[i] = new Vector4[SparseFeatureSize];
+                    sparseFeatureToHiddenDeri[i] = new Dictionary<int, Vector3>();
+                }
+            }
+
+            if (sparseFeatureToHiddenLearningRate == null)
+            {
+                if (SparseFeatureSize > 0)
+                {
+                    sparseFeatureToHiddenLearningRate = new Vector4[LayerSize][];
+                    for (var i = 0; i < LayerSize; i++)
+                    {
+                        sparseFeatureToHiddenLearningRate[i] = new Vector4[SparseFeatureSize];
+                    }
                 }
             }
 
@@ -266,12 +243,22 @@ namespace RNNSharp
                 CellWeightsDeri[i] = new LSTMCellWeightDeri();
             }
 
-            lockerDenseFeature = new object[LayerSize];
-            locakerSparseFeature = new object[LayerSize];
-            for (int i = 0; i < LayerSize; i++)
+            if (lockerDenseFeature == null)
             {
-                lockerDenseFeature[i] = new object();
-                locakerSparseFeature[i] = new object();
+                lockerDenseFeature = new object[LayerSize];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    lockerDenseFeature[i] = new object();
+                }
+            }
+
+            if (lockerSparseFeature == null)
+            {
+                lockerSparseFeature = new object[LayerSize];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    lockerSparseFeature[i] = new object();
+                }
             }
         }
 
@@ -747,9 +734,14 @@ namespace RNNSharp
                 {
                     //Apply sparse weights
                     var weights = sparseFeatureWeights[j];
+                    var deri = sparseFeatureToHiddenDeri[j];
                     foreach (var pair in SparseFeature)
                     {
                         vecCell_j += weights[pair.Key] * pair.Value;
+                        if (deri.ContainsKey(pair.Key) == false)
+                        {
+                            deri.Add(pair.Key, new Vector3(0));
+                        }
                     }
                 }
 
@@ -888,7 +880,7 @@ namespace RNNSharp
                 wlr_i.CopyTo(learningrate_i, j);
 
                 lock (gateWeight.locker[i])
-                {
+               {
                     var w_i = new Vector<float>(weights_i, j);
                     w_i += vecLearningRate * vecDelta;
                     w_i.CopyTo(weights_i, j);
@@ -964,12 +956,10 @@ namespace RNNSharp
                         vecDelta = vecErr * vecDelta;
                         vecDelta = Vector4.Clamp(vecDelta, vecMinGrad, vecMaxGrad);
 
-                        lock (locakerSparseFeature[i])
+                        //Computing actual learning rate
+                        var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[entry.Key]);
+                        lock (lockerSparseFeature[i])
                         {
-                            //Computing actual learning rate
-                            var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[entry.Key]);
-
-
                             w_i[entry.Key] += vecLearningRate * vecDelta;
                         }
                     }
@@ -1072,6 +1062,8 @@ namespace RNNSharp
             {
                 Cells[i] = 0;
                 InitializeLSTMCell(LSTMCells[i], CellWeights[i], CellWeightsDeri[i]);
+
+                sparseFeatureToHiddenDeri[i].Clear();
             }
         }
 

@@ -28,7 +28,7 @@ namespace RNNSharp
 
 
         protected object[] lockerDenseFeature;
-        protected object[] locakerSparseFeature;
+        protected object[] lockerSparseFeature;
 
         public SimpleLayer(LayerConfig config)
         {
@@ -77,11 +77,24 @@ namespace RNNSharp
         {
             SimpleLayer layer = new SimpleLayer(LayerConfig);
             ShallowCopyWeightTo(layer);
-            layer.InitializeInternalTrainingParameters();
-
             return layer;
         }
 
+        public virtual void ShallowCopyWeightTo(SimpleLayer destLayer)
+        {
+            destLayer.DenseWeights = DenseWeights;
+            destLayer.DenseWeightsLearningRate = DenseWeightsLearningRate;
+            destLayer.DenseFeatureSize = DenseFeatureSize;
+
+            destLayer.SparseWeights = SparseWeights;
+            destLayer.SparseWeightsLearningRate = SparseWeightsLearningRate;
+            destLayer.SparseFeatureSize = SparseFeatureSize;
+
+            destLayer.lockerDenseFeature = lockerDenseFeature;
+            destLayer.lockerSparseFeature = lockerSparseFeature;
+
+            destLayer.InitializeInternalTrainingParameters();
+        }
 
         public virtual void PreUpdateWeights(Neuron neuron, float[] errs)
         {
@@ -92,22 +105,32 @@ namespace RNNSharp
 
         public virtual void InitializeInternalTrainingParameters()
         {
-            if (DenseFeatureSize > 0)
+            if (DenseFeatureSize > 0 && DenseWeightsLearningRate == null)
             {
                 DenseWeightsLearningRate = new Matrix<float>(LayerSize, DenseFeatureSize);
             }
 
-            if (SparseFeatureSize > 0)
+            if (SparseFeatureSize > 0 && SparseWeightsLearningRate == null)
             {
                 SparseWeightsLearningRate = new Matrix<float>(LayerSize, SparseFeatureSize);
             }
 
-            lockerDenseFeature = new object[LayerSize];
-            locakerSparseFeature = new object[LayerSize];
-            for (int i = 0; i < LayerSize; i++)
+            if (lockerDenseFeature == null)
             {
-                lockerDenseFeature[i] = new object();
-                locakerSparseFeature[i] = new object();
+                lockerDenseFeature = new object[LayerSize];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    lockerDenseFeature[i] = new object();
+                }
+            }
+
+            if (lockerSparseFeature == null)
+            {
+                lockerSparseFeature = new object[LayerSize];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    lockerSparseFeature[i] = new object();
+                }
             }
         }
 
@@ -142,6 +165,8 @@ namespace RNNSharp
             }
 
             InitializeInternalTrainingParameters();
+
+
         }
 
         public virtual void Save(BinaryWriter fo)
@@ -392,22 +417,6 @@ namespace RNNSharp
                 }
                 Errs[state.Label] = (float)(1.0 - Cells[state.Label]);
             }
-        }
-
-        public virtual void ShallowCopyWeightTo(SimpleLayer destLayer)
-        {
-            destLayer.DenseWeights = DenseWeights;
-            destLayer.DenseWeightsLearningRate = DenseWeightsLearningRate;
-            destLayer.DenseFeatureSize = DenseFeatureSize;
-            destLayer.DenseWeightsLearningRate = DenseWeightsLearningRate;
-
-            destLayer.SparseWeights = SparseWeights;
-            destLayer.SparseWeightsLearningRate = SparseWeightsLearningRate;
-            destLayer.SparseFeatureSize = SparseFeatureSize;
-            destLayer.SparseWeightsLearningRate = SparseWeightsLearningRate;
-
-            destLayer.lockerDenseFeature = lockerDenseFeature;
-            destLayer.locakerSparseFeature = locakerSparseFeature;
         }
 
         public virtual int GetBestOutputIndex()
