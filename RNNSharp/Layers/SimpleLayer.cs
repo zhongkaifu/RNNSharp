@@ -23,7 +23,6 @@ namespace RNNSharp
         public float[] DenseFeature { get; set; }
 
         protected ParallelOptions parallelOption = new ParallelOptions();
-        protected float[] previousCellOutputs;
         protected RunningMode runningMode;
 
 
@@ -34,7 +33,6 @@ namespace RNNSharp
         {
             LayerConfig = config;
             Cells = new float[LayerSize];
-            previousCellOutputs = new float[LayerSize];
             Errs = new float[LayerSize];
             LabelShortList = new List<int>();
         }
@@ -68,7 +66,6 @@ namespace RNNSharp
         public virtual Neuron CopyNeuronTo(Neuron neuron)
         {
             Cells.CopyTo(neuron.Cells, 0);
-            previousCellOutputs.CopyTo(neuron.PrevCellOutputs, 0);
 
             return neuron;
         }
@@ -99,7 +96,6 @@ namespace RNNSharp
         public virtual void PreUpdateWeights(Neuron neuron, float[] errs)
         {
             neuron.Cells.CopyTo(Cells, 0);
-            neuron.PrevCellOutputs.CopyTo(previousCellOutputs, 0);
             errs.CopyTo(Errs, 0);
         }
 

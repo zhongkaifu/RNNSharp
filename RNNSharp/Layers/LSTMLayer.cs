@@ -129,12 +129,14 @@ namespace RNNSharp
         private Vector4 vecNormalLearningRate;
         private Vector3 vecNormalLearningRate3;
         private Vector<float> vecNormalLearningRateFloat;
+ //       protected float[] previousCellOutputs;
 
         LSTMLayerConfig config;
 
         public LSTMLayer(LSTMLayerConfig config) : base(config)
         {
             this.config = config;
+     //       previousCellOutputs = new float[LayerSize];
             LSTMCells = new LSTMCell[LayerSize];
             for (var i = 0; i < LayerSize; i++)
             {
@@ -155,7 +157,7 @@ namespace RNNSharp
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
 
             Cells.CopyTo(lstmNeuron.Cells, 0);
-            previousCellOutputs.CopyTo(lstmNeuron.PrevCellOutputs, 0);
+     //       previousCellOutputs.CopyTo(lstmNeuron.PrevCellOutputs, 0);
             for (int i = 0; i < LayerSize; i++)
             {
                 lstmNeuron.LSTMCells[i].Set(LSTMCells[i]);
@@ -168,8 +170,8 @@ namespace RNNSharp
         public override void PreUpdateWeights(Neuron neuron, float[] errs)
         {
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
-            lstmNeuron.Cells.CopyTo(Cells, 0);
-            lstmNeuron.PrevCellOutputs.CopyTo(previousCellOutputs, 0);
+       //     lstmNeuron.Cells.CopyTo(Cells, 0);
+    //        lstmNeuron.PrevCellOutputs.CopyTo(previousCellOutputs, 0);
             for (int i = 0; i < LayerSize; i++)
             {
                 LSTMCells[i].Set(lstmNeuron.LSTMCells[i]);
@@ -726,7 +728,8 @@ namespace RNNSharp
 
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
-                previousCellOutputs[j] = Cells[j];
+                cell_j.previousCellOutput = Cells[j];
+//                previousCellOutputs[j] = Cells[j];
 
                 var vecCell_j = Vector4.Zero;
 
@@ -787,26 +790,24 @@ namespace RNNSharp
                 //reset each netOut to zero
                 cell_j.netOut = vecCell_j.W;
 
-                var cell_j_previousCellOutput = previousCellOutputs[j];
-
                 //include internal connection multiplied by the previous cell state
-                cell_j.netIn += cell_j.previousCellState * cellWeight_j.wPeepholeIn + cell_j_previousCellOutput * cellWeight_j.wCellIn;
+                cell_j.netIn += cell_j.previousCellState * cellWeight_j.wPeepholeIn + cell_j.previousCellOutput * cellWeight_j.wCellIn;
                 //squash input
                 cell_j.yIn = Sigmoid(cell_j.netIn);
 
                 //include internal connection multiplied by the previous cell state
                 cell_j.netForget += cell_j.previousCellState * cellWeight_j.wPeepholeForget +
-                                    cell_j_previousCellOutput * cellWeight_j.wCellForget;
+                                    cell_j.previousCellOutput * cellWeight_j.wCellForget;
                 cell_j.yForget = Sigmoid(cell_j.netForget);
 
-                cell_j.netCellState += cell_j_previousCellOutput * cellWeight_j.wCellState;
+                cell_j.netCellState += cell_j.previousCellOutput * cellWeight_j.wCellState;
                 cell_j.yCellState = TanH(cell_j.netCellState);
 
                 //cell state is equal to the previous cell state multipled by the forget gate and the cell inputs multiplied by the input gate
                 cell_j.cellState = cell_j.yForget * cell_j.previousCellState + cell_j.yIn * cell_j.yCellState;
 
                 ////include the internal connection multiplied by the CURRENT cell state
-                cell_j.netOut += cell_j.cellState * cellWeight_j.wPeepholeOut + cell_j_previousCellOutput * cellWeight_j.wCellOut;
+                cell_j.netOut += cell_j.cellState * cellWeight_j.wPeepholeOut + cell_j.previousCellOutput * cellWeight_j.wCellOut;
 
                 //squash output gate
                 cell_j.yOut = Sigmoid(cell_j.netOut);
@@ -1001,20 +1002,18 @@ namespace RNNSharp
                 cellWeight.wPeepholeOut += vecCellDelta.Z;
 
                 //Update cells weights
-                var c_previousCellOutput = previousCellOutputs[i];
                 //partial derivatives for internal connections
                 cellWeightDeri.dSWCellIn = cellWeightDeri.dSWCellIn * c.yForget +
-                              Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c_previousCellOutput;
+                              Sigmoid2_ci_netCellState_mul_SigmoidDerivative_ci_netIn * c.previousCellOutput;
 
                 //partial derivatives for internal connections, initially zero as dS is zero and previous cell state is zero
                 cellWeightDeri.dSWCellForget = cellWeightDeri.dSWCellForget * c.yForget +
-                                  ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c_previousCellOutput;
+                                  ci_previousCellState_mul_SigmoidDerivative_ci_netForget * c.previousCellOutput;
 
                 cellWeightDeri.dSWCellState = cellWeightDeri.dSWCellState * c.yForget +
-                                 Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c_previousCellOutput;
+                                 Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.previousCellOutput;
 
-                var vecCellDelta4 = new Vector4((float)cellWeightDeri.dSWCellIn, (float)cellWeightDeri.dSWCellForget, (float)cellWeightDeri.dSWCellState,
-                    c_previousCellOutput);
+                var vecCellDelta4 = new Vector4((float)cellWeightDeri.dSWCellIn, (float)cellWeightDeri.dSWCellForget, (float)cellWeightDeri.dSWCellState, (float)c.previousCellOutput);
                 vecCellDelta4 = vecErr * vecCellDelta4;
 
                 //Normalize err by gradient cut-off
@@ -1069,7 +1068,7 @@ namespace RNNSharp
 
         private void InitializeLSTMCell(LSTMCell c, LSTMCellWeight cw, LSTMCellWeightDeri deri)
         {
-            c.previousCellState = 0;
+         //   c.previousCellState = 0;
             c.cellState = 0;
 
             //partial derivatives
@@ -1139,6 +1138,7 @@ namespace RNNSharp
     {
         //The following fields are only for forward
         public double previousCellState;
+        public double previousCellOutput;
         public double cellState;
 
         public double netCellState;
@@ -1164,6 +1164,7 @@ namespace RNNSharp
         public void Set(LSTMCell cell)
         {
             previousCellState = cell.previousCellState;
+            previousCellOutput = cell.previousCellOutput;
             cellState = cell.cellState;
             netCellState = cell.netCellState;
             netForget = cell.netForget;

@@ -38,7 +38,6 @@ namespace RNNSharp
             DropoutNeuron dropoutNeuron = neuron as DropoutNeuron;
             mask.CopyTo(dropoutNeuron.mask, 0);
             Cells.CopyTo(dropoutNeuron.Cells, 0);
-            previousCellOutputs.CopyTo(dropoutNeuron.PrevCellOutputs, 0);
 
             return dropoutNeuron;
         }

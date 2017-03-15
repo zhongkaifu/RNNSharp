@@ -217,6 +217,7 @@ namespace RNNSharp
 
                 }
 
+                var start = DateTime.Now;
                 Logger.WriteLine($"Start to training {iter} iteration. learning rate = {RNNHelper.LearningRate}");
                 Parallel.For(0, N, i =>
                 {
@@ -224,7 +225,9 @@ namespace RNNSharp
                     Process(rnns[i], dataSets[i], RunningMode.Training);
                 });
 
-                Logger.WriteLine($"End {iter} iteration.");
+                var duration = DateTime.Now.Subtract(start);
+
+                Logger.WriteLine($"End {iter} iteration. Time duration = {duration}");
                 Logger.WriteLine("");
 
                 if (tknErrCnt >= bestTrainTknErrCnt && lastAlpha != RNNHelper.LearningRate)
@@ -256,7 +259,6 @@ namespace RNNSharp
                         //We got better result on validated corpus, save this model
                         Logger.WriteLine($"Saving better model into file {modelFilePath}, since we got a better result on validation set.");
                         Logger.WriteLine($"Error token percent: {(double)tknErrCnt / (double)processedWordCnt * 100.0}%, Error sequence percent: {(double)sentErrCnt / (double)processedSequence * 100.0}%");
-                        Logger.WriteLine("");
 
                         rnn.SaveModel(modelFilePath);
                         bestValidTknErrCnt = tknErrCnt;
@@ -268,11 +270,12 @@ namespace RNNSharp
                     //We got better result on validated corpus, save this model
                     Logger.WriteLine($"Saving better model into file {modelFilePath}, although validation set doesn't exist, we have better result on training set.");
                     Logger.WriteLine($"Error token percent: {(double)trainTknErrCnt / (double)processedWordCnt * 100.0}%, Error sequence percent: {(double)sentErrCnt / (double)processedSequence * 100.0}%");
-                    Logger.WriteLine("");
 
                     rnn.SaveModel(modelFilePath);
                 }
-                
+
+                Logger.WriteLine("");
+
                 if (trainTknErrCnt >= bestTrainTknErrCnt)
                 {
                     //We don't have better result on training set, so reduce learning rate
