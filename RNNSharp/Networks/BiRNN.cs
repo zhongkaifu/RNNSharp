@@ -636,6 +636,7 @@ namespace RNNSharp.Networks
                 if (bTrain)
                 {
                     OutputLayer.SetRunningMode(RunningMode.Training);
+                    OutputLayer.InitializeInternalTrainingParameters();
                 }
                 else
                 {
@@ -649,15 +650,5 @@ namespace RNNSharp.Networks
                 }
             }
         }
-
-        //public override int[] ProcessSeq2Seq(SequencePair pSequence, RunningMode runningMode)
-        //{
-        //    throw new NotImplementedException();
-        //}
-
-        //public override int[] TestSeq2Seq(Sentence srcSentence, Config featurizer)
-        //{
-        //    throw new NotImplementedException();
-        //}
     }
 }

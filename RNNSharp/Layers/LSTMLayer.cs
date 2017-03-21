@@ -114,9 +114,7 @@ namespace RNNSharp
         //Z - wInputCell
         //W - wInputOutputGate
         protected Vector4[][] sparseFeatureWeights;
-      //  protected Vector3[][] sparseFeatureToHiddenDeri;
         protected Vector4[][] sparseFeatureToHiddenLearningRate;
-
         protected Dictionary<int, Vector3>[] sparseFeatureToHiddenDeri;
 
 
@@ -129,14 +127,12 @@ namespace RNNSharp
         private Vector4 vecNormalLearningRate;
         private Vector3 vecNormalLearningRate3;
         private Vector<float> vecNormalLearningRateFloat;
- //       protected float[] previousCellOutputs;
 
         LSTMLayerConfig config;
 
         public LSTMLayer(LSTMLayerConfig config) : base(config)
         {
             this.config = config;
-     //       previousCellOutputs = new float[LayerSize];
             LSTMCells = new LSTMCell[LayerSize];
             for (var i = 0; i < LayerSize; i++)
             {
@@ -155,14 +151,11 @@ namespace RNNSharp
         public override Neuron CopyNeuronTo(Neuron neuron)
         {
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
-
             Cells.CopyTo(lstmNeuron.Cells, 0);
-     //       previousCellOutputs.CopyTo(lstmNeuron.PrevCellOutputs, 0);
             for (int i = 0; i < LayerSize; i++)
             {
                 lstmNeuron.LSTMCells[i].Set(LSTMCells[i]);
             }
-
 
             return lstmNeuron;
         }
@@ -170,8 +163,6 @@ namespace RNNSharp
         public override void PreUpdateWeights(Neuron neuron, float[] errs)
         {
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
-       //     lstmNeuron.Cells.CopyTo(Cells, 0);
-    //        lstmNeuron.PrevCellOutputs.CopyTo(previousCellOutputs, 0);
             for (int i = 0; i < LayerSize; i++)
             {
                 LSTMCells[i].Set(lstmNeuron.LSTMCells[i]);
@@ -206,12 +197,6 @@ namespace RNNSharp
         {
             if (SparseFeatureSize > 0)
             {
-                //sparseFeatureToHiddenDeri = new Vector3[LayerSize][];
-                //for (var i = 0; i < LayerSize; i++)
-                //{
-                //    sparseFeatureToHiddenDeri[i] = new Vector3[SparseFeatureSize];
-                //}
-
                 sparseFeatureToHiddenDeri = new Dictionary<int, Vector3>[LayerSize];
                 for (var i = 0; i < LayerSize; i++)
                 {
@@ -729,7 +714,6 @@ namespace RNNSharp
                 //hidden(t-1) -> hidden(t)
                 cell_j.previousCellState = cell_j.cellState;
                 cell_j.previousCellOutput = Cells[j];
-//                previousCellOutputs[j] = Cells[j];
 
                 var vecCell_j = Vector4.Zero;
 
@@ -1068,7 +1052,6 @@ namespace RNNSharp
 
         private void InitializeLSTMCell(LSTMCell c, LSTMCellWeight cw, LSTMCellWeightDeri deri)
         {
-         //   c.previousCellState = 0;
             c.cellState = 0;
 
             //partial derivatives

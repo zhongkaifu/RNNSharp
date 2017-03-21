@@ -367,5 +367,5 @@ RNNSharp is a pure C# project, so it can be compiled by .NET Core and Mono, and 
 The RNNSharp also provides some APIs for developers to leverage it into their projects. By download source code package and open RNNSharpConsole project, you will see how to use APIs in your project to encode and decode RNN models. Note that, before use RNNSharp APIs, you should add RNNSharp.dll as reference into your project.  
 
 ## RNNSharp referenced by the following published papers  
-1.     [Project-Team IntuiDoc: Intuitive user interaction for document](https://www.irisa.fr/intuidoc/data/ra/intuidoc2015.pdf)  
-2.     [A New Pre-training Method for Training Deep Learning Models with Application to Spoken Language Understanding](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/IS2016.CameraReady-1.pdf)  
+1. [Project-Team IntuiDoc: Intuitive user interaction for document](https://www.irisa.fr/intuidoc/data/ra/intuidoc2015.pdf)
+2. [A New Pre-training Method for Training Deep Learning Models with Application to Spoken Language Understanding](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/IS2016.CameraReady-1.pdf)
