@@ -117,18 +117,17 @@ namespace RNNSharp
         protected Vector4[][] sparseFeatureToHiddenLearningRate;
         protected Dictionary<int, Vector3>[] sparseFeatureToHiddenDeri;
 
-
         private Vector4 vecMaxGrad;
-
         private Vector3 vecMaxGrad3;
         private Vector4 vecMinGrad;
         private Vector3 vecMinGrad3;
-
         private Vector4 vecNormalLearningRate;
         private Vector3 vecNormalLearningRate3;
         private Vector<float> vecNormalLearningRateFloat;
 
         LSTMLayerConfig config;
+
+        object[] cellLockers;
 
         public LSTMLayer(LSTMLayerConfig config) : base(config)
         {
@@ -189,6 +188,7 @@ namespace RNNSharp
 
             layer.lockerDenseFeature = lockerDenseFeature;
             layer.lockerSparseFeature = lockerSparseFeature;
+            layer.cellLockers = cellLockers;
 
             layer.InitializeInternalTrainingParameters();
         }
@@ -247,6 +247,15 @@ namespace RNNSharp
                     lockerSparseFeature[i] = new object();
                 }
             }
+
+            if (cellLockers == null)
+            {
+                cellLockers = new object[LayerSize];
+                for (int i = 0; i < LayerSize; i++)
+                {
+                    cellLockers[i] = new object();
+                }
+            }
         }
 
 
@@ -254,6 +263,11 @@ namespace RNNSharp
         {
             SparseFeatureSize = sparseFeatureSize;
             DenseFeatureSize = denseFeatureSize;
+
+            if (DenseFeatureSize % Vector<float>.Count != 0)
+            {
+                DenseFeatureSize += (Vector<float>.Count - (DenseFeatureSize % Vector<float>.Count));
+            }
 
             InitializeCellWeights(null);
 
@@ -690,7 +704,7 @@ namespace RNNSharp
             vecNormalLearningRateFloat = new Vector<float>(RNNHelper.LearningRate);
 
             vecMaxGrad = new Vector4(RNNHelper.GradientCutoff, RNNHelper.GradientCutoff, RNNHelper.GradientCutoff,
-                RNNHelper.GradientCutoff);
+    RNNHelper.GradientCutoff);
             vecMinGrad = new Vector4(-RNNHelper.GradientCutoff, -RNNHelper.GradientCutoff, -RNNHelper.GradientCutoff,
                 -RNNHelper.GradientCutoff);
 
@@ -740,7 +754,7 @@ namespace RNNSharp
                     float[] denseForgetGateWeight_j = wDenseForgetGate.weights[j];
                     float[] denseCellGateWeight_j = wDenseCellGate.weights[j];
                     float[] denseOutputGateWeight_j = wDenseOutputGate.weights[j];
-                    while (k < DenseFeatureSize - Vector<float>.Count)
+                    while (k < DenseFeatureSize)
                     {
                         var vX = new Vector<float>(denseInputGateWeight_j, k);
                         var vY = new Vector<float>(denseForgetGateWeight_j, k);
@@ -754,15 +768,6 @@ namespace RNNSharp
                         vecCell_j.W += Vector.Dot(vW, vFeature);
 
                         k += Vector<float>.Count;
-                    }
-
-                    while (k < DenseFeatureSize)
-                    {
-                        vecCell_j.X += denseInputGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.Y += denseForgetGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.Z += denseCellGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.W += denseOutputGateWeight_j[k] * DenseFeature[k];
-                        k++;
                     }
                 }
 
@@ -808,11 +813,11 @@ namespace RNNSharp
             var j = 0;
             float[] learningrate_i = gateWeight.learningRate[i];
             float[] weights_i = gateWeight.weights[i];
-            while (j < DenseFeatureSize - Vector<float>.Count)
+            while (j < DenseFeatureSize)
             {
                 Vector<float> vecDelta = new Vector<float>(DenseFeature, j);
                 vecDelta = vecDelta * err;
-                vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+     //           vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                 var wlr_i = new Vector<float>(learningrate_i, j);
                 var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i);
@@ -827,19 +832,6 @@ namespace RNNSharp
 
                 j += Vector<float>.Count;
             }
-
-            while (j < DenseFeatureSize)
-            {
-                float delta = DenseFeature[j] * err;
-                delta = RNNHelper.NormalizeGradient(delta);
-                var wlr_i = learningrate_i[j];
-                var learningRate = ComputeLearningRate(delta, ref wlr_i);
-                learningrate_i[j] = wlr_i;
-
-                RNNHelper.LockFreeAdd(weights_i, j, learningRate * delta);
-
-                j++;
-            }
         }
 
         private void UpdateGateWeights(LSTMGateWeight gateWeight, int i, float featureDerivate, float c_yForget, float err)
@@ -848,7 +840,7 @@ namespace RNNSharp
             float[] deri_i = gateWeight.deri[i];
             float[] learningrate_i = gateWeight.learningRate[i];
             float[] weights_i = gateWeight.weights[i];
-            while (j < DenseFeatureSize - Vector<float>.Count)
+            while (j < DenseFeatureSize)
             {
                 var feature = new Vector<float>(DenseFeature, j);
                 var wd = feature * featureDerivate;
@@ -857,7 +849,7 @@ namespace RNNSharp
                 wd.CopyTo(deri_i, j);
 
                 Vector<float> vecDelta = wd * err;
-                vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+            //    vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
                 //Computing learning rate and update it
                 var wlr_i = new Vector<float>(learningrate_i, j);
@@ -873,23 +865,6 @@ namespace RNNSharp
 
                 j += Vector<float>.Count;
             }
-
-            while (j < DenseFeatureSize)
-            {
-                var wd = DenseFeature[j] * featureDerivate;
-                wd += deri_i[j] * c_yForget;
-                deri_i[j] = wd;
-
-                float delta = wd * err;
-                delta = RNNHelper.NormalizeGradient(delta);
-                var wlr_i = learningrate_i[j];
-                var learningRate = ComputeLearningRate(delta, ref wlr_i);
-                learningrate_i[j] = wlr_i;
-
-                RNNHelper.LockFreeAdd(weights_i, j, learningRate * delta);
-
-                j++;
-            }
         }
 
         public override void BackwardPass()
@@ -900,6 +875,7 @@ namespace RNNSharp
                 var c = LSTMCells[i];
                 var cellWeight = CellWeights[i];
                 var cellWeightDeri = CellWeightsDeri[i];
+                var cellLocker = cellLockers[i];
 
                 //using the error find the gradient of the output gate
                 var gradientOutputGate = (float)(SigmoidDerivative(c.netOut) * TanH(c.cellState) * Errs[i]);
@@ -975,15 +951,17 @@ namespace RNNSharp
 
                 //Normalize err by gradient cut-off
                 vecCellDelta = Vector3.Clamp(vecCellDelta, vecMinGrad3, vecMaxGrad3);
-
                 //Computing actual learning rate
                 var vecCellLearningRate = ComputeLearningRate(vecCellDelta, ref peepholeLearningRate[i]);
 
                 vecCellDelta = vecCellLearningRate * vecCellDelta;
 
-                cellWeight.wPeepholeIn += vecCellDelta.X;
-                cellWeight.wPeepholeForget += vecCellDelta.Y;
-                cellWeight.wPeepholeOut += vecCellDelta.Z;
+                lock (cellLocker)
+                {
+                    cellWeight.wPeepholeIn += vecCellDelta.X;
+                    cellWeight.wPeepholeForget += vecCellDelta.Y;
+                    cellWeight.wPeepholeOut += vecCellDelta.Z;
+                }
 
                 //Update cells weights
                 //partial derivatives for internal connections
@@ -999,43 +977,22 @@ namespace RNNSharp
 
                 var vecCellDelta4 = new Vector4((float)cellWeightDeri.dSWCellIn, (float)cellWeightDeri.dSWCellForget, (float)cellWeightDeri.dSWCellState, (float)c.previousCellOutput);
                 vecCellDelta4 = vecErr * vecCellDelta4;
-
                 //Normalize err by gradient cut-off
                 vecCellDelta4 = Vector4.Clamp(vecCellDelta4, vecMinGrad, vecMaxGrad);
-
                 //Computing actual learning rate
                 var vecCellLearningRate4 = ComputeLearningRate(vecCellDelta4, ref cellLearningRate[i]);
 
                 vecCellDelta4 = vecCellLearningRate4 * vecCellDelta4;
 
-                RNNHelper.LockFreeAdd(ref cellWeight.wCellIn, vecCellDelta4.X);
-                RNNHelper.LockFreeAdd(ref cellWeight.wCellForget, vecCellDelta4.Y);
-                RNNHelper.LockFreeAdd(ref cellWeight.wCellState, vecCellDelta4.Z);
-                RNNHelper.LockFreeAdd(ref cellWeight.wCellOut, vecCellDelta4.W);
+                lock (cellLocker)
+                {
+                    cellWeight.wCellIn += vecCellDelta4.X;
+                    cellWeight.wCellForget += vecCellDelta4.Y;
+                    cellWeight.wCellState += vecCellDelta4.Z;
+                    cellWeight.wCellOut += vecCellDelta4.W;
+                }
 
                 LSTMCells[i] = c;
-            }
-        }
-
-        public override void ComputeLayerErr(SimpleLayer nextLayer)
-        {
-            var layer = nextLayer as LSTMLayer;
-
-            if (layer != null)
-            {
-                for (var i = 0;i < LayerSize;i++)
-                {
-                    var err = 0.0f;
-                    for (var k = 0; k < nextLayer.LayerSize; k++)
-                    {
-                        err += layer.Errs[k] * layer.wDenseOutputGate.weights[k][i];
-                    }
-                    Errs[i] = RNNHelper.NormalizeGradient(err);
-                }
-            }
-            else
-            {
-                base.ComputeLayerErr(nextLayer);
             }
         }
 

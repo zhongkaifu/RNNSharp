@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -44,6 +45,12 @@ namespace RNNSharp
                         idx++;
                     }
                 }
+            }
+
+            while (idx % Vector<float>.Count != 0)
+            {
+                m_Tag2Index.Add($"AlignmentID_{idx}", idx);
+                idx++;
             }
         }
 

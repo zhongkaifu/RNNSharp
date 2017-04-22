@@ -61,7 +61,7 @@ major      | JJ   | S
 financial  | JJ   | S
 centers    | NNS  | S
 .          | PUN  | S
-           |      |    
+---empty line---
 !          | PUN  | S
 p          | FW   | S
 '          | PUN  | S
@@ -162,21 +162,21 @@ PRETRAIN_TYPE = Embedding
 WORDEMBEDDING_FILENAME = Data\WordEmbedding\wordvec_chs.bin  
 \#The context range of word embedding. In below example, the context is current token, previous token and next token  
 \#If more than one token are combined, this feature would use a plenty of memory.  
-WORDEMBEDDING_CONTEXT: -1,0,1  
+WORDEMBEDDING_CONTEXT = -1,0,1  
 \#The column index applied word embedding feature  
 WORDEMBEDDING_COLUMN = 0  
   
 \#The following setting is for pretrained model in 'Autoencoder' type.  
 \#The feature configuration file for pretrained model.  
-AUTOENCODER_CONFIG: D:\RNNSharpDemoPackage\config_autoencoder.txt  
+AUTOENCODER_CONFIG = D:\RNNSharpDemoPackage\config_autoencoder.txt  
   
 \#The following setting is the configuration file for source sequence encoder which is only for sequence-to-sequence task that MODEL_TYPE equals to SEQ2SEQ.  
 \#In this example, since MODEL_TYPE is SEQLABEL, so we comment it out.  
-\#SEQ2SEQ_AUTOENCODER_CONFIG: D:\RNNSharpDemoPackage\config_seq2seq_autoencoder.txt  
+\#SEQ2SEQ_AUTOENCODER_CONFIG = D:\RNNSharpDemoPackage\config_seq2seq_autoencoder.txt  
   
 \#The context range of run time feature. In below example, RNNSharp will use the output of previous token as run time feature for current token  
 \#Note that, bi-directional model does not support run time feature, so we comment it out.  
-\#RTFEATURE_CONTEXT: -1
+\#RTFEATURE_CONTEXT = -1
   
 ## Training file format
 
@@ -199,7 +199,7 @@ major      | JJ   | S
 financial  | JJ   | S
 centers    | NNS  | S
 .          | PUN  | S
-           |      |    
+---empty line---
 !          | PUN  | S
 p          | FW   | S
 '          | PUN  | S
@@ -233,7 +233,7 @@ is        |
 your      | 
 name      | 
 ?         | 
-          | 
+---empty line---
 I         | 
 am        | 
 Zhongkai  | 

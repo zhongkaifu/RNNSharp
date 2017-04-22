@@ -9,11 +9,16 @@ namespace RNNSharp.Networks
 {
     public abstract class RNN<T> where T : ISequence
     {
-        protected Matrix<float> CRFSeqOutput;
         public virtual bool IsCRFTraining { get; set; }
         public virtual bool bVQ { get; set; }
-        public Matrix<float> CRFTagTransWeights { get; set; }
-        public SimpleLayer OutputLayer { get; set; }
+
+        protected Matrix<float> CRFSeqOutput;
+        protected Matrix<float> CRFTagTransWeights { get; set; }
+        protected SimpleLayer OutputLayer { get; set; }
+
+        private double[][] alphaSet;
+        private double[][] betaSet;
+        protected object crfLocker;
 
         public int MaxSeqLength = 1024;
 
@@ -47,6 +52,9 @@ namespace RNNSharp.Networks
                     break;
                 case NETWORKTYPE.ForwardSeq2Seq:
                     rnn = new ForwardRNNSeq2Seq<T>();
+                    break;
+                case NETWORKTYPE.ForwardSeq2SeqLabeling:
+                    rnn = new ForwardRNNSeq2SeqLabeling<T>();
                     break;
                 case NETWORKTYPE.BiDirectional:
                     rnn = new BiRNN<T>();
@@ -137,53 +145,48 @@ namespace RNNSharp.Networks
         public void ForwardBackward(int numStates, Matrix<float> m_RawOutput)
         {
             //forward
-            var alphaSet = new double[numStates][];
-            var betaSet = new double[numStates][];
             var OutputLayerSize = OutputLayer.LayerSize;
 
-
-                for (var i = 0; i < numStates; i++)
+            for (var i = 0; i < numStates; i++)
+            {
+                for (var j = 0; j < OutputLayerSize; j++)
                 {
-                    alphaSet[i] = new double[OutputLayerSize];
-                    for (var j = 0; j < OutputLayerSize; j++)
+                    double dscore0 = 0;
+                    if (i > 0)
                     {
-                        double dscore0 = 0;
-                        if (i > 0)
+                        for (var k = 0; k < OutputLayerSize; k++)
                         {
-                            for (var k = 0; k < OutputLayerSize; k++)
-                            {
-                                var fbgm = CRFTagTransWeights[j][k];
-                                var finit = alphaSet[i - 1][k];
-                                var ftmp = fbgm + finit;
+                            var fbgm = CRFTagTransWeights[j][k];
+                            var finit = alphaSet[i - 1][k];
+                            var ftmp = fbgm + finit;
 
-                                dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
-                            }
+                            dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
                         }
-                        alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
                     }
+                    alphaSet[i][j] = dscore0 + m_RawOutput[i][j];
                 }
+            }
 
-                    //backward
-                    for (var i = numStates - 1; i >= 0; i--)
+            //backward
+            for (var i = numStates - 1; i >= 0; i--)
+            {
+                for (var j = 0; j < OutputLayerSize; j++)
+                {
+                    double dscore0 = 0;
+                    if (i < numStates - 1)
                     {
-                        betaSet[i] = new double[OutputLayerSize];
-                        for (var j = 0; j < OutputLayerSize; j++)
+                        for (var k = 0; k < OutputLayerSize; k++)
                         {
-                            double dscore0 = 0;
-                            if (i < numStates - 1)
-                            {
-                                for (var k = 0; k < OutputLayerSize; k++)
-                                {
-                                    var fbgm = CRFTagTransWeights[k][j];
-                                    var finit = betaSet[i + 1][k];
-                                    var ftmp = fbgm + finit;
+                            var fbgm = CRFTagTransWeights[k][j];
+                            var finit = betaSet[i + 1][k];
+                            var ftmp = fbgm + finit;
 
-                                    dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
-                                }
-                            }
-                            betaSet[i][j] = dscore0 + m_RawOutput[i][j];
+                            dscore0 = MathUtil.logsumexp(dscore0, ftmp, k == 0);
                         }
                     }
+                    betaSet[i][j] = dscore0 + m_RawOutput[i][j];
+                }
+            }
 
 
             //Z_
@@ -195,7 +198,6 @@ namespace RNNSharp.Networks
             }
 
             //Calculate the output probability of each node
-            CRFSeqOutput = new Matrix<float>(numStates, OutputLayerSize);
             for (var i = 0; i < numStates; i++)
             {
                 var CRFSeqOutput_i = CRFSeqOutput[i];
@@ -264,7 +266,7 @@ namespace RNNSharp.Networks
             return tagOutputs;
         }
 
-        public virtual void setTagBigramTransition(List<List<float>> m)
+        public void InitializeCRFWeights(List<List<float>> m)
         {
             var OutputLayerSize = OutputLayer.LayerSize;
             CRFTagTransWeights = new Matrix<float>(OutputLayerSize, OutputLayerSize);
@@ -275,13 +277,30 @@ namespace RNNSharp.Networks
                     CRFTagTransWeights[i][j] = m[i][j];
                 }
             }
+
+
+            crfLocker = new object();
+        }
+
+        public void InitializeCRFVariablesForTraining()
+        {
+            var OutputLayerSize = OutputLayer.LayerSize;
+            CRFSeqOutput = new Matrix<float>(MaxSeqLength, OutputLayerSize);
+
+            alphaSet = new double[MaxSeqLength][];
+            betaSet = new double[MaxSeqLength][];
+            for (var i = 0; i < MaxSeqLength; i++)
+            {
+                alphaSet[i] = new double[OutputLayerSize];
+                betaSet[i] = new double[OutputLayerSize];
+            }
         }
 
         public void UpdateBigramTransition(Sequence seq)
         {
             var OutputLayerSize = OutputLayer.LayerSize;
             var numStates = seq.States.Length;
-            var m_DeltaBigramLM = new Matrix<float>(OutputLayerSize, OutputLayerSize);
+            var deltaBigramLM = new Matrix<float>(OutputLayerSize, OutputLayerSize);
 
             for (var timeat = 1; timeat < numStates; timeat++)
             {
@@ -291,60 +310,48 @@ namespace RNNSharp.Networks
                 {
                     var CRFSeqOutput_timeat_i = CRFSeqOutput_timeat[i];
                     var CRFTagTransWeights_i = CRFTagTransWeights[i];
-                    var m_DeltaBigramLM_i = m_DeltaBigramLM[i];
+                    var deltaBigramLM_i = deltaBigramLM[i];
                     var j = 0;
 
                     var vecCRFSeqOutput_timeat_i = new Vector<float>(CRFSeqOutput_timeat_i);
-                    while (j < OutputLayerSize - Vector<float>.Count)
+                    while (j < OutputLayerSize)
                     {
                         var v1 = new Vector<float>(CRFTagTransWeights_i, j);
                         var v2 = new Vector<float>(CRFSeqOutput_pre_timeat, j);
-                        var v = new Vector<float>(m_DeltaBigramLM_i, j);
+                        var v = new Vector<float>(deltaBigramLM_i, j);
 
                         v -= v1 * vecCRFSeqOutput_timeat_i * v2;
-                        v.CopyTo(m_DeltaBigramLM_i, j);
+                        v.CopyTo(deltaBigramLM_i, j);
 
                         j += Vector<float>.Count;
-                    }
-
-                    while (j < OutputLayerSize)
-                    {
-                        m_DeltaBigramLM_i[j] -= CRFTagTransWeights_i[j] * CRFSeqOutput_timeat_i * CRFSeqOutput_pre_timeat[j];
-                        j++;
                     }
                 }
 
                 var iTagId = seq.States[timeat].Label;
                 var iLastTagId = seq.States[timeat - 1].Label;
-                m_DeltaBigramLM[iTagId][iLastTagId] += 1;
+                deltaBigramLM[iTagId][iLastTagId] += 1;
             }
 
             //Update tag Bigram LM
             for (var b = 0; b < OutputLayerSize; b++)
             {
                 var vector_b = CRFTagTransWeights[b];
-                var vector_delta_b = m_DeltaBigramLM[b];
+                var vector_delta_b = deltaBigramLM[b];
                 var a = 0;
-
-                while (a < OutputLayerSize - Vector<float>.Count)
-                {
-                    var v1 = new Vector<float>(vector_delta_b, a);
-                    var v = new Vector<float>(vector_b, a);
-
-                    //Normalize delta
-                    v1 = RNNHelper.NormalizeGradient(v1);
-
-                    //Update weights
-                    v += RNNHelper.vecNormalLearningRate * v1;
-                    v.CopyTo(vector_b, a);
-
-                    a += Vector<float>.Count;
-                }
 
                 while (a < OutputLayerSize)
                 {
-                    vector_b[a] += RNNHelper.LearningRate * RNNHelper.NormalizeGradient(vector_delta_b[a]);
-                    a++;
+                    var v1 = new Vector<float>(vector_delta_b, a);
+
+                    lock (crfLocker)
+                    {
+                        //Update weights
+                        var v = new Vector<float>(vector_b, a);
+                        v += RNNHelper.vecNormalLearningRate * v1;
+                        v.CopyTo(vector_b, a);
+                    }
+
+                    a += Vector<float>.Count;
                 }
             }
         }

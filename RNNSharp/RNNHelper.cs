@@ -52,8 +52,6 @@ namespace RNNSharp
             return v;
         }
 
-       
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector<float> UpdateLearningRate(Vector<float> vecDelta, ref Vector<float> vecLearningRateWeights)
         {
@@ -141,40 +139,6 @@ namespace RNNSharp
             }
         }
 
-        public static void LockFreeAdd(float[] expected, long exp_offset, float addValue)
-        {
-            float initialValue;
-            float newValue;
-            do
-            {
-                initialValue = expected[exp_offset]; // read current value
-                newValue = initialValue + addValue;  //calculate new value
-            }
-            while (initialValue != Interlocked.CompareExchange(ref expected[exp_offset], newValue, initialValue));
-        }
-
-        public static void LockFreeAssign(float[] expected, long exp_offset, float value)
-        {
-            float initialValue;
-            do
-            {
-                initialValue = expected[exp_offset]; // read current value
-            }
-            while (initialValue != Interlocked.CompareExchange(ref expected[exp_offset], value, initialValue));
-        }
-
-        public static void LockFreeAdd(ref double src, double addValue)
-        {
-            double initialValue;
-            double newValue;
-            do
-            {
-                initialValue = src;
-                newValue = src + addValue;
-            }
-            while (initialValue != Interlocked.CompareExchange(ref src, newValue, initialValue));
-        }
-
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             int SrcSize)
         {
@@ -184,7 +148,7 @@ namespace RNNSharp
                 float cellOutput = 0;
                 var j = 0;
 
-                while (j < SrcSize - Vector<float>.Count)
+                while (j < SrcSize)
                 {
                     var v1 = new Vector<float>(srcvec, j);
                     var v2 = new Vector<float>(vector_i, j);
@@ -193,20 +157,14 @@ namespace RNNSharp
                     j += Vector<float>.Count;
                 }
 
-                while (j < SrcSize)
-                {
-                    cellOutput += srcvec[j] * vector_i[j];
-                    j++;
-                }
-
                 dest[i] = cellOutput;
             }
         }
 
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize, 
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             int SrcSize)
         {
-            for (var i = 0;i <DestSize;i++)
+            for (var i = 0; i < DestSize; i++)
             {
                 float er = 0;
                 for (var j = 0; j < SrcSize; j++)
@@ -266,7 +224,7 @@ namespace RNNSharp
                 float cellOutput = 0;
                 var vector_i = srcmatrix[i];
                 var j = 0;
-                while (j < SrcSize - Vector<float>.Count)
+                while (j < SrcSize)
                 {
                     var v1 = new Vector<float>(srcvec, j);
                     var v2 = new Vector<float>(vector_i, j);
@@ -275,28 +233,7 @@ namespace RNNSharp
                     j += Vector<float>.Count;
                 }
 
-                while (j < SrcSize)
-                {
-                    cellOutput += srcvec[j] * vector_i[j];
-                    j++;
-                }
-
                 dest[i] = cellOutput;
-            }
-        }
-
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
-            HashSet<int> setSkipSampling, int SrcSize)
-        {
-            foreach(var i in setSkipSampling)
-            {
-                float er = 0;
-                for (var j = 0; j < SrcSize; j++)
-                {
-                    er += srcvec[j] * srcmatrix[j][i];
-                }
-
-                dest[i] = NormalizeGradient(er);
             }
         }
 

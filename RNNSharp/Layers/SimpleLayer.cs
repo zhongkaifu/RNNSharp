@@ -32,6 +32,11 @@ namespace RNNSharp
         public SimpleLayer(LayerConfig config)
         {
             LayerConfig = config;
+            if (LayerSize % Vector<float>.Count != 0)
+            {
+                LayerSize += (Vector<float>.Count - (LayerSize % Vector<float>.Count));
+            }
+
             Cells = new float[LayerSize];
             Errs = new float[LayerSize];
             LabelShortList = new List<int>();
@@ -132,10 +137,17 @@ namespace RNNSharp
 
         public virtual void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
         {
+            DenseFeatureSize = denseFeatureSize;
+            SparseFeatureSize = sparseFeatureSize;
+
+            if (DenseFeatureSize % Vector<float>.Count != 0)
+            {
+                DenseFeatureSize += (Vector<float>.Count - (DenseFeatureSize % Vector<float>.Count));
+            }
+
             if (denseFeatureSize > 0)
             {
-                Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);
-                DenseFeatureSize = denseFeatureSize;
+                Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);    
                 DenseWeights = new Matrix<float>(LayerSize, denseFeatureSize);
                 for (var i = 0; i < DenseWeights.Height; i++)
                 {
@@ -149,7 +161,6 @@ namespace RNNSharp
             if (sparseFeatureSize > 0)
             {
                 Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize, sparseFeatureSize);
-                SparseFeatureSize = sparseFeatureSize;
                 SparseWeights = new Matrix<float>(LayerSize, SparseFeatureSize);
                 for (var i = 0; i < SparseWeights.Height; i++)
                 {
@@ -258,7 +269,7 @@ namespace RNNSharp
             var vecDenseFeature = new Vector<float>(feature, idx);
             var vecDelta = vecDenseFeature * err;
 
-            vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+        //    vecDelta = RNNHelper.NormalizeGradient(vecDelta);
 
             //Computing learning rate
             var vecDenseWeightLearningRateCol = new Vector<float>(learningRateWeight, idx);
@@ -287,21 +298,11 @@ namespace RNNSharp
                     var featureWeightCol = DenseWeights[c];
                     var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
                     var j = 0;
-                    while (j < DenseFeatureSize - Vector<float>.Count)
+                    while (j < DenseFeatureSize)
                     {
                         UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol,
                             err, j, c);
                         j += Vector<float>.Count;
-                    }
-
-                    while (j < DenseFeatureSize)
-                    {
-                        var delta = RNNHelper.NormalizeGradient(err * DenseFeature[j]);
-                        var newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, c, j, delta);
-
-                        RNNHelper.LockFreeAdd(featureWeightCol, j, newLearningRate * delta);
-
-                        j++;
                     }
                 }
             }
@@ -317,10 +318,10 @@ namespace RNNSharp
                     {
                         var pos = pair.Key;
                         var val = pair.Value;
-                        var delta = RNNHelper.NormalizeGradient(er2 * val);
+                        var delta = er2 * val; // RNNHelper.NormalizeGradient(er2 * val);
                         var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
 
-                        RNNHelper.LockFreeAdd(vector_c, pos, newLearningRate * delta);
+                        vector_c[pos] += newLearningRate * delta;
 
                     }
                 }
@@ -331,28 +332,28 @@ namespace RNNSharp
         {
         }
 
-        public virtual void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer, Neuron neuron)
+        public virtual void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
         {
-            var largeOutputLayer = nextLayer as SampledSoftmaxLayer;
-            if (largeOutputLayer != null)
+            var sampledSoftmaxLayer = nextLayer as SampledSoftmaxLayer;
+            if (sampledSoftmaxLayer != null)
             {
-                RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, largeOutputLayer.DenseWeights, LayerSize,
-                    largeOutputLayer.negativeSampleWordList);
+                RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, sampledSoftmaxLayer.DenseWeights, LayerSize,
+                    sampledSoftmaxLayer.negativeSampleWordList);
             }
             else
             {
                 var lstmLayer = nextLayer as LSTMLayer;
                 if (lstmLayer != null)
                 {
-                    for (var i = 0;i < LayerSize;i++)
+                    for (var i = 0; i < LayerSize; i++)
+                    {
+                        var err = 0.0f;
+                        for (var k = 0; k < nextLayer.LayerSize; k++)
                         {
-                            var err = 0.0f;
-                            for (var k = 0; k < nextLayer.LayerSize; k++)
-                            {
-                                err += srcErrLayer[k] * lstmLayer.wDenseOutputGate.weights[k][i];
-                            }
-                            destErrLayer[i] = RNNHelper.NormalizeGradient(err);
+                            err += srcErrLayer[k] * lstmLayer.wDenseOutputGate.weights[k][i];
                         }
+                        destErrLayer[i] = err; // RNNHelper.NormalizeGradient(err);
+                    }
                 }
                 else
                 {
@@ -364,33 +365,7 @@ namespace RNNSharp
         }
         public virtual void ComputeLayerErr(SimpleLayer nextLayer)
         {
-            var largeOutputLayer = nextLayer as SampledSoftmaxLayer;
-            if (largeOutputLayer != null)
-            {
-                RNNHelper.matrixXvectorADDErr(Errs, largeOutputLayer.Errs, largeOutputLayer.DenseWeights, LayerSize,
-                    largeOutputLayer.negativeSampleWordList);
-            }
-            else
-            {
-                var lstmLayer = nextLayer as LSTMLayer;
-                if (lstmLayer != null)
-                {
-                    for(var i = 0;i < LayerSize;i++)
-                    {
-                        var err = 0.0f;
-                        for (var k = 0; k < nextLayer.LayerSize; k++)
-                        {
-                            err += lstmLayer.Errs[k] * lstmLayer.wDenseOutputGate.weights[k][i];
-                        }
-                        Errs[i] = RNNHelper.NormalizeGradient(err);
-                    }
-                }
-                else
-                {
-                    //error output->hidden for words from specific class
-                    RNNHelper.matrixXvectorADDErr(Errs, nextLayer.Errs, nextLayer.DenseWeights, LayerSize, nextLayer.LayerSize);
-                }
-            }
+            ComputeLayerErr(nextLayer, Errs, nextLayer.Errs);
         }
 
         public virtual void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)

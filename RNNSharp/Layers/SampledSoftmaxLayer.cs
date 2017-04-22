@@ -132,21 +132,11 @@ namespace RNNSharp
                     var featureWeightCol = DenseWeights[c];
                     var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
                     var j = 0;
-                    while (j < DenseFeatureSize - Vector<float>.Count)
+                    while (j < DenseFeatureSize)
                     {
                         UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol,
                             err, j, c);
                         j += Vector<float>.Count;
-                    }
-
-                    while (j < DenseFeatureSize)
-                    {
-                        var delta = RNNHelper.NormalizeGradient(err * DenseFeature[j]);
-                        var newLearningRate = RNNHelper.UpdateLearningRate(DenseWeightsLearningRate, c, j, delta);
-
-                        RNNHelper.LockFreeAdd(featureWeightCol, j, newLearningRate * delta);
-
-                        j++;
                     }
                 }
             }
@@ -162,21 +152,14 @@ namespace RNNSharp
                     {
                         var pos = pair.Key;
                         var val = pair.Value;
-                        var delta = RNNHelper.NormalizeGradient(er2 * val);
+                        var delta = er2 * val; // RNNHelper.NormalizeGradient(er2 * val);
                         var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
-
-                        RNNHelper.LockFreeAdd(vector_c, pos, newLearningRate * delta);
+                        vector_c[pos] += newLearningRate * delta;
                     }
                 }
             }
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer)
-        {
-            //error output->hidden for words from specific class
-            RNNHelper.matrixXvectorADDErr(Errs, nextLayer.Errs, nextLayer.DenseWeights, negativeSampleWordList,
-                nextLayer.LayerSize);
-        }
 
         public override void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)
         {

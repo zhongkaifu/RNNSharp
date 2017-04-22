@@ -88,6 +88,16 @@ namespace RNNSharp
             m_innerData = val;
         }
 
+        public SingleVector(float[] val, int nLen)
+        {
+            m_innerData = new float[nLen];
+
+            for (var i = 0; i < val.Length; i++)
+            {
+                m_innerData[i] = val[i];
+            }
+        }
+
         public SingleVector(int nLen)
         {
             m_innerData = new float[nLen];

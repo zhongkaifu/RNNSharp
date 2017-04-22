@@ -42,7 +42,7 @@ namespace RNNSharp
         int tknErrCnt = 0;
         int sentErrCnt = 0;
 
-        public void Process(RNN<T> rnn, DataSet<T> trainingSet, RunningMode runningMode)
+        public void Process(RNN<T> rnn, DataSet<T> trainingSet, RunningMode runningMode, int totalSequenceNum)
         {
             //Shffle training corpus
             trainingSet.Shuffle();
@@ -106,7 +106,7 @@ namespace RNNSharp
 
                 if (processedSequence % 1000 == 0)
                 {
-                    Logger.WriteLine("Progress = {0} ", processedSequence / 1000 + "K/" + TrainingSet.SequenceList.Count / 1000.0 + "K");
+                    Logger.WriteLine("Progress = {0} ", processedSequence / 1000 + "K/" + totalSequenceNum / 1000.0 + "K");
                     Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)processedWordCnt * 100.0);
                     Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)processedSequence * 100.0);
                 }
@@ -157,7 +157,7 @@ namespace RNNSharp
                 if (IsCRFTraining)
                 {
                     Logger.WriteLine("Initialize bigram transition for CRF output layer.");
-                    rnn.setTagBigramTransition(TrainingSet.CRFLabelBigramTransition);
+                    rnn.InitializeCRFWeights(TrainingSet.CRFLabelBigramTransition);
                 }
             }
 
@@ -174,14 +174,13 @@ namespace RNNSharp
 
             for (int i = 0; i < N; i++)
             {
-                if (IsCRFTraining)
-                {
-                    dataSets[i].BuildLabelBigramTransition();
-                }
-
                 //Assign model settings to RNN
                 rnns[i].bVQ = ModelSettings.VQ != 0 ? true : false;
                 rnns[i].IsCRFTraining = IsCRFTraining;
+                if (IsCRFTraining)
+                {
+                    rnns[i].InitializeCRFVariablesForTraining();
+                }
             }
 
             //Initialize RNNHelper
@@ -191,7 +190,6 @@ namespace RNNSharp
             RNNHelper.GradientCutoff = ModelSettings.GradientCutoff;
             RNNHelper.vecMaxGrad = new Vector<float>(RNNHelper.GradientCutoff);
             RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
-
             RNNHelper.IsConstAlpha = ModelSettings.IsConstAlpha;
 
             Logger.WriteLine("");
@@ -222,7 +220,7 @@ namespace RNNSharp
                 Parallel.For(0, N, i =>
                 {
                     rnns[i].CleanStatus();
-                    Process(rnns[i], dataSets[i], RunningMode.Training);
+                    Process(rnns[i], dataSets[i], RunningMode.Training, TrainingSet.SequenceList.Count);
                 });
 
                 var duration = DateTime.Now.Subtract(start);
@@ -250,7 +248,7 @@ namespace RNNSharp
                     sentErrCnt = 0;
 
                     Logger.WriteLine("Verify model on validated corpus.");
-                    Process(rnn, ValidationSet, RunningMode.Validate);
+                    Process(rnn, ValidationSet, RunningMode.Validate, ValidationSet.SequenceList.Count);
                     Logger.WriteLine("End model verification.");
                     Logger.WriteLine("");
 

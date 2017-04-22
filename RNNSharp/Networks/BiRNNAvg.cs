@@ -83,6 +83,7 @@ namespace RNNSharp.Networks
             rnn.InitCache(forwardLayers, backwardLayers, OutputLayer.CreateLayerSharedWegiths());
             rnn.CRFTagTransWeights = CRFTagTransWeights;
             rnn.MaxSeqLength = MaxSeqLength;
+            rnn.crfLocker = crfLocker;
 
             return rnn;
         }
@@ -99,7 +100,7 @@ namespace RNNSharp.Networks
 
                 var i = 0;
                 Vector<float> vecDiv2 = new Vector<float>(2.0f);
-                while (i < layerSize - Vector<float>.Count)
+                while (i < layerSize)
                 {
                     var v1 = new Vector<float>(forwardCells, i);
                     var v2 = new Vector<float>(backwardCells, i);
@@ -108,12 +109,6 @@ namespace RNNSharp.Networks
                     vec.CopyTo(mergedLayer, i);
 
                     i += Vector<float>.Count;
-                }
-
-                while (i < layerSize)
-                {
-                    mergedLayer[i] = (forwardCells[i] + backwardCells[i]) / 2.0f;
-                    i++;
                 }
             }
         }

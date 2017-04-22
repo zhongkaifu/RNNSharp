@@ -1,6 +1,7 @@
 ﻿using AdvUtils;
 using System;
 using System.IO;
+using System.Numerics;
 
 namespace RNNSharp
 {
@@ -42,12 +43,35 @@ namespace RNNSharp
             return dropoutNeuron;
         }
 
+        public override void PreUpdateWeights(Neuron neuron, float[] errs)
+        {
+            DropoutNeuron dropoutNeuron = neuron as DropoutNeuron;
+            dropoutNeuron.Cells.CopyTo(Cells, 0);
+            for (int i = 0; i < LayerSize; i++)
+            {
+                if (dropoutNeuron.mask[i])
+                {
+                    Errs[i] = 0;
+                }
+                else
+                {
+                    Errs[i] = errs[i];
+                }
+            }
+        }
+
         public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
         {
+            SparseFeatureSize = sparseFeatureSize;
+            DenseFeatureSize = denseFeatureSize;
+            if (DenseFeatureSize % Vector<float>.Count != 0)
+            {
+                DenseFeatureSize += (Vector<float>.Count - (DenseFeatureSize % Vector<float>.Count));
+            }
+
             if (denseFeatureSize > 0)
             {
                 Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);
-                DenseFeatureSize = denseFeatureSize;
                 DenseWeights = new Matrix<float>(LayerSize, denseFeatureSize);
                 for (var i = 0; i < DenseWeights.Height; i++)
                 {
@@ -61,7 +85,6 @@ namespace RNNSharp
             if (sparseFeatureSize > 0)
             {
                 Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize, sparseFeatureSize);
-                SparseFeatureSize = sparseFeatureSize;
                 SparseWeights = new Matrix<float>(LayerSize, SparseFeatureSize);
                 for (var i = 0; i < SparseWeights.Height; i++)
                 {
@@ -109,19 +132,6 @@ namespace RNNSharp
 
         public override void BackwardPass()
         {
-        }
-
-        public override void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer, Neuron neuron)
-        {
-            DropoutNeuron dropoutNeuron = neuron as DropoutNeuron;
-            base.ComputeLayerErr(nextLayer, destErrLayer, srcErrLayer, dropoutNeuron);
-            for (var i = 0; i < LayerSize; i++)
-            {
-                if (dropoutNeuron.mask[i])
-                {
-                    destErrLayer[i] = 0;
-                }
-            }
         }
 
         public override void ComputeLayerErr(SimpleLayer nextLayer)

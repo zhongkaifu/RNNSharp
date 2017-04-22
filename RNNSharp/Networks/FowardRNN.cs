@@ -66,6 +66,7 @@ namespace RNNSharp.Networks
             rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
             rnn.CRFTagTransWeights = CRFTagTransWeights;
             rnn.MaxSeqLength = MaxSeqLength;
+            rnn.crfLocker = crfLocker;
 
             return rnn;
         }
@@ -326,6 +327,7 @@ namespace RNNSharp.Networks
             {
                 Logger.WriteLine("Loading CRF tag trans weights...");
                 CRFTagTransWeights = RNNHelper.LoadMatrix(br);
+                crfLocker = new object();
             }
 
             sr.Close();

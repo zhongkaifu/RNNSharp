@@ -60,6 +60,7 @@
     <Compile Include="Layers\SampledSoftmaxLayer.cs" />
     <Compile Include="Networks\BiRNNAvg.cs" />
     <Compile Include="Networks\ForwardRNNSeq2Seq.cs" />
+    <Compile Include="Networks\ForwardRNNSeq2SeqLabeling.cs" />
     <Compile Include="Networks\RNN.cs" />
     <Compile Include="Layers\LSTMLayer.cs" />
     <Compile Include="ModelSetting.cs" />

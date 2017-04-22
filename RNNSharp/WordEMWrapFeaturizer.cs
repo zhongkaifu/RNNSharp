@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using Txt2Vec;
+using System.Numerics;
 
 /// <summary>
 /// RNNSharp written by Zhongkai Fu (fuzhongkai@gmail.com)
@@ -20,6 +21,10 @@ namespace RNNSharp
 
             var terms = model.GetAllTerms();
             vectorSize = model.VectorSize;
+            if (vectorSize % Vector<float>.Count != 0)
+            {
+                vectorSize += (Vector<float>.Count - (vectorSize % Vector<float>.Count));
+            }
 
             m_WordEmbedding = new Dictionary<string, SingleVector>();
             m_UnkEmbedding = new SingleVector(vectorSize);
@@ -30,7 +35,7 @@ namespace RNNSharp
 
                 if (vector != null)
                 {
-                    var spVector = new SingleVector(vector);
+                    var spVector = new SingleVector(vector, vectorSize);
                     m_WordEmbedding.Add(term, spVector);
                 }
             }

@@ -389,7 +389,7 @@ namespace RNNSharpConsole
                 {
                     //Output decoded result
                     var output = decoder.Process(sent);
-                    if (decoder.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
+                    if (decoder.NetworkType != NETWORKTYPE.ForwardSeq2Seq && decoder.NetworkType != NETWORKTYPE.ForwardSeq2SeqLabeling)
                     {
                         //Append the decoded result into the end of feature set of each token
                         if (output != null)
@@ -514,7 +514,7 @@ namespace RNNSharpConsole
                 return;
             }
 
-            if (config.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
+            if (config.NetworkType != NETWORKTYPE.ForwardSeq2Seq && config.NetworkType != NETWORKTYPE.ForwardSeq2SeqLabeling)
             {
                 //Create RNN encoder and save necessary parameters
                 var encoder = new RNNEncoder<Sequence>(RNNConfig, config)
