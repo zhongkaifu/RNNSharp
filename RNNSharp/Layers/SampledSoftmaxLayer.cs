@@ -152,7 +152,7 @@ namespace RNNSharp
                     {
                         var pos = pair.Key;
                         var val = pair.Value;
-                        var delta = er2 * val; // RNNHelper.NormalizeGradient(er2 * val);
+                        var delta = RNNHelper.NormalizeGradient(er2 * val);
                         var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
                         vector_c[pos] += newLearningRate * delta;
                     }

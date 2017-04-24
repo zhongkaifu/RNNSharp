@@ -29,7 +29,6 @@ namespace RNNSharp
         {
             return random(-0.1f, 0.1f) + random(-0.1f, 0.1f) + random(-0.1f, 0.1f);
         }
-
         public static float NormalizeGradient(float err)
         {
             if (err > GradientCutoff)
@@ -42,7 +41,6 @@ namespace RNNSharp
             }
             return err;
         }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vector<float> NormalizeGradient(Vector<float> v)
         {
@@ -50,17 +48,6 @@ namespace RNNSharp
             v = Vector.Max(v, vecMinGrad);
 
             return v;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector<float> UpdateLearningRate(Vector<float> vecDelta, ref Vector<float> vecLearningRateWeights)
-        {
-            if (IsConstAlpha)
-            {
-                return vecNormalLearningRate;
-            }
-            vecLearningRateWeights += vecDelta * vecDelta;
-            return vecNormalLearningRate / (Vector<float>.One + Vector.SquareRoot(vecLearningRateWeights));
         }
 
         public static float UpdateLearningRate(Matrix<float> m, int i, int j, float delta)
@@ -260,13 +247,6 @@ namespace RNNSharp
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             HashSet<int> setSkipSampling)
         {
-            //for (var i = 0;i <DestSize;i++)
-            //{
-            //    var er = setSkipSampling.Sum(j => srcvec[j] * srcmatrix[j][i]);
-
-            //    dest[i] = NormalizeGradient(er);
-            //}
-
             int cnt = 0;
             foreach (int j in setSkipSampling)
             {

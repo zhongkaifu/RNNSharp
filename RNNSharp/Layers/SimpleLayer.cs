@@ -268,9 +268,7 @@ namespace RNNSharp
             //Computing error delta
             var vecDenseFeature = new Vector<float>(feature, idx);
             var vecDelta = vecDenseFeature * err;
-
-        //    vecDelta = RNNHelper.NormalizeGradient(vecDelta);
-
+            vecDelta = RNNHelper.NormalizeGradient(vecDelta);
             //Computing learning rate
             var vecDenseWeightLearningRateCol = new Vector<float>(learningRateWeight, idx);
             vecDenseWeightLearningRateCol += vecDelta * vecDelta;
@@ -318,7 +316,7 @@ namespace RNNSharp
                     {
                         var pos = pair.Key;
                         var val = pair.Value;
-                        var delta = er2 * val; // RNNHelper.NormalizeGradient(er2 * val);
+                        var delta = RNNHelper.NormalizeGradient(er2 * val);
                         var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
 
                         vector_c[pos] += newLearningRate * delta;
