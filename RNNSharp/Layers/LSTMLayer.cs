@@ -817,7 +817,8 @@ namespace RNNSharp
             {
                 Vector<float> vecDelta = new Vector<float>(DenseFeature, j);
                 vecDelta = vecDelta * err;
-                vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+     //           vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+
                 var wlr_i = new Vector<float>(learningrate_i, j);
                 var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i);
                 wlr_i.CopyTo(learningrate_i, j);
@@ -848,7 +849,8 @@ namespace RNNSharp
                 wd.CopyTo(deri_i, j);
 
                 Vector<float> vecDelta = wd * err;
-                vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+            //    vecDelta = RNNHelper.NormalizeGradient(vecDelta);
+
                 //Computing learning rate and update it
                 var wlr_i = new Vector<float>(learningrate_i, j);
                 var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i);
