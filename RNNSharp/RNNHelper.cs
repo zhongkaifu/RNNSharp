@@ -164,35 +164,15 @@ namespace RNNSharp
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             int SrcSize)
         {
-            for (var j = 0; j < SrcSize; j++)
+            for (var i = 0; i < DestSize; i++)
             {
-                int i = 0;
-                float src = srcvec[j];
-                float[] srcVector = srcmatrix[j];
-
-                while (i < DestSize)
+                float er = 0;
+                for (var j = 0; j < SrcSize; j++)
                 {
-                    Vector<float> vecSrc = new Vector<float>(srcVector, i);
-                    Vector<float> vecDest = new Vector<float>(dest, i);
-
-                    if (j == 0)
-                    {
-                        vecDest = src * vecSrc;
-                    }
-                    else
-                    {
-                        vecDest = vecDest + src * vecSrc;
-                    }
-
-                    if (j == SrcSize - 1)
-                    {
-                        vecDest = NormalizeGradient(vecDest);
-                    }
-
-                    vecDest.CopyTo(dest, i);
-
-                    i += Vector<float>.Count;
+                    er += srcvec[j] * srcmatrix[j][i];
                 }
+
+                dest[i] = NormalizeGradient(er);
             }
         }
 
@@ -260,45 +240,11 @@ namespace RNNSharp
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             HashSet<int> setSkipSampling)
         {
-            //for (var i = 0;i <DestSize;i++)
-            //{
-            //    var er = setSkipSampling.Sum(j => srcvec[j] * srcmatrix[j][i]);
-
-            //    dest[i] = NormalizeGradient(er);
-            //}
-
-            int cnt = 0;
-            foreach (int j in setSkipSampling)
+            for (var i = 0;i <DestSize;i++)
             {
-                int i = 0;
-                float src = srcvec[j];
-                float[] srcVector = srcmatrix[j];
+                var er = setSkipSampling.Sum(j => srcvec[j] * srcmatrix[j][i]);
 
-                while (i < DestSize)
-                {
-                    Vector<float> vecSrc = new Vector<float>(srcVector, i);
-                    Vector<float> vecDest = new Vector<float>(dest, i);
-
-                    if (j == 0)
-                    {
-                        vecDest = src * vecSrc;
-                    }
-                    else
-                    {
-                        vecDest = vecDest + src * vecSrc;
-                    }
-
-                    if (cnt == setSkipSampling.Count - 1)
-                    {
-                        vecDest = NormalizeGradient(vecDest);
-                    }
-
-                    vecDest.CopyTo(dest, i);
-
-                    i += Vector<float>.Count;
-                }
-
-                cnt++;
+                dest[i] = NormalizeGradient(er);
             }
         }
     }

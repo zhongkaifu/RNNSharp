@@ -345,33 +345,14 @@ namespace RNNSharp
                 var lstmLayer = nextLayer as LSTMLayer;
                 if (lstmLayer != null)
                 {
-                    for (var k = 0; k < nextLayer.LayerSize; k++)
+                    for (var i = 0; i < LayerSize; i++)
                     {
-                        int i = 0;
-                        float[] weights = lstmLayer.wDenseOutputGate.weights[k];
-                        float err = srcErrLayer[k];
-                        while (i < LayerSize)
+                        var err = 0.0f;
+                        for (var k = 0; k < nextLayer.LayerSize; k++)
                         {
-                            Vector<float> vecWeights = new Vector<float>(weights, i);
-                            Vector<float> vecErrs = new Vector<float>(destErrLayer, i);
-
-                            if (k == 0)
-                            {
-                                vecErrs = err * vecWeights;
-                            }
-                            else
-                            {
-                                vecErrs = vecErrs + err * vecWeights;
-                            }
-
-                            if (k == nextLayer.LayerSize - 1)
-                            {
-                                vecErrs = RNNHelper.NormalizeGradient(vecErrs);
-                            }
-
-                            vecErrs.CopyTo(destErrLayer, i);
-                            i += Vector<float>.Count;
+                            err += srcErrLayer[k] * lstmLayer.wDenseOutputGate.weights[k][i];
                         }
+                        destErrLayer[i] = err; // RNNHelper.NormalizeGradient(err);
                     }
                 }
                 else
