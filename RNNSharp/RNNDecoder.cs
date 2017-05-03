@@ -39,7 +39,7 @@ namespace RNNSharp
             RNN<Sequence> r = null;
             while (qRNNs.TryDequeue(out r) == false)
             {
-                Thread.Sleep(100);
+                Thread.Yield();
             }
 
             return r;

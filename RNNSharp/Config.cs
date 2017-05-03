@@ -200,10 +200,6 @@ namespace RNNSharp
             {
                 NetworkType = NETWORKTYPE.BiDirectionalAverage;
             }
-            else if (networkType.Equals(NETWORKTYPE.ForwardSeq2SeqLabeling.ToString(), StringComparison.InvariantCultureIgnoreCase))
-            {
-                NetworkType = NETWORKTYPE.ForwardSeq2SeqLabeling;
-            }
             else
             {
                 throw new ArgumentException($"Invalidated network type: {networkType}");
@@ -216,7 +212,7 @@ namespace RNNSharp
             SetTFeatures();
 
             //Load auto-encoder model for sequence-to-sequence. This model is used to encode source sequence
-            if (NetworkType == NETWORKTYPE.ForwardSeq2Seq || NetworkType == NETWORKTYPE.ForwardSeq2SeqLabeling)
+            if (NetworkType == NETWORKTYPE.ForwardSeq2Seq)
             {
                 var seqAutoEncoderConfigFilePath = GetFilePath(currentDirectory,
                     config.GetValueRequired(SEQ2SEQ_AUTOENCODER_CONFIG));
@@ -364,10 +360,6 @@ namespace RNNSharp
                     OutputLayerConfig = new SimpleLayerConfig();
                     Logger.WriteLine("Initialize configuration for simple layer.");
                     break;
-
-                default:
-                    Logger.WriteLine($"Invalidated output layer type {sLayerType}");
-                    throw new ArgumentException($"Invalidated output layer type {sLayerType}");
             }
         }
 

@@ -51,6 +51,15 @@ namespace RNNSharp.Networks
 
         public List<SimpleLayer> HiddenLayerList { get; set; }
 
+        public override void UpdateWeights()
+        {
+            foreach (var layer in HiddenLayerList)
+            {
+                layer.UpdateWeights();
+            }
+
+            OutputLayer.UpdateWeights();
+        }
 
         public override RNN<T> Clone()
         {
@@ -64,9 +73,14 @@ namespace RNNSharp.Networks
             ForwardRNN<T> rnn = new ForwardRNN<T>();
             rnn.HiddenLayerList = hiddenLayers;
             rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
-            rnn.CRFTagTransWeights = CRFTagTransWeights;
+            rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
-            rnn.crfLocker = crfLocker;
+            rnn.bVQ = bVQ;
+            rnn.IsCRFTraining = IsCRFTraining;
+            if (rnn.IsCRFTraining)
+            {
+                rnn.InitializeCRFVariablesForTraining();
+            }
 
             return rnn;
         }
@@ -273,7 +287,7 @@ namespace RNNSharp.Networks
             if (IsCRFTraining)
             {
                 //Save CRF feature weights
-                RNNHelper.SaveMatrix(CRFTagTransWeights, fo);
+                RNNHelper.SaveMatrix(CRFWeights, fo);
             }
 
             fo.Close();
@@ -326,21 +340,20 @@ namespace RNNSharp.Networks
             if (IsCRFTraining)
             {
                 Logger.WriteLine("Loading CRF tag trans weights...");
-                CRFTagTransWeights = RNNHelper.LoadMatrix(br);
-                crfLocker = new object();
+                CRFWeights = RNNHelper.LoadMatrix(br);
             }
 
             sr.Close();
         }
 
-        public override void CleanStatus()
+        public override void CleanStatusForTraining()
         {
             foreach (var layer in HiddenLayerList)
             {
-                layer.CleanLearningRate();
+                layer.CleanForTraining();
             }
 
-            OutputLayer.CleanLearningRate();
+            OutputLayer.CleanForTraining();
         }
     }
 }

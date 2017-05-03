@@ -27,7 +27,6 @@
     {
         Forward = 0,
         ForwardSeq2Seq,
-        ForwardSeq2SeqLabeling,
         BiDirectional,
         BiDirectionalAverage
     }

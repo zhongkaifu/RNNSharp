@@ -67,7 +67,9 @@ namespace RNNSharp
                     //Apply sparse features
                     SparseFeature = sparseFeature;
 
-                    foreach(var b in negativeSampleWordList)
+
+
+                                        foreach(var b in negativeSampleWordList)
                     {
                         float score = 0;
                         var vector_b = SparseWeights[b];
@@ -119,47 +121,18 @@ namespace RNNSharp
             {
                 return base.GetBestOutputIndex();
             }
-        } 
+        }
 
         public override void BackwardPass()
         {
-            if (DenseFeatureSize > 0)
+            //Update hidden-output weights
+
+                       foreach (var c in negativeSampleWordList)
             {
-                //Update hidden-output weights
-                foreach (var c in negativeSampleWordList)
-                {
-                    var err = Errs[c];
-                    var featureWeightCol = DenseWeights[c];
-                    var featureWeightsLearningRateCol = DenseWeightsLearningRate[c];
-                    var j = 0;
-                    while (j < DenseFeatureSize)
-                    {
-                        UpdateFeatureWeights(DenseFeature, featureWeightCol, featureWeightsLearningRateCol,
-                            err, j, c);
-                        j += Vector<float>.Count;
-                    }
-                }
+                UpdateLayerAt(c);
             }
 
-            if (SparseFeatureSize > 0)
-            {
-                //Update hidden-output weights
-                foreach (var c in negativeSampleWordList)
-                {
-                    var er2 = Errs[c];
-                    var vector_c = SparseWeights[c];
-                    foreach (var pair in SparseFeature)
-                    {
-                        var pos = pair.Key;
-                        var val = pair.Value;
-                        var delta = er2 * val; // RNNHelper.NormalizeGradient(er2 * val);
-                        var newLearningRate = RNNHelper.UpdateLearningRate(SparseWeightsLearningRate, c, pos, delta);
-                        vector_c[pos] += newLearningRate * delta;
-                    }
-                }
-            }
         }
-
 
         public override void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)
         {

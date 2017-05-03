@@ -81,9 +81,14 @@ namespace RNNSharp.Networks
 
             BiRNNAvg<T> rnn = new BiRNNAvg<T>();
             rnn.InitCache(forwardLayers, backwardLayers, OutputLayer.CreateLayerSharedWegiths());
-            rnn.CRFTagTransWeights = CRFTagTransWeights;
+            rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
-            rnn.crfLocker = crfLocker;
+            rnn.bVQ = bVQ;
+            rnn.IsCRFTraining = IsCRFTraining;
+            if (rnn.IsCRFTraining)
+            {
+                rnn.InitializeCRFVariablesForTraining();
+            }
 
             return rnn;
         }
@@ -92,6 +97,8 @@ namespace RNNSharp.Networks
         {
             //Merge forward and backward
             float[][] stateOutputs = layersOutput[layerIdx];
+
+
             for (var curState = 0; curState < numStates; curState++)
             {
                 var forwardCells = forwardCellList[layerIdx][curState].Cells;
@@ -100,7 +107,9 @@ namespace RNNSharp.Networks
 
                 var i = 0;
                 Vector<float> vecDiv2 = new Vector<float>(2.0f);
-                while (i < layerSize)
+
+                var moreItems = (layerSize % Vector<float>.Count);
+                while (i < layerSize - moreItems)
                 {
                     var v1 = new Vector<float>(forwardCells, i);
                     var v2 = new Vector<float>(backwardCells, i);
@@ -109,6 +118,12 @@ namespace RNNSharp.Networks
                     vec.CopyTo(mergedLayer, i);
 
                     i += Vector<float>.Count;
+                }
+
+                while (i < layerSize)
+                {
+                    mergedLayer[i] = (forwardCells[i] + backwardCells[i]) / 2.0f;
+                    i++;
                 }
             }
         }

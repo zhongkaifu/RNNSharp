@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace RNNSharp
 {
@@ -62,16 +63,10 @@ namespace RNNSharp
 
         public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
         {
-            SparseFeatureSize = sparseFeatureSize;
-            DenseFeatureSize = denseFeatureSize;
-            if (DenseFeatureSize % Vector<float>.Count != 0)
-            {
-                DenseFeatureSize += (Vector<float>.Count - (DenseFeatureSize % Vector<float>.Count));
-            }
-
             if (denseFeatureSize > 0)
             {
                 Logger.WriteLine("Initializing dense feature matrix. layer size = {0}, feature size = {1}", LayerSize, denseFeatureSize);
+                DenseFeatureSize = denseFeatureSize;
                 DenseWeights = new Matrix<float>(LayerSize, denseFeatureSize);
                 for (var i = 0; i < DenseWeights.Height; i++)
                 {
@@ -85,6 +80,7 @@ namespace RNNSharp
             if (sparseFeatureSize > 0)
             {
                 Logger.WriteLine("Initializing sparse feature matrix. layer size = {0}, feature size = {1}", LayerSize, sparseFeatureSize);
+                SparseFeatureSize = sparseFeatureSize;
                 SparseWeights = new Matrix<float>(LayerSize, SparseFeatureSize);
                 for (var i = 0; i < SparseWeights.Height; i++)
                 {
@@ -97,6 +93,12 @@ namespace RNNSharp
 
             InitializeInternalTrainingParameters();
         }
+
+        public override void UpdateWeights()
+        {
+
+        }
+
         public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
         {
             if (LayerSize != denseFeature.Length)
@@ -106,7 +108,8 @@ namespace RNNSharp
 
             if (runningMode == RunningMode.Training)
             {
-                for (var i = 0; i < LayerSize; i++)
+
+                              for (var i = 0; i < LayerSize; i++)
                 {
                     var val = (float)rnd.NextDouble();
                     if (val < dropoutRatio)
@@ -123,7 +126,8 @@ namespace RNNSharp
             }
             else
             {
-                for (var i = 0; i < LayerSize; i++)
+
+                                for (var i = 0; i < LayerSize; i++)
                 {
                     Cells[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
                 }

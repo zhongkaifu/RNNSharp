@@ -20,6 +20,8 @@ namespace RNNSharp
         public static float LearningRate { get; set; }
         public static bool IsConstAlpha { get; set; }
 
+        public static int MiniBatchSize { get; set; }
+
         public static float random(float min, float max)
         {
             return (float)(rand.NextDouble() * (max - min) + min);
@@ -53,17 +55,7 @@ namespace RNNSharp
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector<float> UpdateLearningRate(Vector<float> vecDelta, ref Vector<float> vecLearningRateWeights)
-        {
-            if (IsConstAlpha)
-            {
-                return vecNormalLearningRate;
-            }
-            vecLearningRateWeights += vecDelta * vecDelta;
-            return vecNormalLearningRate / (Vector<float>.One + Vector.SquareRoot(vecLearningRateWeights));
-        }
-
-        public static float UpdateLearningRate(Matrix<float> m, int i, int j, float delta)
+        public static float ComputeLearningRate(Matrix<float> m, int i, int j, float delta)
         {
             if (IsConstAlpha)
             {
@@ -73,6 +65,19 @@ namespace RNNSharp
             m[i][j] = dg;
 
             return (float)(LearningRate / (1.0 + Math.Sqrt(dg)));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector<float> ComputeLearningRate(Vector<float> vecDelta, ref Vector<float> vecWeightLearningRate)
+        {
+            if (RNNHelper.IsConstAlpha)
+            {
+                return RNNHelper.vecNormalLearningRate;
+            }
+
+            vecWeightLearningRate += vecDelta * vecDelta;
+            return vecNormalLearningRate / (Vector.SquareRoot(vecWeightLearningRate) + Vector<float>.One);
+
         }
 
         //Save matrix into file as binary format
@@ -142,13 +147,14 @@ namespace RNNSharp
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
             int SrcSize)
         {
-            for (var i = 0;i < DestSize;i++)
+            for (var i = 0; i < DestSize; i++)
             {
                 var vector_i = srcmatrix[i];
                 float cellOutput = 0;
                 var j = 0;
 
-                while (j < SrcSize)
+                var moreItems = (SrcSize % Vector<float>.Count);
+                while (j < SrcSize - moreItems)
                 {
                     var v1 = new Vector<float>(srcvec, j);
                     var v2 = new Vector<float>(vector_i, j);
@@ -157,22 +163,13 @@ namespace RNNSharp
                     j += Vector<float>.Count;
                 }
 
-                dest[i] = cellOutput;
-            }
-        }
-
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-            int SrcSize)
-        {
-            for (var i = 0; i < DestSize; i++)
-            {
-                float er = 0;
-                for (var j = 0; j < SrcSize; j++)
+                while (j < SrcSize)
                 {
-                    er += srcvec[j] * srcmatrix[j][i];
+                    cellOutput += srcvec[j] * vector_i[j];
+                    j++;
                 }
 
-                dest[i] = NormalizeGradient(er);
+                dest[i] = cellOutput;
             }
         }
 
@@ -219,12 +216,15 @@ namespace RNNSharp
         public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
             HashSet<int> setSkipSampling, int SrcSize)
         {
-            foreach(var i in setSkipSampling)
+
+            foreach (var i in setSkipSampling)
             {
                 float cellOutput = 0;
                 var vector_i = srcmatrix[i];
                 var j = 0;
-                while (j < SrcSize)
+
+                var moreItems = (SrcSize % Vector<float>.Count);
+                while (j < SrcSize - moreItems)
                 {
                     var v1 = new Vector<float>(srcvec, j);
                     var v2 = new Vector<float>(vector_i, j);
@@ -233,18 +233,74 @@ namespace RNNSharp
                     j += Vector<float>.Count;
                 }
 
+                while (j < SrcSize)
+                {
+                    cellOutput += srcvec[j] * vector_i[j];
+                    j++;
+                }
+
                 dest[i] = cellOutput;
             }
         }
 
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-            HashSet<int> setSkipSampling)
+           int SrcSize)
         {
-            for (var i = 0;i <DestSize;i++)
+            Array.Clear(dest, 0, dest.Length);
+            for (var j = 0; j < SrcSize; j++)
             {
-                var er = setSkipSampling.Sum(j => srcvec[j] * srcmatrix[j][i]);
+                int i = 0;
+                float src = srcvec[j];
+                float[] srcVector = srcmatrix[j];
 
-                dest[i] = NormalizeGradient(er);
+                var moreItems = (DestSize % Vector<float>.Count);
+                while (i < DestSize - moreItems)
+                {
+                    Vector<float> vecSrc = new Vector<float>(srcVector, i);
+                    Vector<float> vecDest = new Vector<float>(dest, i);
+                    vecDest += src * vecSrc;
+
+                    vecDest.CopyTo(dest, i);
+                    i += Vector<float>.Count;
+                }
+
+                while (i < DestSize)
+                {
+                    dest[i] += src * srcVector[i];
+                    i++;
+                }
+            }
+        }
+
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
+                    HashSet<int> setSkipSampling)
+        {
+            Array.Clear(dest, 0, dest.Length);
+            int cnt = 0;
+            foreach (int j in setSkipSampling)
+            {
+                int i = 0;
+                float src = srcvec[j];
+                float[] srcVector = srcmatrix[j];
+
+                var moreItems = (DestSize % Vector<float>.Count);
+                while (i < DestSize - moreItems)
+                {
+                    Vector<float> vecSrc = new Vector<float>(srcVector, i);
+                    Vector<float> vecDest = new Vector<float>(dest, i);
+                    vecDest += src * vecSrc;
+
+                    vecDest.CopyTo(dest, i);
+                    i += Vector<float>.Count;
+                }
+
+                while (i < DestSize)
+                {
+                    dest[i] += src * srcVector[i];
+                    i++;
+                }
+
+                cnt++;
             }
         }
     }

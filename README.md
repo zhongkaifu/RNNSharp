@@ -261,18 +261,19 @@ RNNSharpConsole.exe is a console tool for recurrent neural network encoding and 
 In this mode, the console tool can encode a RNN model by given feature set and training/validated corpus. The usage as follows:
 
 RNNSharpConsole.exe -mode train <parameters>  
- Parameters for training RNN based model  
+ Parameters for training RNN based model.
 -trainfile <string>: Training corpus file  
 -validfile <string>: Validated corpus for training  
 -cfgfile <string>: Configuration file  
 -tagfile <string>: Output tag or vocabulary file  
 -inctrain <boolean>: Incremental training. Starting from output model specified in configuration file. Default is false  
--alpha <float>: Learning rate, default is 0.1  
--maxiter <int>: Maximum iteration for training. 0 is no limition, default is 20  
--savestep <int>: Save temporary model after every <int> sentence, default is 0  
--vq <int> : Model vector quantization, 0 is disable, 1 is enable. default is 0  
+-alpha <float>: Learning rate, Default is 0.1  
+-maxiter <int>: Maximum iteration for training. 0 is no limition, Default is 20  
+-savestep <int>: Save temporary model after every <int> sentence, Default is 0  
+-vq <int> : Model vector quantization, 0 is disable, 1 is enable. Default is 0  
+-minibatch <int> : Updating weights every <int> sequence. Default is 1
 
-Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K -vq 0 -grad 15.0  
+Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K -vq 0 -grad 15.0  -minibatch 128
 
 ### Decode Model
 
@@ -369,3 +370,4 @@ The RNNSharp also provides some APIs for developers to leverage it into their pr
 ## RNNSharp referenced by the following published papers  
 1. [Project-Team IntuiDoc: Intuitive user interaction for document](https://www.irisa.fr/intuidoc/data/ra/intuidoc2015.pdf)
 2. [A New Pre-training Method for Training Deep Learning Models with Application to Spoken Language Understanding](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/IS2016.CameraReady-1.pdf)
+3. [Long Short-Term Memory](http://pages.cs.wisc.edu/~shavlik/cs638/lectureNotes/Long%20Short-Term%20Memory%20Networks.pdf)

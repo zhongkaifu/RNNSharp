@@ -1,6 +1,7 @@
 ﻿using AdvUtils;
 using RNNSharp.Networks;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading;
@@ -42,39 +43,73 @@ namespace RNNSharp
         int tknErrCnt = 0;
         int sentErrCnt = 0;
 
-        public void Process(RNN<T> rnn, DataSet<T> trainingSet, RunningMode runningMode, int totalSequenceNum)
+        int updatingWeights = 0;
+        int processMiniBatch = 0;
+
+        ParallelOptions parallelOptions;
+
+        /// <summary>
+        /// Process entire corpus set by given RNN
+        /// </summary>
+        /// <param name="rnns"></param>
+        /// <param name="corpusSet"></param>
+        /// <param name="runningMode"></param>
+        public void Process(List<RNN<T>> rnns, DataSet<T> corpusSet, RunningMode runningMode)
         {
-            //Shffle training corpus
-            trainingSet.Shuffle();
+            parallelOptions = new ParallelOptions();
+            parallelOptions.MaxDegreeOfParallelism = Environment.ProcessorCount;
+            processedSequence = 0;
+            processedWordCnt = 0;
+            tknErrCnt = 0;
+            sentErrCnt = 0;
 
-            for (var i = 0; i < trainingSet.SequenceList.Count; i++)
+            corpusSet.Shuffle();
+
+            //Add RNN instance into job queue
+            ConcurrentQueue<RNN<T>> qRNNs = new ConcurrentQueue<RNN<T>>();
+            foreach (var rnn in rnns)
             {
-                var pSequence = trainingSet.SequenceList[i];           
+                qRNNs.Enqueue(rnn);
+            }
 
-                int wordCnt = 0;
+            Parallel.For(0, corpusSet.SequenceList.Count, parallelOptions, i =>
+            {
+                //Get a free RNN instance for running
+                RNN<T> rnn;
+                if (qRNNs.TryDequeue(out rnn) == false)
+                {
+                    //The queue is empty, so we clone a new one
+                    rnn = rnns[0].Clone();
+                    Logger.WriteLine("Cloned a new RNN instance for training.");
+                }
+
+                var pSequence = corpusSet.SequenceList[i];
+
+                //Calcuate how many tokens we are going to process in this sequence
+                int tokenCnt = 0;
                 if (pSequence is Sequence)
                 {
-                    wordCnt = (pSequence as Sequence).States.Length;
+                    tokenCnt = (pSequence as Sequence).States.Length;
                 }
                 else
                 {
                     SequencePair sp = pSequence as SequencePair;
                     if (sp.srcSentence.TokensList.Count > rnn.MaxSeqLength)
                     {
-                        continue;
+                        qRNNs.Enqueue(rnn);
+                        return;
                     }
-
-                    wordCnt = sp.tgtSequence.States.Length;
-                    
+                    tokenCnt = sp.tgtSequence.States.Length;
                 }
 
-                if (wordCnt > rnn.MaxSeqLength)
+                //This sequence is too long, so we ignore it
+                if (tokenCnt > rnn.MaxSeqLength)
                 {
-                    continue;
+                    qRNNs.Enqueue(rnn);
+                    return;
                 }
 
-                Interlocked.Add(ref processedWordCnt, wordCnt);
-
+                //Run neural network
                 int[] predicted;
                 if (IsCRFTraining)
                 {
@@ -85,6 +120,11 @@ namespace RNNSharp
                     Matrix<float> m;
                     predicted = rnn.ProcessSequence(pSequence, runningMode, false, out m);
                 }
+
+                //Update counters
+                Interlocked.Add(ref processedWordCnt, tokenCnt);
+                Interlocked.Increment(ref processedSequence);
+                Interlocked.Increment(ref processMiniBatch);
 
                 int newTknErrCnt;
                 if (pSequence is Sequence)
@@ -102,25 +142,50 @@ namespace RNNSharp
                     Interlocked.Increment(ref sentErrCnt);
                 }
 
-                Interlocked.Increment(ref processedSequence);
+                //Update weights
+                //We only allow one thread to update weights, and other threads keep running to train or predict given sequences
+                //Note: we don't add any lock when updating weights and deltas for weights in order to improve performance singificantly, 
+                //so that means race condition will happen and it's okay for us.
+                if (runningMode == RunningMode.Training && processMiniBatch > 0 && processMiniBatch % ModelSettings.MiniBatchSize == 0 && updatingWeights == 0)
+                {
+                    Interlocked.Increment(ref updatingWeights);
+                    if (updatingWeights == 1)
+                    {
+                        rnn.UpdateWeights();
+                        Interlocked.Exchange(ref processMiniBatch, 0);
+                    }
+                    Interlocked.Decrement(ref updatingWeights);
+                }
 
+                //Show progress information
                 if (processedSequence % 1000 == 0)
                 {
-                    Logger.WriteLine("Progress = {0} ", processedSequence / 1000 + "K/" + totalSequenceNum / 1000.0 + "K");
+                    Logger.WriteLine("Progress = {0} ", processedSequence / 1000 + "K/" + corpusSet.SequenceList.Count / 1000.0 + "K");
                     Logger.WriteLine(" Error token ratio = {0}%", (double)tknErrCnt / (double)processedWordCnt * 100.0);
                     Logger.WriteLine(" Error sentence ratio = {0}%", (double)sentErrCnt / (double)processedSequence * 100.0);
                 }
 
+                //Save intermediate model file
                 if (ModelSettings.SaveStep > 0 && processedSequence % ModelSettings.SaveStep == 0)
                 {
                     //After processed every m_SaveStep sentences, save current model into a temporary file
                     Logger.WriteLine("Saving temporary model into file...");
-                    rnn.SaveModel("model.tmp");
+                    try
+                    {
+                        rnn.SaveModel("model.tmp");
+                    }
+                    catch (Exception err)
+                    {
+                        Logger.WriteLine($"Fail to save temporary model into file. Error: {err.Message.ToString()}");
+                    }
                 }
 
-                
-            }
+                qRNNs.Enqueue(rnn);
+            });
+
         }
+
+        
 
         private int GetErrorTokenNum(Sequence seq, int[] predicted)
         {
@@ -162,25 +227,16 @@ namespace RNNSharp
             }
 
             rnn.MaxSeqLength = maxSequenceLength;
-            int N = Environment.ProcessorCount;
-            List<DataSet<T>> dataSets = TrainingSet.Split(N);
+            rnn.bVQ = ModelSettings.VQ != 0 ? true : false;
+            rnn.IsCRFTraining = IsCRFTraining;
+
+            int N = Environment.ProcessorCount * 2;
             List<RNN<T>> rnns = new List<RNN<T>>();
             rnns.Add(rnn);
 
             for (int i = 1; i < N; i++)
             {
                 rnns.Add(rnn.Clone());
-            }
-
-            for (int i = 0; i < N; i++)
-            {
-                //Assign model settings to RNN
-                rnns[i].bVQ = ModelSettings.VQ != 0 ? true : false;
-                rnns[i].IsCRFTraining = IsCRFTraining;
-                if (IsCRFTraining)
-                {
-                    rnns[i].InitializeCRFVariablesForTraining();
-                }
             }
 
             //Initialize RNNHelper
@@ -191,6 +247,7 @@ namespace RNNSharp
             RNNHelper.vecMaxGrad = new Vector<float>(RNNHelper.GradientCutoff);
             RNNHelper.vecMinGrad = new Vector<float>(-RNNHelper.GradientCutoff);
             RNNHelper.IsConstAlpha = ModelSettings.IsConstAlpha;
+            RNNHelper.MiniBatchSize = ModelSettings.MiniBatchSize;
 
             Logger.WriteLine("");
 
@@ -203,25 +260,21 @@ namespace RNNSharp
             parallelOption.MaxDegreeOfParallelism = -1;
             while (true)
             {
-                processedSequence = 0;
-                processedWordCnt = 0;
-                tknErrCnt = 0;
-                sentErrCnt = 0;
-
                 if (ModelSettings.MaxIteration > 0 && iter > ModelSettings.MaxIteration)
                 {
                     Logger.WriteLine("We have trained this model {0} iteration, exit.");
                     break;
-
                 }
 
                 var start = DateTime.Now;
                 Logger.WriteLine($"Start to training {iter} iteration. learning rate = {RNNHelper.LearningRate}");
-                Parallel.For(0, N, i =>
+
+                //Clean all RNN instances' status for training
+                foreach (var r in rnns)
                 {
-                    rnns[i].CleanStatus();
-                    Process(rnns[i], dataSets[i], RunningMode.Training, TrainingSet.SequenceList.Count);
-                });
+                    r.CleanStatusForTraining();
+                }
+                Process(rnns, TrainingSet, RunningMode.Training);
 
                 var duration = DateTime.Now.Subtract(start);
 
@@ -242,13 +295,8 @@ namespace RNNSharp
                 //Validate the model by validated corpus
                 if (ValidationSet != null)
                 {
-                    processedSequence = 0;
-                    processedWordCnt = 0;
-                    tknErrCnt = 0;
-                    sentErrCnt = 0;
-
                     Logger.WriteLine("Verify model on validated corpus.");
-                    Process(rnn, ValidationSet, RunningMode.Validate, ValidationSet.SequenceList.Count);
+                    Process(rnns, ValidationSet, RunningMode.Validate);
                     Logger.WriteLine("End model verification.");
                     Logger.WriteLine("");
 
@@ -278,6 +326,7 @@ namespace RNNSharp
                 {
                     //We don't have better result on training set, so reduce learning rate
                     RNNHelper.LearningRate = RNNHelper.LearningRate / 2.0f;
+                    RNNHelper.vecNormalLearningRate = new Vector<float>(RNNHelper.LearningRate);
                 }
                 else
                 {

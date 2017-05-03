@@ -30,12 +30,20 @@ namespace RNNSharp
             }
             var i = 0;
             var vecSum = new Vector<float>(sum);
-            while (i < LayerSize)
+
+            var moreItems = (LayerSize % Vector<float>.Count);
+            while (i < LayerSize - moreItems)
             {
                 var v = new Vector<float>(Cells, i);
                 v /= vecSum;
                 v.CopyTo(Cells, i);
                 i += Vector<float>.Count;
+            }
+
+            while (i < LayerSize)
+            {
+                Cells[i] /= sum;
+                i++;
             }
         }
     }

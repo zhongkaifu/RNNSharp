@@ -17,6 +17,7 @@ namespace RNNSharp
             IncrementalTrain = false;
         }
 
+        public int MiniBatchSize { get; set; }
         public bool IncrementalTrain { get; set; }
         public float LearningRate { get; set; }
         public int MaxIteration { get; set; }
@@ -39,6 +40,7 @@ namespace RNNSharp
             }
 
             Logger.WriteLine($"Incremental training: {IncrementalTrain}");
+            Logger.WriteLine($"Mini batch size: {MiniBatchSize}");
         }
     }
 }

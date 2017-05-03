@@ -26,12 +26,13 @@ namespace RNNSharpConsole
         private static float alpha = 0.1f;
         private static int nBest = 1;
         private static int iVQ;
-        private static float gradientCutoff = 15.0f;
+        private static float gradientCutoff = 1.0f;
         private static bool constAlpha;
+        private static int miniBatchSize = 1;
 
         private static void UsageTitle()
         {
-            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.2.1 by Zhongkai Fu (fuzhongkai@gmail.com)");
+            Console.WriteLine("Deep Recurrent Neural Network Toolkit v2.3.0 by Zhongkai Fu (fuzhongkai@gmail.com)");
         }
 
         private static void Usage()
@@ -78,11 +79,14 @@ namespace RNNSharpConsole
             Console.WriteLine("\tModel vector quantization, 0 is disable, 1 is enable. Default is 0");
 
             Console.WriteLine(" -grad <float>");
-            Console.WriteLine("\tGradient cut-off. Default is 15.0f");
+            Console.WriteLine("\tGradient cut-off. Default is 1.0f");
+
+            Console.WriteLine(" -minibatch <int>");
+            Console.WriteLine("\tUpdating weights every <int> sequences. Default is 1");
 
             Console.WriteLine();
             Console.WriteLine(
-                "Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K -vq 0 -grad 15.0");
+                "Example: RNNSharpConsole.exe -mode train -trainfile train.txt -validfile valid.txt -cfgfile config.txt -tagfile tags.txt -alpha 0.1 -maxiter 20 -savestep 200K");
         }
 
         private static void UsageTest()
@@ -124,9 +128,9 @@ namespace RNNSharpConsole
             if ((i = ArgPos("-alpha", args)) >= 0) alpha = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-nbest", args)) >= 0) nBest = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-vq", args)) >= 0) iVQ = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
-            if ((i = ArgPos("-grad", args)) >= 0)
-                gradientCutoff = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
+            if ((i = ArgPos("-grad", args)) >= 0) gradientCutoff = float.Parse(args[i + 1], CultureInfo.InvariantCulture);
             if ((i = ArgPos("-constalpha", args)) >= 0) constAlpha = bool.Parse(args[i + 1]);
+            if ((i = ArgPos("-minibatch", args)) >= 0) miniBatchSize = int.Parse(args[i + 1], CultureInfo.InvariantCulture);
 
             if ((i = ArgPos("-savestep", args)) >= 0)
             {
@@ -389,7 +393,7 @@ namespace RNNSharpConsole
                 {
                     //Output decoded result
                     var output = decoder.Process(sent);
-                    if (decoder.NetworkType != NETWORKTYPE.ForwardSeq2Seq && decoder.NetworkType != NETWORKTYPE.ForwardSeq2SeqLabeling)
+                    if (decoder.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
                     {
                         //Append the decoded result into the end of feature set of each token
                         if (output != null)
@@ -490,7 +494,8 @@ namespace RNNSharpConsole
                 LearningRate = alpha,
                 GradientCutoff = gradientCutoff,
                 IsConstAlpha = constAlpha,
-                IncrementalTrain = incrementalTrain
+                IncrementalTrain = incrementalTrain,
+                MiniBatchSize = miniBatchSize
             };
 
             //Dump RNN setting on console
@@ -514,7 +519,7 @@ namespace RNNSharpConsole
                 return;
             }
 
-            if (config.NetworkType != NETWORKTYPE.ForwardSeq2Seq && config.NetworkType != NETWORKTYPE.ForwardSeq2SeqLabeling)
+            if (config.NetworkType != NETWORKTYPE.ForwardSeq2Seq)
             {
                 //Create RNN encoder and save necessary parameters
                 var encoder = new RNNEncoder<Sequence>(RNNConfig, config)

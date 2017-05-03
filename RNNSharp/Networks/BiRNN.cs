@@ -25,6 +25,21 @@ namespace RNNSharp.Networks
         List<float[][]> bErrLayers;
         SimpleLayer[] seqFinalOutput;
 
+        public override void UpdateWeights()
+        {
+            foreach (var layer in backwardHiddenLayers)
+            {
+                layer.UpdateWeights();
+            }
+
+            foreach (var layer in forwardHiddenLayers)
+            {
+                layer.UpdateWeights();
+            }
+
+            OutputLayer.UpdateWeights();
+        }
+
         public void InitCache(List<SimpleLayer> s_forwardRNN, List<SimpleLayer> s_backwardRNN, SimpleLayer outputLayer)
         {
             forwardHiddenLayers = s_forwardRNN;
@@ -153,6 +168,7 @@ namespace RNNSharp.Networks
             InitCache(forwardHiddenLayers, backwardHiddenLayers, outputLayer);
         }
 
+
         public override RNN<T> Clone()
         {
             List<SimpleLayer> forwardLayers = new List<SimpleLayer>();
@@ -170,26 +186,31 @@ namespace RNNSharp.Networks
 
             BiRNN<T> rnn = new BiRNN<T>();
             rnn.InitCache(forwardLayers, backwardLayers, OutputLayer.CreateLayerSharedWegiths());
-            rnn.CRFTagTransWeights = CRFTagTransWeights;
+            rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
-            rnn.crfLocker = crfLocker;
+            rnn.bVQ = bVQ;
+            rnn.IsCRFTraining = IsCRFTraining;
+            if (rnn.IsCRFTraining)
+            {
+                rnn.InitializeCRFVariablesForTraining();
+            }
 
             return rnn;
         }
 
-        public override void CleanStatus()
+        public override void CleanStatusForTraining()
         {
             foreach (var layer in forwardHiddenLayers)
             {
-                layer.CleanLearningRate();
+                layer.CleanForTraining();
             }
 
             foreach (var layer in backwardHiddenLayers)
             {
-                layer.CleanLearningRate();
+                layer.CleanForTraining();
             }
 
-            OutputLayer.CleanLearningRate();
+            OutputLayer.CleanForTraining();
         }
 
         protected virtual void MergeForwardBackwardLayers(int numStates, int layerSize, int layerIdx)
@@ -203,7 +224,8 @@ namespace RNNSharp.Networks
                 var mergedLayer = stateOutputs[curState];
 
                 var i = 0;
-                while (i < layerSize)
+                var moreItems = (layerSize % Vector<float>.Count);
+                while (i < layerSize - moreItems)
                 {
                     var v1 = new Vector<float>(forwardCells, i);
                     var v2 = new Vector<float>(backwardCells, i);
@@ -213,15 +235,23 @@ namespace RNNSharp.Networks
 
                     i += Vector<float>.Count;
                 }
+
+                while (i < layerSize)
+                {
+                    mergedLayer[i] = forwardCells[i];
+                    mergedLayer[layerSize + i] = backwardCells[i];
+                    i++;
+                }
             }
         }
 
-    
+
 
         private void ComputeMiddleLayers(Sequence pSequence, SimpleLayer forwardLayer, SimpleLayer backwardLayer, RunningMode runningMode, int layerIdx)
         {
             var numStates = pSequence.States.Length;
             float[][] lastLayerOutputs = layersOutput[layerIdx - 1];
+
 
             //Computing forward RNN
             forwardLayer.Reset();
@@ -240,6 +270,7 @@ namespace RNNSharp.Networks
                 backwardLayer.ForwardPass(state.SparseFeature, lastLayerOutputs[curState]);
                 backwardCellList[layerIdx][curState] = backwardLayer.CopyNeuronTo(backwardCellList[layerIdx][curState]);
             }
+
 
             //Merge forward and backward
             MergeForwardBackwardLayers(numStates, forwardLayer.LayerSize, layerIdx);
@@ -265,6 +296,7 @@ namespace RNNSharp.Networks
                 forwardCellList[0][curState] = forwardLayer.CopyNeuronTo(forwardCellList[0][curState]);
             }
 
+
             //Computing backward RNN
             backwardLayer.Reset();
             for (var curState = numStates - 1; curState >= 0; curState--)
@@ -273,6 +305,8 @@ namespace RNNSharp.Networks
                 backwardLayer.ForwardPass(state.SparseFeature, state.DenseFeature.CopyTo());
                 backwardCellList[0][curState] = backwardLayer.CopyNeuronTo(backwardCellList[0][curState]);
             }
+
+
 
             //Merge forward and backward
             MergeForwardBackwardLayers(numStates, forwardLayer.LayerSize, 0);
@@ -303,7 +337,8 @@ namespace RNNSharp.Networks
                 }
             }
 
-            for (var curState = 0;curState < numStates;curState++)
+
+            for (var curState = 0; curState < numStates; curState++)
             {
                 var state = pSequence.States[curState];
                 var outputCells = seqFinalOutput[curState];
@@ -322,12 +357,12 @@ namespace RNNSharp.Networks
 
         public override int GetTopHiddenLayerSize()
         {
-                return forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2;
+            return forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize * 2;
         }
 
         public override float[][] ComputeTopHiddenLayerOutput(Sequence pSequence)
         {
-             ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], RunningMode.Test);
+            ComputeBottomLayer(pSequence, forwardHiddenLayers[0], backwardHiddenLayers[0], RunningMode.Test);
             for (var i = 1; i < forwardHiddenLayers.Count; i++)
             {
                 ComputeMiddleLayers(pSequence, forwardHiddenLayers[i], backwardHiddenLayers[i], RunningMode.Test, i);
@@ -367,6 +402,8 @@ namespace RNNSharp.Networks
             var numLayers = forwardHiddenLayers.Count;
 
             //Calculate output layer error
+
+
             for (var curState = 0; curState < numStates; curState++)
             {
                 var layer = seqFinalOutput[curState];
@@ -382,16 +419,20 @@ namespace RNNSharp.Networks
             var errLayer1 = fErrLayers[numLayers - 1];
             var errLayer2 = bErrLayers[numLayers - 1];
 
+
             for (var curState = 0; curState < numStates; curState++)
             {
                 var curState2 = numStates - curState - 1;
                 forwardLayer.ComputeLayerErr(seqFinalOutput[curState2], errLayer1[curState2], seqFinalOutput[curState2].Errs);
             }
 
+
             for (var curState = 0; curState < numStates; curState++)
             {
                 backwardLayer.ComputeLayerErr(seqFinalOutput[curState], errLayer2[curState], seqFinalOutput[curState].Errs);
             }
+
+
 
             // Forward
             for (var i = numLayers - 2; i >= 0; i--)
@@ -416,11 +457,13 @@ namespace RNNSharp.Networks
                 var errLayer = bErrLayers[i];
                 var srcErrLayer = bErrLayers[i + 1];
 
+
                 for (var curState = 0; curState < numStates; curState++)
                 {
                     backwardLayer.ComputeLayerErr(lastBackwardLayer, errLayer[curState], srcErrLayer[curState]);
                 }
             }
+
         }
 
         private void DeepLearningNet(Sequence pSequence, SimpleLayer[] seqOutput)
@@ -428,16 +471,19 @@ namespace RNNSharp.Networks
             var numStates = pSequence.States.Length;
             var numLayers = forwardHiddenLayers.Count;
 
-            //Learning output layer
 
+            //Learning output layer
             for (var curState = 0; curState < numStates; curState++)
             {
                 seqOutput[curState].BackwardPass();
             }
 
+
+
             for (var i = 0; i < numLayers; i++)
             {
                 float[][] layerOutputs_i = (i > 0) ? layersOutput[i - 1] : null;
+
 
                 Neuron[] forwardNeurons = forwardCellList[i];
                 float[][] forwardErrs = fErrLayers[i];
@@ -491,7 +537,7 @@ namespace RNNSharp.Networks
             var numStates = pSequence.States.Length;
             seqBestOutput = new int[numStates];
 
-            for (var curState = 0;curState < numStates;curState++)
+            for (var curState = 0; curState < numStates; curState++)
             {
                 seqBestOutput[curState] = seqOutput[curState].GetBestOutputIndex();
             }
@@ -561,7 +607,7 @@ namespace RNNSharp.Networks
                 if (IsCRFTraining)
                 {
                     // Save CRF features weights
-                    RNNHelper.SaveMatrix(CRFTagTransWeights, fo);
+                    RNNHelper.SaveMatrix(CRFWeights, fo);
                 }
             }
         }
@@ -590,7 +636,7 @@ namespace RNNSharp.Networks
                     {
                         layer.SetRunningMode(RunningMode.Training);
                         layer.InitializeInternalTrainingParameters();
-                        
+
                     }
                     else
                     {
@@ -634,8 +680,7 @@ namespace RNNSharp.Networks
                 if (IsCRFTraining)
                 {
                     Logger.WriteLine("Loading CRF tag trans weights...");
-                    CRFTagTransWeights = RNNHelper.LoadMatrix(br);
-                    crfLocker = new object();
+                    CRFWeights = RNNHelper.LoadMatrix(br);
                 }
 
                 if (bTrain)

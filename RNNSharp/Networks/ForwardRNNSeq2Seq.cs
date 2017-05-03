@@ -16,15 +16,6 @@ namespace RNNSharp.Networks
 
         }
 
-        /// <summary>
-        /// Create network for forward sequence-to-sequence
-        /// Sparse feature size = source sparse feature size + target sparse feature size
-        /// Dense feature size: For first layer, (source dense feature size + target dense), for other layers, (source dense feature size + previous hidden layer size)
-        /// </summary>
-        /// <param name="hiddenLayersConfig"></param>
-        /// <param name="outputLayerConfig"></param>
-        /// <param name="TrainingSet"></param>
-        /// <param name="featurizer"></param>
         public override void CreateNetwork(List<LayerConfig> hiddenLayersConfig, LayerConfig outputLayerConfig, DataSet<T> TrainingSet, Config featurizer)
         {
             var srcDenseFeatureSize = featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
@@ -44,7 +35,7 @@ namespace RNNSharp.Networks
             }
 
             outputLayerConfig.LayerSize = TrainingSet.TagSize;
-            OutputLayer = CreateOutputLayer(outputLayerConfig, 0, (srcDenseFeatureSize + HiddenLayerList[HiddenLayerList.Count - 1].LayerSize));
+            OutputLayer = CreateOutputLayer(outputLayerConfig, sparseFeatureSize, (srcDenseFeatureSize + HiddenLayerList[HiddenLayerList.Count - 1].LayerSize));
             OutputLayer.SetRunningMode(RunningMode.Training);
 
             Logger.WriteLine($"Create a Forward recurrent neural sequence-to-sequence network with {HiddenLayerList.Count} hidden layers");
@@ -62,9 +53,14 @@ namespace RNNSharp.Networks
             ForwardRNNSeq2Seq<T> rnn = new ForwardRNNSeq2Seq<T>();
             rnn.HiddenLayerList = hiddenLayers;
             rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
-            rnn.CRFTagTransWeights = CRFTagTransWeights;
+            rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
-            rnn.crfLocker = crfLocker;
+            rnn.bVQ = bVQ;
+            rnn.IsCRFTraining = IsCRFTraining;
+            if (rnn.IsCRFTraining)
+            {
+                rnn.InitializeCRFVariablesForTraining();
+            }
 
             return rnn;
         }
@@ -77,7 +73,7 @@ namespace RNNSharp.Networks
         /// <param name="targetSparseFeatureSize"></param>
         /// <param name="srcHiddenAvgOutput"></param>
         /// <param name="srcSparseFeatures"></param>
-        protected virtual void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize)
+        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize)
         {
             //Extract dense features from source sequence
             var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
@@ -92,7 +88,9 @@ namespace RNNSharp.Networks
             var j = 0;
             float[] srcOutputForward = srcOutputs[0];
             float[] srcOutputBackward = srcOutputs[srcSequenceLength];
-            while (j < srcSequenceDenseFeatureSize)
+
+            var moreItems = (srcSequenceDenseFeatureSize % Vector<float>.Count);
+            while (j < srcSequenceDenseFeatureSize - moreItems)
             {
                 var vForward = new Vector<float>(srcOutputForward, j);
                 var vBackward = new Vector<float>(srcOutputBackward, j);
@@ -101,6 +99,13 @@ namespace RNNSharp.Networks
                 vBackward.CopyTo(srcHiddenAvgOutput, srcSequenceDenseFeatureSize + j);
 
                 j += Vector<float>.Count;
+            }
+
+            while (j < srcSequenceDenseFeatureSize)
+            {
+                srcHiddenAvgOutput[j] = srcOutputForward[j];
+                srcHiddenAvgOutput[srcSequenceDenseFeatureSize + j] = srcOutputBackward[j];
+                j++;
             }
 
             //Extract sparse features from source sequence
@@ -144,7 +149,7 @@ namespace RNNSharp.Networks
             }
         }
 
-        protected int[] PredictTargetSentence(Sentence sentence, Config featurizer, out Matrix<float> m)
+        private int[] PredictTargetSentence(Sentence sentence, Config featurizer, out Matrix<float> m)
         {
             m = null;
 
@@ -215,8 +220,8 @@ namespace RNNSharp.Networks
         }
 
         List<float[]> denseFeaturesList = null;
-        protected float[] srcHiddenAvgOutput;
-        protected Dictionary<int, float> srcSparseFeatures;
+        float[] srcHiddenAvgOutput;
+        Dictionary<int, float> srcSparseFeatures;
         private void CreateDenseFeatureList()
         {
             if (denseFeaturesList == null)
@@ -236,7 +241,7 @@ namespace RNNSharp.Networks
             return TrainSequencePair(sequence, runningMode, outputRawScore, out m);
         }
 
-        protected virtual int[] TrainSequencePair(ISequence sequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m)
+        private int[] TrainSequencePair(ISequence sequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m)
         {
             SequencePair pSequence = sequence as SequencePair;
             var tgtSequence = pSequence.tgtSequence;
@@ -256,7 +261,6 @@ namespace RNNSharp.Networks
             var numStates = pSequence.tgtSequence.States.Length;
             var numLayers = HiddenLayerList.Count;
             var predicted = new int[numStates];
-            var previousLables = new int[numStates];
 
             m = outputRawScore ? new Matrix<float>(numStates, OutputLayer.LayerSize) : null;
 
@@ -279,7 +283,7 @@ namespace RNNSharp.Networks
             {
                 //Build runtime features
                 var state = tgtSequence.States[curState];
-                SetRuntimeFeatures(state, curState, numStates, (runningMode == RunningMode.Training) ? previousLables : predicted);
+                SetRuntimeFeatures(state, curState, numStates, predicted);
 
                 //Build sparse features for all layers
                 sparseVector.Clean();
@@ -312,8 +316,6 @@ namespace RNNSharp.Networks
 
                 if (runningMode == RunningMode.Training)
                 {
-                    previousLables[curState] = state.Label;
-
                     // error propogation
                     OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
 
