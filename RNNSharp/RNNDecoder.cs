@@ -15,11 +15,12 @@ namespace RNNSharp
     {
        private ConcurrentQueue<RNN<Sequence>> qRNNs;
         public Config Config;
+        private RNN<Sequence> rnn;
 
         public RNNDecoder(Config config)
         {
             Config = config;
-            RNN<Sequence> rnn = RNN<Sequence>.CreateRNN(Config.NetworkType);
+            rnn = RNN<Sequence>.CreateRNN(Config.NetworkType);
             rnn.LoadModel(config.ModelFilePath);
             rnn.MaxSeqLength = config.MaxSequenceLength;
 
@@ -37,9 +38,9 @@ namespace RNNSharp
         private RNN<Sequence> GetRNNInstance()
         {
             RNN<Sequence> r = null;
-            while (qRNNs.TryDequeue(out r) == false)
+            if (qRNNs.TryDequeue(out r) == false)
             {
-                Thread.Yield();
+                r = rnn.Clone();
             }
 
             return r;

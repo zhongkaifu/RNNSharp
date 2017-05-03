@@ -229,6 +229,10 @@ namespace RNNSharp
             rnn.MaxSeqLength = maxSequenceLength;
             rnn.bVQ = ModelSettings.VQ != 0 ? true : false;
             rnn.IsCRFTraining = IsCRFTraining;
+            if (rnn.IsCRFTraining)
+            {
+                rnn.InitializeCRFVariablesForTraining();
+            }
 
             int N = Environment.ProcessorCount * 2;
             List<RNN<T>> rnns = new List<RNN<T>>();
