@@ -19,8 +19,8 @@ namespace RNNSharp
         public float[] Errs { get; set; }
 
         public List<int> LabelShortList { get; set; }
-        public SparseVector SparseFeature { get; set; }
-        public float[] DenseFeature { get; set; }
+        public List<SparseVector> SparseFeatureGroups { get; set; }
+        public List<float[]> DenseFeatureGroups { get; set; }
 
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected RunningMode runningMode;
@@ -214,25 +214,42 @@ namespace RNNSharp
             }
         }
 
+
         public virtual void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        {
+            List<SparseVector> sparseFeatureGroups = new List<SparseVector>();
+            sparseFeatureGroups.Add(sparseFeature);
+
+            List<float[]> denseFeatureGroups = new List<float[]>();
+            denseFeatureGroups.Add(denseFeature);
+
+            ForwardPass(sparseFeatureGroups, denseFeatureGroups);
+        }
+
+
+        public virtual void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroups)
         {
             if (DenseFeatureSize > 0)
             {
-                DenseFeature = denseFeature;
-                RNNHelper.matrixXvectorADD(Cells, denseFeature, DenseWeights, LayerSize, DenseFeatureSize);
+                DenseFeatureGroups = denseFeatureGroups;
+                RNNHelper.matrixXvectorADD(Cells, DenseFeatureGroups, DenseWeights, LayerSize);
             }
 
             if (SparseFeatureSize > 0)
             {
                 //Apply sparse features
-                SparseFeature = sparseFeature;
+                SparseFeatureGroups = sparseFeatureGroups;
                 for (var b = 0; b < LayerSize; b++)
                 {
                     float score = 0;
                     var vector_b = SparseWeights[b];
-                    foreach (var pair in SparseFeature)
+
+                    foreach (var sparseFeature in SparseFeatureGroups)
                     {
-                        score += pair.Value * vector_b[pair.Key];
+                        foreach (var pair in sparseFeature)
+                        {
+                            score += pair.Value * vector_b[pair.Key];
+                        }
                     }
                     Cells[b] += score;
                 }
@@ -256,37 +273,46 @@ namespace RNNSharp
                 var denseWeightsDelta_c = DenseWeightsDelta[c];
                 var j = 0;
 
-                var moreItems = (DenseFeatureSize % Vector<float>.Count);
-                while (j < DenseFeatureSize - moreItems)
+                foreach (var denseFeature in DenseFeatureGroups)
                 {
-                    var vecDenseFeature = new Vector<float>(DenseFeature, j);
-                    var vecDelta = vecDenseFeature * err;
+                    int k = 0;
+                    var denseFeatureSize = denseFeature.Length;
+                    var moreItems = (denseFeatureSize % Vector<float>.Count);
+                    while (k < denseFeatureSize - moreItems)
+                    {
+                        var vecDenseFeature = new Vector<float>(denseFeature, k);
+                        var vecDelta = vecDenseFeature * err;
 
-                    var vecVector_C = new Vector<float>(denseWeightsDelta_c, j);
-                    vecVector_C += vecDelta;
-                    vecVector_C.CopyTo(denseWeightsDelta_c, j);
+                        var vecVector_C = new Vector<float>(denseWeightsDelta_c, j);
+                        vecVector_C += vecDelta;
+                        vecVector_C.CopyTo(denseWeightsDelta_c, j);
 
-                    j += Vector<float>.Count;
-                }
+                        j += Vector<float>.Count;
+                        k += Vector<float>.Count;
+                    }
 
-                while (j < DenseFeatureSize)
-                {
-                    var delta = err * DenseFeature[j];
-                    denseWeightsDelta_c[j] += delta;
+                    while (k < denseFeatureSize)
+                    {
+                        denseWeightsDelta_c[j] += err * denseFeature[k];
 
-                    j++;
+                        j++;
+                        k++;
+                    }
                 }
             }
 
             if (SparseFeatureSize > 0)
             {
                 var sparseWeightsDelta_c = SparseWeightsDelta[c];
-                foreach (var pair in SparseFeature)
+
+                foreach (var sparseFeature in SparseFeatureGroups)
                 {
-                    var pos = pair.Key;
-                    var val = pair.Value;
-                    var delta = err * val;
-                    sparseWeightsDelta_c[pos] += delta;
+                    foreach (var pair in sparseFeature)
+                    {
+                        var pos = pair.Key;
+                        var val = pair.Value;
+                        sparseWeightsDelta_c[pos] += err * val;
+                    }
                 }
             }
         }
@@ -318,8 +344,9 @@ namespace RNNSharp
                             var vecLearningRate = RNNHelper.ComputeLearningRate(vecDelta, ref wlr_i);
                             wlr_i.CopyTo(sparseLearningRate_i, j);
 
+                            vecDelta = vecLearningRate * vecDelta;
                             Vector<float> vecWeights = new Vector<float>(sparseWeights_i, j);
-                            vecWeights += vecLearningRate * vecDelta;
+                            vecWeights += vecDelta;
                             vecWeights.CopyTo(sparseWeights_i, j);
 
                         }
@@ -363,8 +390,9 @@ namespace RNNSharp
                         var vecLearningRate = RNNHelper.ComputeLearningRate(vecDelta, ref wlr_i);
                         wlr_i.CopyTo(denseLearningRate_i, j);
 
+                        vecDelta = vecLearningRate * vecDelta;
                         Vector<float> vecWeights = new Vector<float>(denseWeights_i, j);
-                        vecWeights += vecLearningRate * vecDelta;
+                        vecWeights += vecDelta;
                         vecWeights.CopyTo(denseWeights_i, j);
 
                         j += Vector<float>.Count;

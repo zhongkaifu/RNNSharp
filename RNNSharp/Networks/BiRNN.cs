@@ -483,8 +483,6 @@ namespace RNNSharp.Networks
             for (var i = 0; i < numLayers; i++)
             {
                 float[][] layerOutputs_i = (i > 0) ? layersOutput[i - 1] : null;
-
-
                 Neuron[] forwardNeurons = forwardCellList[i];
                 float[][] forwardErrs = fErrLayers[i];
                 var forwardLayer = forwardHiddenLayers[i];
@@ -492,8 +490,10 @@ namespace RNNSharp.Networks
                 {
                     State state = pSequence.States[curState];
 
-                    forwardLayer.SparseFeature = state.SparseFeature;
-                    forwardLayer.DenseFeature = (i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState];
+                    forwardLayer.SparseFeatureGroups = new List<SparseVector>();
+                    forwardLayer.SparseFeatureGroups.Add(state.SparseFeature);
+                    forwardLayer.DenseFeatureGroups = new List<float[]>();
+                    forwardLayer.DenseFeatureGroups.Add((i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState]);
                     forwardLayer.PreUpdateWeights(forwardNeurons[curState], forwardErrs[curState]);
                     forwardLayer.BackwardPass();
                 }
@@ -506,8 +506,10 @@ namespace RNNSharp.Networks
                     var curState2 = numStates - curState - 1;
                     State state = pSequence.States[curState2];
 
-                    backwardLayer.SparseFeature = state.SparseFeature;
-                    backwardLayer.DenseFeature = (i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState2];
+                    backwardLayer.SparseFeatureGroups = new List<SparseVector>();
+                    backwardLayer.SparseFeatureGroups.Add(state.SparseFeature);
+                    backwardLayer.DenseFeatureGroups = new List<float[]>();
+                    backwardLayer.DenseFeatureGroups.Add((i == 0) ? state.DenseFeature.CopyTo() : layerOutputs_i[curState2]);
                     backwardLayer.PreUpdateWeights(backwardNeurons[curState2], backwardErrs[curState2]);
                     backwardLayer.BackwardPass();
                 }

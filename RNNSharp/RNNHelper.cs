@@ -22,7 +22,7 @@ namespace RNNSharp
 
         public static int MiniBatchSize { get; set; }
 
-        public static float random(float min, float max)
+        private static float random(float min, float max)
         {
             return (float)(rand.NextDouble() * (max - min) + min);
         }
@@ -144,29 +144,70 @@ namespace RNNSharp
             }
         }
 
-        public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-            int SrcSize)
+        public static void matrixXvectorADD(float[] dest, List<float[]> srcVecGroup, Matrix<float> srcmatrix,
+            HashSet<int> setSkipSampling)
+        {
+
+            foreach (var i in setSkipSampling)
+            {
+                var vector_i = srcmatrix[i];
+                float cellOutput = 0;
+                var k = 0;
+                foreach (float[] srcVec in srcVecGroup)
+                {
+                    var j = 0;
+                    var SrcSize = srcVec.Length;
+                    var moreItems = (SrcSize % Vector<float>.Count);
+                    while (j < SrcSize - moreItems)
+                    {
+                        var v1 = new Vector<float>(srcVec, j);
+                        var v2 = new Vector<float>(vector_i, k);
+                        cellOutput += Vector.Dot(v1, v2);
+
+                        j += Vector<float>.Count;
+                        k += Vector<float>.Count;
+                    }
+
+                    while (j < SrcSize)
+                    {
+                        cellOutput += srcVec[j] * vector_i[k];
+                        j++;
+                        k++;
+                    }
+                }
+
+                dest[i] = cellOutput;
+            }
+        }
+
+        public static void matrixXvectorADD(float[] dest, List<float[]> srcVecGroup, Matrix<float> srcmatrix, int DestSize)
         {
             for (var i = 0; i < DestSize; i++)
             {
                 var vector_i = srcmatrix[i];
                 float cellOutput = 0;
-                var j = 0;
-
-                var moreItems = (SrcSize % Vector<float>.Count);
-                while (j < SrcSize - moreItems)
+                var k = 0;
+                foreach (float[] srcVec in srcVecGroup)
                 {
-                    var v1 = new Vector<float>(srcvec, j);
-                    var v2 = new Vector<float>(vector_i, j);
-                    cellOutput += Vector.Dot(v1, v2);
+                    var j = 0;
+                    var SrcSize = srcVec.Length;
+                    var moreItems = (SrcSize % Vector<float>.Count);
+                    while (j < SrcSize - moreItems)
+                    {
+                        var v1 = new Vector<float>(srcVec, j);
+                        var v2 = new Vector<float>(vector_i, k);
+                        cellOutput += Vector.Dot(v1, v2);
 
-                    j += Vector<float>.Count;
-                }
+                        j += Vector<float>.Count;
+                        k += Vector<float>.Count;
+                    }
 
-                while (j < SrcSize)
-                {
-                    cellOutput += srcvec[j] * vector_i[j];
-                    j++;
+                    while (j < SrcSize)
+                    {
+                        cellOutput += srcVec[j] * vector_i[k];
+                        j++;
+                        k++;
+                    }
                 }
 
                 dest[i] = cellOutput;
@@ -211,36 +252,6 @@ namespace RNNSharp
             }
 
             return m;
-        }
-
-        public static void matrixXvectorADD(float[] dest, float[] srcvec, Matrix<float> srcmatrix,
-            HashSet<int> setSkipSampling, int SrcSize)
-        {
-
-            foreach (var i in setSkipSampling)
-            {
-                float cellOutput = 0;
-                var vector_i = srcmatrix[i];
-                var j = 0;
-
-                var moreItems = (SrcSize % Vector<float>.Count);
-                while (j < SrcSize - moreItems)
-                {
-                    var v1 = new Vector<float>(srcvec, j);
-                    var v2 = new Vector<float>(vector_i, j);
-                    cellOutput += Vector.Dot(v1, v2);
-
-                    j += Vector<float>.Count;
-                }
-
-                while (j < SrcSize)
-                {
-                    cellOutput += srcvec[j] * vector_i[j];
-                    j++;
-                }
-
-                dest[i] = cellOutput;
-            }
         }
 
         public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,

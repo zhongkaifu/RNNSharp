@@ -35,7 +35,7 @@ namespace RNNSharp
         }
 
 
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        public override void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroups)
         {
             if (runningMode == RunningMode.Training)
             {
@@ -58,24 +58,25 @@ namespace RNNSharp
 
                 if (DenseFeatureSize > 0)
                 {
-                    DenseFeature = denseFeature;
-                    RNNHelper.matrixXvectorADD(Cells, denseFeature, DenseWeights, negativeSampleWordList, DenseFeatureSize);
+                    DenseFeatureGroups = denseFeatureGroups;
+                    RNNHelper.matrixXvectorADD(Cells, DenseFeatureGroups, DenseWeights, negativeSampleWordList);
                 }
 
                 if (SparseFeatureSize > 0)
                 {
                     //Apply sparse features
-                    SparseFeature = sparseFeature;
-
-
-
-                                        foreach(var b in negativeSampleWordList)
+                    SparseFeatureGroups = sparseFeatureGroups;
+                    foreach (var b in negativeSampleWordList)
                     {
                         float score = 0;
                         var vector_b = SparseWeights[b];
-                        foreach (var pair in SparseFeature)
+
+                        foreach (var sparseFeature in SparseFeatureGroups)
                         {
-                            score += pair.Value * vector_b[pair.Key];
+                            foreach (var pair in sparseFeature)
+                            {
+                                score += pair.Value * vector_b[pair.Key];
+                            }
                         }
                         Cells[b] += score;
                     }
@@ -100,7 +101,7 @@ namespace RNNSharp
             }
             else
             {
-                base.ForwardPass(sparseFeature, denseFeature);
+                base.ForwardPass(sparseFeatureGroups, denseFeatureGroups);
             }
         }
 

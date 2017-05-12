@@ -13,9 +13,9 @@ namespace RNNSharp
         {
         }
 
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        public override void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroups)
         {
-            base.ForwardPass(sparseFeature, denseFeature);
+            base.ForwardPass(sparseFeatureGroups, denseFeatureGroups);
 
             //Softmax
             float sum = 0;

@@ -762,12 +762,12 @@ namespace RNNSharp
         }
 
         // forward process. output layer consists of tag value
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        public override void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroup)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
-            SparseFeature = sparseFeature;
-            DenseFeature = denseFeature;
+            SparseFeatureGroups = sparseFeatureGroups;
+            DenseFeatureGroups = denseFeatureGroup;
 
             for (var j = 0; j < LayerSize; j++)
             {
@@ -785,12 +785,16 @@ namespace RNNSharp
                     //Apply sparse weights
                     var weights = sparseFeatureWeights[j];
                     var deri = sparseFeatureToHiddenDeri[j];
-                    foreach (var pair in SparseFeature)
+
+                    foreach (var sparseFeature in SparseFeatureGroups)
                     {
-                        vecCell_j += weights[pair.Key] * pair.Value;
-                        if (deri.ContainsKey(pair.Key) == false)
+                        foreach (var pair in sparseFeature)
                         {
-                            deri.Add(pair.Key, new Vector3(0));
+                            vecCell_j += weights[pair.Key] * pair.Value;
+                            if (deri.ContainsKey(pair.Key) == false)
+                            {
+                                deri.Add(pair.Key, Vector3.Zero);
+                            }
                         }
                     }
                 }
@@ -804,30 +808,37 @@ namespace RNNSharp
                     float[] denseCellGateWeight_j = wDenseCellGate.weights[j];
                     float[] denseOutputGateWeight_j = wDenseOutputGate.weights[j];
 
-                    var moreItems = (DenseFeatureSize % Vector<float>.Count);
-                    while (k < DenseFeatureSize - moreItems)
+                    foreach (var denseFeature in DenseFeatureGroups)
                     {
-                        var vX = new Vector<float>(denseInputGateWeight_j, k);
-                        var vY = new Vector<float>(denseForgetGateWeight_j, k);
-                        var vZ = new Vector<float>(denseCellGateWeight_j, k);
-                        var vW = new Vector<float>(denseOutputGateWeight_j, k);
-                        var vFeature = new Vector<float>(DenseFeature, k);
+                        int i = 0;
+                        var denseFeatureSize = denseFeature.Length;
+                        var moreItems = (denseFeatureSize % Vector<float>.Count);
+                        while (i < denseFeatureSize - moreItems)
+                        {
+                            var vX = new Vector<float>(denseInputGateWeight_j, k);
+                            var vY = new Vector<float>(denseForgetGateWeight_j, k);
+                            var vZ = new Vector<float>(denseCellGateWeight_j, k);
+                            var vW = new Vector<float>(denseOutputGateWeight_j, k);
+                            var vFeature = new Vector<float>(denseFeature, i);
 
-                        vecCell_j.X += Vector.Dot(vX, vFeature);
-                        vecCell_j.Y += Vector.Dot(vY, vFeature);
-                        vecCell_j.Z += Vector.Dot(vZ, vFeature);
-                        vecCell_j.W += Vector.Dot(vW, vFeature);
+                            vecCell_j.X += Vector.Dot(vX, vFeature);
+                            vecCell_j.Y += Vector.Dot(vY, vFeature);
+                            vecCell_j.Z += Vector.Dot(vZ, vFeature);
+                            vecCell_j.W += Vector.Dot(vW, vFeature);
 
-                        k += Vector<float>.Count;
-                    }
+                            k += Vector<float>.Count;
+                            i += Vector<float>.Count;
+                        }
 
-                    while (k < DenseFeatureSize)
-                    {
-                        vecCell_j.X += denseInputGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.Y += denseForgetGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.Z += denseCellGateWeight_j[k] * DenseFeature[k];
-                        vecCell_j.W += denseOutputGateWeight_j[k] * DenseFeature[k];
-                        k++;
+                        while (i < denseFeatureSize)
+                        {
+                            vecCell_j.X += denseInputGateWeight_j[k] * denseFeature[i];
+                            vecCell_j.Y += denseForgetGateWeight_j[k] * denseFeature[i];
+                            vecCell_j.Z += denseCellGateWeight_j[k] * denseFeature[i];
+                            vecCell_j.W += denseOutputGateWeight_j[k] * denseFeature[i];
+                            k++;
+                            i++;
+                        }
                     }
                 }
 
@@ -874,25 +885,32 @@ namespace RNNSharp
             float[] learningrate_i = gateWeight.learningRate[i];
             float[] weights_i = gateWeight.weightsDelta[i];
 
-            var moreItems = (DenseFeatureSize % Vector<float>.Count);
-            while (j < DenseFeatureSize - moreItems)
+            foreach (var denseFeature in DenseFeatureGroups)
             {
-                Vector<float> vecDelta = new Vector<float>(DenseFeature, j);
-                vecDelta = vecDelta * err;
+                int k = 0;
+                var denseFeatureSize = denseFeature.Length;
+                var moreItems = (denseFeatureSize % Vector<float>.Count);
+                while (k < denseFeatureSize - moreItems)
+                {
+                    Vector<float> vecDelta = new Vector<float>(denseFeature, k);
+                    vecDelta = vecDelta * err;
 
-                var w_i = new Vector<float>(weights_i, j);
-                w_i += vecDelta;
-                w_i.CopyTo(weights_i, j);
+                    var w_i = new Vector<float>(weights_i, j);
+                    w_i += vecDelta;
+                    w_i.CopyTo(weights_i, j);
 
-                j += Vector<float>.Count;
-            }
+                    j += Vector<float>.Count;
+                    k += Vector<float>.Count;
+                }
 
-            while (j < DenseFeatureSize)
-            {
-                float delta = DenseFeature[j] * err;
-                weights_i[j] += delta;
+                while (k < denseFeatureSize)
+                {
+                    float delta = denseFeature[k] * err;
+                    weights_i[j] += delta;
 
-                j++;
+                    j++;
+                    k++;
+                }
             }
         }
 
@@ -903,34 +921,39 @@ namespace RNNSharp
             float[] learningrate_i = gateWeight.learningRate[i];
             float[] weights_i = gateWeight.weightsDelta[i];
 
-            var moreItems = (DenseFeatureSize % Vector<float>.Count);
-            while (j < DenseFeatureSize - moreItems)
+            foreach (var denseFeature in DenseFeatureGroups)
             {
-                var feature = new Vector<float>(DenseFeature, j);
-                var wd = feature * featureDerivate;
-                var wd_i = new Vector<float>(deri_i, j);
-                wd += wd_i * c_yForget;
-                wd.CopyTo(deri_i, j);
+                int k = 0;
+                var denseFeatureSize = denseFeature.Length;
+                var moreItems = (denseFeatureSize % Vector<float>.Count);
+                while (k < denseFeatureSize - moreItems)
+                {
+                    var feature = new Vector<float>(denseFeature, k);
+                    var wd = feature * featureDerivate;
+                    var wd_i = new Vector<float>(deri_i, j);
+                    wd += wd_i * c_yForget;
+                    wd.CopyTo(deri_i, j);
 
-                Vector<float> vecDelta = wd * err;
+                    Vector<float> vecDelta = wd * err;
 
-                var w_i = new Vector<float>(weights_i, j);
-                w_i += vecDelta;
-                w_i.CopyTo(weights_i, j);
+                    var w_i = new Vector<float>(weights_i, j);
+                    w_i += vecDelta;
+                    w_i.CopyTo(weights_i, j);
 
-                j += Vector<float>.Count;
-            }
+                    j += Vector<float>.Count;
+                    k += Vector<float>.Count;
+                }
 
-            while (j < DenseFeatureSize)
-            {
-                var wd = DenseFeature[j] * featureDerivate;
-                wd += deri_i[j] * c_yForget;
-                deri_i[j] = wd;
+                while (k < denseFeatureSize)
+                {
+                    var wd = denseFeature[k] * featureDerivate;
+                    wd += deri_i[j] * c_yForget;
+                    deri_i[j] = wd;
+                    weights_i[j] += wd * err;
 
-                float delta = wd * err;
-                weights_i[j] += delta;
-
-                j++;
+                    j++;
+                    k++;
+                }
             }
         }
 
@@ -972,17 +995,19 @@ namespace RNNSharp
                     var wd_i = sparseFeatureToHiddenDeri[i];
                     var wlr_i = sparseFeatureLearningRate[i];
 
-                    foreach (var entry in SparseFeature)
+                    foreach (var sparseFeature in SparseFeatureGroups)
                     {
-                        var wd = vecDerivate * entry.Value;
-                        //Adding historical information
-                        wd += wd_i[entry.Key] * c_yForget;
-                        wd_i[entry.Key] = wd;
+                        foreach (var entry in sparseFeature)
+                        {
+                            var wd = vecDerivate * entry.Value;
+                            //Adding historical information
+                            wd += wd_i[entry.Key] * c_yForget;
+                            wd_i[entry.Key] = wd;
 
-                        //Computing final err delta
-                        var vecDelta = new Vector4(wd, entry.Value);
-                        vecDelta = vecErr * vecDelta;
-                        w_i[entry.Key] += vecDelta;
+                            //Computing final err delta
+                            var vecDelta = new Vector4(wd, entry.Value);
+                            w_i[entry.Key] += vecErr * vecDelta;
+                        }
                     }
                 }
 
@@ -1006,9 +1031,7 @@ namespace RNNSharp
                 //update internal weights
                 var vecCellDelta = new Vector3((float)cellWeightDeri.dSWPeepholeIn, (float)cellWeightDeri.dSWPeepholeForget, (float)c.cellState);
                 var vecErr3 = new Vector3(cellStateError, cellStateError, gradientOutputGate);
-
-                vecCellDelta = vecErr3 * vecCellDelta;
-                peepholeDelta[i] += vecCellDelta;
+                peepholeDelta[i] += vecErr3 * vecCellDelta;
 
                 //Update cells weights
                 //partial derivatives for internal connections
@@ -1023,8 +1046,7 @@ namespace RNNSharp
                                  Sigmoid2Derivative_ci_netCellState_mul_ci_yIn * c.previousCellOutput;
 
                 var vecCellDelta4 = new Vector4((float)cellWeightDeri.dSWCellIn, (float)cellWeightDeri.dSWCellForget, (float)cellWeightDeri.dSWCellState, (float)c.previousCellOutput);
-                vecCellDelta4 = vecErr * vecCellDelta4;
-                cellDelta[i] += vecCellDelta4;
+                cellDelta[i] += vecErr * vecCellDelta4;
 
                 LSTMCells[i] = c;
             }

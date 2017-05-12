@@ -1,5 +1,6 @@
 ﻿using AdvUtils;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -99,37 +100,40 @@ namespace RNNSharp
 
         }
 
-        public override void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        public override void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroups)
         {
-            if (LayerSize != denseFeature.Length)
-            {
-                throw new Exception($"The layer size of dropout layer must be equal to its denseFeature size. Layer size = {LayerSize}, Dense feature size = {denseFeature.Length}");
-            }
-
             if (runningMode == RunningMode.Training)
             {
-
-                              for (var i = 0; i < LayerSize; i++)
+                int i = 0;
+                foreach (var denseFeature in denseFeatureGroups)
                 {
-                    var val = (float)rnd.NextDouble();
-                    if (val < dropoutRatio)
+                    for (var j = 0; j < denseFeature.Length; j++)
                     {
-                        mask[i] = true;
-                        Cells[i] = 0;
-                    }
-                    else
-                    {
-                        mask[i] = false;
-                        Cells[i] = denseFeature[i];
+                        var r = (float)rnd.NextDouble();
+                        if (r < dropoutRatio)
+                        {
+                            mask[i] = true;
+                            Cells[i] = 0;
+                        }
+                        else
+                        {
+                            mask[i] = false;
+                            Cells[i] = denseFeature[j];
+                        }
+                        i++;
                     }
                 }
             }
             else
             {
-
-                                for (var i = 0; i < LayerSize; i++)
+                int i = 0;
+                foreach (var denseFeature in denseFeatureGroups)
                 {
-                    Cells[i] = (float)(1.0 - dropoutRatio) * denseFeature[i];
+                    for (var j = 0; j < denseFeature.Length; j++)
+                    {
+                        Cells[i] = (float)(1.0 - dropoutRatio) * denseFeature[j];
+                        i++;
+                    }
                 }
             }
         }

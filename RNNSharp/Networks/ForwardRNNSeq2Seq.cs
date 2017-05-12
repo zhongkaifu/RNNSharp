@@ -10,21 +10,29 @@ namespace RNNSharp.Networks
 {
     class ForwardRNNSeq2Seq<T> : ForwardRNN<T> where T : ISequence
     {
+        List<float[]>[] denseFeatureGroupsList;
+        List<float[]> denseFeatureGroupsOutputLayer;
+        List<SparseVector> sparseFeatureGorups;
+
         public ForwardRNNSeq2Seq()
-            :base()
+            : base()
         {
 
         }
 
         public override void CreateNetwork(List<LayerConfig> hiddenLayersConfig, LayerConfig outputLayerConfig, DataSet<T> TrainingSet, Config featurizer)
         {
-            var srcDenseFeatureSize = featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
             var sparseFeatureSize = TrainingSet.SparseFeatureSize;
             sparseFeatureSize += featurizer.Seq2SeqAutoEncoder.Config.SparseFeatureSize;
+            sparseFeatureGorups = new List<SparseVector>();
+
             Logger.WriteLine("Sparse Feature Format: [{0}][{1}] = {2}", TrainingSet.SparseFeatureSize, featurizer.Seq2SeqAutoEncoder.Config.SparseFeatureSize, sparseFeatureSize);
 
+            //Create all hidden layers
             HiddenLayerList = CreateLayers(hiddenLayersConfig);
 
+            var srcDenseFeatureSize = featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
+            denseFeatureGroupsList = new List<float[]>[HiddenLayerList.Count];
             for (var i = 0; i < HiddenLayerList.Count; i++)
             {
                 SimpleLayer layer = HiddenLayerList[i];
@@ -32,28 +40,43 @@ namespace RNNSharp.Networks
                 layer.SetRunningMode(RunningMode.Training);
 
                 Logger.WriteLine($"Create hidden layer {i}: size = {layer.LayerSize}, sparse feature size = {layer.SparseFeatureSize}, dense feature size = {layer.DenseFeatureSize}");
+
+                denseFeatureGroupsList[i] = new List<float[]>();
+
             }
 
+            //Create output layer
             outputLayerConfig.LayerSize = TrainingSet.TagSize;
             OutputLayer = CreateOutputLayer(outputLayerConfig, sparseFeatureSize, (srcDenseFeatureSize + HiddenLayerList[HiddenLayerList.Count - 1].LayerSize));
             OutputLayer.SetRunningMode(RunningMode.Training);
 
             Logger.WriteLine($"Create a Forward recurrent neural sequence-to-sequence network with {HiddenLayerList.Count} hidden layers");
+
+            denseFeatureGroupsOutputLayer = new List<float[]>();
         }
 
         public override RNN<T> Clone()
         {
             List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
+            List<float[]>[] denseFeatureGroupsList = new List<float[]>[HiddenLayerList.Count];
 
+            int i = 0;
             foreach (SimpleLayer layer in HiddenLayerList)
             {
                 hiddenLayers.Add(layer.CreateLayerSharedWegiths());
+                denseFeatureGroupsList[i] = new List<float[]>();
+                i++;
             }
+
+            List<float[]> denseFeatureGroupsOutputLayer = new List<float[]>();
 
             ForwardRNNSeq2Seq<T> rnn = new ForwardRNNSeq2Seq<T>();
             rnn.HiddenLayerList = hiddenLayers;
             rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
             rnn.CRFWeights = CRFWeights;
+            rnn.denseFeatureGroupsList = denseFeatureGroupsList;
+            rnn.denseFeatureGroupsOutputLayer = denseFeatureGroupsOutputLayer;
+            rnn.sparseFeatureGorups = new List<SparseVector>();
             rnn.MaxSeqLength = MaxSeqLength;
             rnn.bVQ = bVQ;
             rnn.IsCRFTraining = IsCRFTraining;
@@ -73,67 +96,36 @@ namespace RNNSharp.Networks
         /// <param name="targetSparseFeatureSize"></param>
         /// <param name="srcHiddenAvgOutput"></param>
         /// <param name="srcSparseFeatures"></param>
-        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize)
+        private void ExtractSourceSentenceFeature(RNNDecoder decoder, Sequence srcSequence, int targetSparseFeatureSize, List<float[]> srcDenseFeatureGroups, SparseVector srcSparseFeatures)
         {
             //Extract dense features from source sequence
             var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
-            int srcSequenceDenseFeatureSize = srcOutputs[0].Length;
             int srcSequenceLength = srcOutputs.Length - 1;
 
-            if (srcHiddenAvgOutput == null)
-            {
-                srcHiddenAvgOutput = new float[srcSequenceDenseFeatureSize * 2];
-            }
-
-            var j = 0;
-            float[] srcOutputForward = srcOutputs[0];
-            float[] srcOutputBackward = srcOutputs[srcSequenceLength];
-
-            var moreItems = (srcSequenceDenseFeatureSize % Vector<float>.Count);
-            while (j < srcSequenceDenseFeatureSize - moreItems)
-            {
-                var vForward = new Vector<float>(srcOutputForward, j);
-                var vBackward = new Vector<float>(srcOutputBackward, j);
-
-                vForward.CopyTo(srcHiddenAvgOutput, j);
-                vBackward.CopyTo(srcHiddenAvgOutput, srcSequenceDenseFeatureSize + j);
-
-                j += Vector<float>.Count;
-            }
-
-            while (j < srcSequenceDenseFeatureSize)
-            {
-                srcHiddenAvgOutput[j] = srcOutputForward[j];
-                srcHiddenAvgOutput[srcSequenceDenseFeatureSize + j] = srcOutputBackward[j];
-                j++;
-            }
+            srcDenseFeatureGroups.Add(srcOutputs[0]);
+            srcDenseFeatureGroups.Add(srcOutputs[srcSequenceLength]);
 
             //Extract sparse features from source sequence
-            if (srcSparseFeatures == null)
-            {
-                srcSparseFeatures = new Dictionary<int, float>();
-            }
-            else
-            {
-                srcSparseFeatures.Clear();
-            }
-
+            Dictionary<int, float> srcSparseFeaturesDict = new Dictionary<int, float>();
             for (var i = 0; i < srcSequence.States.Length; i++)
             {
                 foreach (var kv in srcSequence.States[i].SparseFeature)
                 {
                     var srcSparseFeatureIndex = kv.Key + targetSparseFeatureSize;
 
-                    if (srcSparseFeatures.ContainsKey(srcSparseFeatureIndex) == false)
+                    if (srcSparseFeaturesDict.ContainsKey(srcSparseFeatureIndex) == false)
                     {
-                        srcSparseFeatures.Add(srcSparseFeatureIndex, kv.Value);
+                        srcSparseFeaturesDict.Add(srcSparseFeatureIndex, kv.Value);
                     }
                     else
                     {
-                        srcSparseFeatures[srcSparseFeatureIndex] += kv.Value;
+                        srcSparseFeaturesDict[srcSparseFeatureIndex] += kv.Value;
                     }
                 }
             }
+
+            srcSparseFeatures.SetLength(srcSequence.SparseFeatureSize + targetSparseFeatureSize);
+            srcSparseFeatures.AddKeyValuePairData(srcSparseFeaturesDict);
         }
 
         public override int[] ProcessSequence(ISentence sentence, Config featurizer, RunningMode runningMode, bool outputRawScore, out Matrix<float> m)
@@ -164,43 +156,52 @@ namespace RNNSharp.Networks
 
             //Extract features from source sentence
             var srcSequence = featurizer.Seq2SeqAutoEncoder.Config.BuildSequence(sentence);
-
-            ExtractSourceSentenceFeature(featurizer.Seq2SeqAutoEncoder, srcSequence, curState.SparseFeature.Length);
+            List<float[]> srcDenseFeatureGorups = new List<float[]>();
+            SparseVector srcSparseFeatures = new SparseVector();
+            ExtractSourceSentenceFeature(featurizer.Seq2SeqAutoEncoder, srcSequence, curState.SparseFeature.Length, srcDenseFeatureGorups, srcSparseFeatures);
 
             var numLayers = HiddenLayerList.Count;
             var predicted = new List<int> { curState.Label };
 
-            CreateDenseFeatureList();
-            for (int i = 0; i < numLayers; i++)
-            {
-                srcHiddenAvgOutput.CopyTo(denseFeaturesList[i], 0);
-            }
-            srcHiddenAvgOutput.CopyTo(denseFeaturesList[numLayers], 0);
+            //Set sparse feature group from source sequence
+            sparseFeatureGorups.Clear();
+            sparseFeatureGorups.Add(srcSparseFeatures);
+            sparseFeatureGorups.Add(null);
+            int targetSparseFeatureIndex = sparseFeatureGorups.Count - 1;
 
-            var sparseVector = new SparseVector();
+            //Set dense feature groups from source sequence
+            for (var i = 0; i < numLayers; i++)
+            {
+                denseFeatureGroupsList[i].Clear();
+                denseFeatureGroupsList[i].AddRange(srcDenseFeatureGorups);
+                denseFeatureGroupsList[i].Add(null);
+            }
+            denseFeatureGroupsOutputLayer.Clear();
+            denseFeatureGroupsOutputLayer.AddRange(srcDenseFeatureGorups);
+            denseFeatureGroupsOutputLayer.Add(null);
+            int targetDenseFeatureIndex = denseFeatureGroupsOutputLayer.Count - 1;
+
             while (true)
             {
-                //Build sparse features
-                sparseVector.Clean();
-                sparseVector.SetLength(curState.SparseFeature.Length + srcSequence.SparseFeatureSize);
-                sparseVector.AddKeyValuePairData(curState.SparseFeature);
-                sparseVector.AddKeyValuePairData(srcSparseFeatures);
+                //Set sparse feature groups
+                sparseFeatureGorups[targetSparseFeatureIndex] = curState.SparseFeature;
 
                 //Compute first layer
-                curState.DenseFeature.CopyTo().CopyTo(denseFeaturesList[0], srcHiddenAvgOutput.Length);
-                HiddenLayerList[0].ForwardPass(sparseVector, denseFeaturesList[0]);
+                denseFeatureGroupsList[0][targetDenseFeatureIndex] = curState.DenseFeature.CopyTo();
+                HiddenLayerList[0].ForwardPass(sparseFeatureGorups, denseFeatureGroupsList[0]);
 
                 //Compute middle layers
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i - 1].Cells.CopyTo(denseFeaturesList[i], srcHiddenAvgOutput.Length);
-                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeaturesList[i]);
+                    denseFeatureGroupsList[i][targetDenseFeatureIndex] = HiddenLayerList[i - 1].Cells;
+                    HiddenLayerList[i].ForwardPass(sparseFeatureGorups, denseFeatureGroupsList[i]);
                 }
 
                 //Compute output layer
-                HiddenLayerList[numLayers - 1].Cells.CopyTo(denseFeaturesList[numLayers], srcHiddenAvgOutput.Length);
-                OutputLayer.ForwardPass(sparseVector, denseFeaturesList[numLayers]);
+                denseFeatureGroupsOutputLayer[targetDenseFeatureIndex] = HiddenLayerList[numLayers - 1].Cells;
+                OutputLayer.ForwardPass(sparseFeatureGorups, denseFeatureGroupsOutputLayer);
+
 
                 var nextTagId = OutputLayer.GetBestOutputIndex();
                 var nextWord = featurizer.TagSet.GetTagName(nextTagId);
@@ -217,23 +218,6 @@ namespace RNNSharp.Networks
             }
 
             return predicted.ToArray();
-        }
-
-        List<float[]> denseFeaturesList = null;
-        float[] srcHiddenAvgOutput;
-        Dictionary<int, float> srcSparseFeatures;
-        private void CreateDenseFeatureList()
-        {
-            if (denseFeaturesList == null)
-            {
-                denseFeaturesList = new List<float[]>();
-                for (int i = 0; i < HiddenLayerList.Count; i++)
-                {
-                    denseFeaturesList.Add(new float[2048]);
-                }
-
-                denseFeaturesList.Add(new float[2048]);
-            }
         }
 
         public override int[] ProcessSequence(ISequence sequence, RunningMode runningMode, bool outputRawScore, out Matrix<float> m)
@@ -256,7 +240,9 @@ namespace RNNSharp.Networks
 
             //Extract features from source sentences
             srcSequence = pSequence.autoEncoder.Config.BuildSequence(pSequence.srcSentence);
-            ExtractSourceSentenceFeature(pSequence.autoEncoder, srcSequence, tgtSequence.SparseFeatureSize);
+            List<float[]> srcDenseFeatureGorups = new List<float[]>();
+            SparseVector srcSparseFeatures = new SparseVector();
+            ExtractSourceSentenceFeature(pSequence.autoEncoder, srcSequence, tgtSequence.SparseFeatureSize, srcDenseFeatureGorups, srcSparseFeatures);
 
             var numStates = pSequence.tgtSequence.States.Length;
             var numLayers = HiddenLayerList.Count;
@@ -271,41 +257,46 @@ namespace RNNSharp.Networks
                 OutputLayer.LabelShortList.Add(state.Label);
             }
 
-            CreateDenseFeatureList();
-            for (int i = 0; i < numLayers; i++)
-            {
-                srcHiddenAvgOutput.CopyTo(denseFeaturesList[i], 0);
-            }
-            srcHiddenAvgOutput.CopyTo(denseFeaturesList[numLayers], 0);
+            //Set sparse feature group from source sequence
+            sparseFeatureGorups.Clear();
+            sparseFeatureGorups.Add(srcSparseFeatures);
+            sparseFeatureGorups.Add(null);
+            int targetSparseFeatureIndex = sparseFeatureGorups.Count - 1;
 
-            var sparseVector = new SparseVector();
+            //Set dense feature groups from source sequence
+            for (var i = 0; i < numLayers; i++)
+            {
+                denseFeatureGroupsList[i].Clear();
+                denseFeatureGroupsList[i].AddRange(srcDenseFeatureGorups);
+                denseFeatureGroupsList[i].Add(null);
+            }
+            denseFeatureGroupsOutputLayer.Clear();
+            denseFeatureGroupsOutputLayer.AddRange(srcDenseFeatureGorups);
+            denseFeatureGroupsOutputLayer.Add(null);
+            int targetDenseFeatureIndex = denseFeatureGroupsOutputLayer.Count - 1;
+
             for (var curState = 0; curState < numStates; curState++)
             {
-                //Build runtime features
                 var state = tgtSequence.States[curState];
-                SetRuntimeFeatures(state, curState, numStates, predicted);
 
-                //Build sparse features for all layers
-                sparseVector.Clean();
-                sparseVector.SetLength(tgtSequence.SparseFeatureSize + srcSequence.SparseFeatureSize);
-                sparseVector.AddKeyValuePairData(state.SparseFeature);
-                sparseVector.AddKeyValuePairData(srcSparseFeatures);
+                //Set sparse feature groups
+                sparseFeatureGorups[targetSparseFeatureIndex] = state.SparseFeature;
 
                 //Compute first layer
-                state.DenseFeature.CopyTo().CopyTo(denseFeaturesList[0], srcHiddenAvgOutput.Length);
-                HiddenLayerList[0].ForwardPass(sparseVector, denseFeaturesList[0]);
+                denseFeatureGroupsList[0][targetDenseFeatureIndex] = state.DenseFeature.CopyTo();
+                HiddenLayerList[0].ForwardPass(sparseFeatureGorups, denseFeatureGroupsList[0]);
 
                 //Compute middle layers
                 for (var i = 1; i < numLayers; i++)
                 {
                     //We use previous layer's output as dense feature for current layer
-                    HiddenLayerList[i - 1].Cells.CopyTo(denseFeaturesList[i], srcHiddenAvgOutput.Length);
-                    HiddenLayerList[i].ForwardPass(sparseVector, denseFeaturesList[i]);
+                    denseFeatureGroupsList[i][targetDenseFeatureIndex] = HiddenLayerList[i - 1].Cells;
+                    HiddenLayerList[i].ForwardPass(sparseFeatureGorups, denseFeatureGroupsList[i]);
                 }
 
                 //Compute output layer
-                HiddenLayerList[numLayers - 1].Cells.CopyTo(denseFeaturesList[numLayers], srcHiddenAvgOutput.Length);
-                OutputLayer.ForwardPass(sparseVector, denseFeaturesList[numLayers]);
+                denseFeatureGroupsOutputLayer[targetDenseFeatureIndex] = HiddenLayerList[numLayers - 1].Cells;
+                OutputLayer.ForwardPass(sparseFeatureGorups, denseFeatureGroupsOutputLayer);
 
                 if (m != null)
                 {
@@ -328,7 +319,6 @@ namespace RNNSharp.Networks
 
                     //Update net weights
                     OutputLayer.BackwardPass();
-
                     for (var i = 0; i < numLayers; i++)
                     {
                         HiddenLayerList[i].BackwardPass();
