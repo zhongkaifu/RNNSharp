@@ -13,6 +13,7 @@ namespace RNNSharp.Networks
         List<float[]>[] denseFeatureGroupsList;
         List<float[]> denseFeatureGroupsOutputLayer;
         List<SparseVector> sparseFeatureGorups;
+        int numSrcDenseFeatureGroups = 2;
 
         public ForwardRNNSeq2Seq()
             : base()
@@ -31,7 +32,7 @@ namespace RNNSharp.Networks
             //Create all hidden layers
             HiddenLayerList = CreateLayers(hiddenLayersConfig);
 
-            var srcDenseFeatureSize = featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * 2;
+            var srcDenseFeatureSize = featurizer.Seq2SeqAutoEncoder.GetTopHiddenLayerSize() * numSrcDenseFeatureGroups;
             denseFeatureGroupsList = new List<float[]>[HiddenLayerList.Count];
             for (var i = 0; i < HiddenLayerList.Count; i++)
             {
@@ -101,9 +102,28 @@ namespace RNNSharp.Networks
             //Extract dense features from source sequence
             var srcOutputs = decoder.ComputeTopHiddenLayerOutput(srcSequence);
             int srcSequenceLength = srcOutputs.Length - 1;
-
-            srcDenseFeatureGroups.Add(srcOutputs[0]);
             srcDenseFeatureGroups.Add(srcOutputs[srcSequenceLength]);
+
+            if (numSrcDenseFeatureGroups > 1)
+            {
+                srcDenseFeatureGroups.Add(srcOutputs[0]);
+            }
+
+            if (numSrcDenseFeatureGroups > 2)
+            {
+                float srcOffsetPerBlock = (float)srcSequenceLength / (float)(numSrcDenseFeatureGroups - 1);
+                if (srcOffsetPerBlock < 1.0)
+                {
+                    srcOffsetPerBlock = 1.0f;
+                }
+
+                float idx = srcOffsetPerBlock;
+                while (srcDenseFeatureGroups.Count < numSrcDenseFeatureGroups && idx < srcSequenceLength)
+                {
+                    srcDenseFeatureGroups.Add(srcOutputs[(int)idx]);
+                    idx += srcOffsetPerBlock;
+                }
+            }
 
             //Extract sparse features from source sequence
             Dictionary<int, float> srcSparseFeaturesDict = new Dictionary<int, float>();
