@@ -254,18 +254,63 @@ namespace RNNSharp
             return m;
         }
 
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-           int SrcSize)
+        public static void matrixXvectorADDErr(List<float[]> destList, float[] srcvec, Matrix<float> srcmatrix, bool cleanDest = true)
         {
-            Array.Clear(dest, 0, dest.Length);
-            for (var j = 0; j < SrcSize; j++)
+            if (cleanDest == true)
+            {
+                foreach (float[] dest in destList)
+                {
+                    Array.Clear(dest, 0, dest.Length);
+                }
+            }
+
+            for (var j = 0; j < srcmatrix.Height; j++)
             {
                 int i = 0;
                 float src = srcvec[j];
                 float[] srcVector = srcmatrix[j];
 
-                var moreItems = (DestSize % Vector<float>.Count);
-                while (i < DestSize - moreItems)
+                foreach (float[] dest in destList)
+                {
+                    int k = 0;
+                    var moreItems = (dest.Length % Vector<float>.Count);
+                    while (k < dest.Length - moreItems)
+                    {
+                        Vector<float> vecSrc = new Vector<float>(srcVector, i);
+                        Vector<float> vecDest = new Vector<float>(dest, k);
+                        vecDest += src * vecSrc;
+
+                        vecDest.CopyTo(dest, k);
+
+                        i += Vector<float>.Count;
+                        k += Vector<float>.Count;
+                    }
+
+                    while (k < dest.Length)
+                    {
+                        dest[k] += src * srcVector[i];
+                        i++;
+                        k++;
+                    }
+                }
+                
+            }
+        }
+
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, bool cleanDest = true)
+        {
+            if (cleanDest == true)
+            {
+                Array.Clear(dest, 0, dest.Length);
+            }
+            for (var j = 0; j < srcmatrix.Height; j++)
+            {
+                int i = 0;
+                float src = srcvec[j];
+                float[] srcVector = srcmatrix[j];
+
+                var moreItems = (srcmatrix.Width % Vector<float>.Count);
+                while (i < srcmatrix.Width - moreItems)
                 {
                     Vector<float> vecSrc = new Vector<float>(srcVector, i);
                     Vector<float> vecDest = new Vector<float>(dest, i);
@@ -275,7 +320,7 @@ namespace RNNSharp
                     i += Vector<float>.Count;
                 }
 
-                while (i < DestSize)
+                while (i < srcmatrix.Width)
                 {
                     dest[i] += src * srcVector[i];
                     i++;
@@ -283,19 +328,22 @@ namespace RNNSharp
             }
         }
 
-        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, int DestSize,
-                    HashSet<int> setSkipSampling)
+        public static void matrixXvectorADDErr(float[] dest, float[] srcvec, Matrix<float> srcmatrix, HashSet<int> setSkipSampling, bool cleanDest = true)
         {
-            Array.Clear(dest, 0, dest.Length);
+            if (cleanDest == true)
+            {
+                Array.Clear(dest, 0, dest.Length);
+            }
             int cnt = 0;
             foreach (int j in setSkipSampling)
             {
                 int i = 0;
                 float src = srcvec[j];
                 float[] srcVector = srcmatrix[j];
+                int weight = srcVector.Length;
 
-                var moreItems = (DestSize % Vector<float>.Count);
-                while (i < DestSize - moreItems)
+                var moreItems = (weight % Vector<float>.Count);
+                while (i < weight - moreItems)
                 {
                     Vector<float> vecSrc = new Vector<float>(srcVector, i);
                     Vector<float> vecDest = new Vector<float>(dest, i);
@@ -305,7 +353,7 @@ namespace RNNSharp
                     i += Vector<float>.Count;
                 }
 
-                while (i < DestSize)
+                while (i < weight)
                 {
                     dest[i] += src * srcVector[i];
                     i++;

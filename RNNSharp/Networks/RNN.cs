@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,7 +15,7 @@ namespace RNNSharp.Networks
 
         protected Matrix<float> CRFSeqOutput;
         protected Matrix<float> CRFWeights { get; set; }
-        protected SimpleLayer OutputLayer { get; set; }
+        protected IOutputLayer OutputLayer { get; set; }
 
         private Matrix<float> crfWeightsDelta;
 
@@ -71,9 +72,9 @@ namespace RNNSharp.Networks
             return rnn;
         }
 
-        protected SimpleLayer CreateOutputLayer(LayerConfig outputLayerConfig, int sparseFeatureSize, int denseFeatureSize)
+        protected IOutputLayer CreateOutputLayer(LayerConfig outputLayerConfig, int sparseFeatureSize, int denseFeatureSize)
         {
-            SimpleLayer outputLayer = null;
+            IOutputLayer outputLayer = null;
             switch (outputLayerConfig.LayerType)
             {
                 case LayerType.SampledSoftmax:
@@ -99,12 +100,12 @@ namespace RNNSharp.Networks
             return outputLayer;
         }
 
-        protected virtual List<SimpleLayer> CreateLayers(List<LayerConfig> hiddenLayersConfig)
+        protected virtual List<ILayer> CreateLayers(List<LayerConfig> hiddenLayersConfig)
         {
-            var hiddenLayers = new List<SimpleLayer>();
+            var hiddenLayers = new List<ILayer>();
             for (var i = 0; i < hiddenLayersConfig.Count; i++)
             {
-                SimpleLayer layer = null;
+                ILayer layer = null;
                 switch (hiddenLayersConfig[i].LayerType)
                 {
                     case LayerType.LSTM:
@@ -483,23 +484,31 @@ namespace RNNSharp.Networks
             return Viterbi(ys, sent.TokensList.Count);
         }
 
-        public static SimpleLayer Load(LayerType layerType, BinaryReader br)
+        public static ILayer Load(LayerType layerType, BinaryReader br, bool forTraining = false)
         {
+            ILayer layer = null;
             switch (layerType)
             {
                 case LayerType.LSTM:
-                    return LSTMLayer.Load(br, LayerType.LSTM);
+                    layer = new LSTMLayer();
+                    break;
                 case LayerType.DropOut:
-                    return DropoutLayer.Load(br, LayerType.DropOut);
+                    layer = new DropoutLayer();
+                    break;
                 case LayerType.Softmax:
-                    return SoftmaxLayer.Load(br, LayerType.Softmax);
+                    layer = new SoftmaxLayer();
+                    break;
                 case LayerType.SampledSoftmax:
-                    return SampledSoftmaxLayer.Load(br, LayerType.SampledSoftmax);
+                    layer = new SampledSoftmaxLayer();
+                    break;
                 case LayerType.Simple:
-                    return SimpleLayer.Load(br, LayerType.Simple);
+                    layer = new SimpleLayer();
+                    break;
             }
 
-            return null;
+            layer.Load(br, layerType, forTraining);
+
+            return layer;
         }
     }
 }

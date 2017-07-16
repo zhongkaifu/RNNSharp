@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,7 +37,7 @@ namespace RNNSharp.Networks
             denseFeatureGroupsList = new List<float[]>[HiddenLayerList.Count];
             for (var i = 0; i < HiddenLayerList.Count; i++)
             {
-                SimpleLayer layer = HiddenLayerList[i];
+                ILayer layer = HiddenLayerList[i];
                 layer.InitializeWeights(sparseFeatureSize, i == 0 ? (srcDenseFeatureSize + TrainingSet.DenseFeatureSize) : (srcDenseFeatureSize + HiddenLayerList[i - 1].LayerSize));
                 layer.SetRunningMode(RunningMode.Training);
 
@@ -58,11 +59,11 @@ namespace RNNSharp.Networks
 
         public override RNN<T> Clone()
         {
-            List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
+            List<ILayer> hiddenLayers = new List<ILayer>();
             List<float[]>[] denseFeatureGroupsList = new List<float[]>[HiddenLayerList.Count];
 
             int i = 0;
-            foreach (SimpleLayer layer in HiddenLayerList)
+            foreach (ILayer layer in HiddenLayerList)
             {
                 hiddenLayers.Add(layer.CreateLayerSharedWegiths());
                 denseFeatureGroupsList[i] = new List<float[]>();
@@ -73,7 +74,7 @@ namespace RNNSharp.Networks
 
             ForwardRNNSeq2Seq<T> rnn = new ForwardRNNSeq2Seq<T>();
             rnn.HiddenLayerList = hiddenLayers;
-            rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
+            rnn.OutputLayer = (IOutputLayer)OutputLayer.CreateLayerSharedWegiths();
             rnn.CRFWeights = CRFWeights;
             rnn.denseFeatureGroupsList = denseFeatureGroupsList;
             rnn.denseFeatureGroupsOutputLayer = denseFeatureGroupsOutputLayer;
@@ -328,13 +329,14 @@ namespace RNNSharp.Networks
                 if (runningMode == RunningMode.Training)
                 {
                     // error propogation
-                    OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
+                    OutputLayer.ComputeOutputLoss(CRFSeqOutput, state, curState);
 
                     //propogate errors to each layer from output layer to input layer
-                    HiddenLayerList[numLayers - 1].ComputeLayerErr(OutputLayer);
-                    for (var i = numLayers - 2; i >= 0; i--)
+                    OutputLayer.ComputeLayerErr(HiddenLayerList[numLayers - 1]);
+
+                    for (var i = numLayers - 1; i > 0; i--)
                     {
-                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i + 1]);
+                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i - 1]);
                     }
 
                     //Update net weights

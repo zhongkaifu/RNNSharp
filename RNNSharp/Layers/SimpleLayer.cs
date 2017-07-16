@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,13 +11,36 @@ namespace RNNSharp
     public class Neuron
     {
         public float[] Cells { get; set; }
-        public float[] PrevCellOutputs { get; set; }
+        public float[] Errs { get; set; }
+
+        public Neuron(int length)
+        {
+            Cells = new float[length];
+            Errs = new float[length];
+        }
+
+        public virtual int GetMaxCellIndex()
+        {
+            var imax = 0;
+            var dmax = Cells[0];
+            for (var k = 1; k < Cells.Length; k++)
+            {
+                if (Cells[k] > dmax)
+                {
+                    dmax = Cells[k];
+                    imax = k;
+                }
+            }
+            return imax;
+        }
     }
 
-    public class SimpleLayer
+    public class SimpleLayer : IOutputLayer
     {
         public float[] Cells { get; set; }
         public float[] Errs { get; set; }
+        public int SparseFeatureSize { get; set; }
+        public int DenseFeatureSize { get; set; }
 
         public List<int> LabelShortList { get; set; }
         public List<SparseVector> SparseFeatureGroups { get; set; }
@@ -25,6 +49,7 @@ namespace RNNSharp
         protected ParallelOptions parallelOption = new ParallelOptions();
         protected RunningMode runningMode;
 
+        public SimpleLayer() { }
 
         public SimpleLayer(LayerConfig config)
         {
@@ -47,15 +72,14 @@ namespace RNNSharp
         }
 
         public LayerConfig LayerConfig { get; set; }
-        public Matrix<float> SparseWeights { get; set; }
-        public Matrix<float> SparseWeightsLearningRate { get; set; }
+        protected Matrix<float> SparseWeights { get; set; }
+        Matrix<float> SparseWeightsLearningRate { get; set; }
 
-        public Matrix<float> SparseWeightsDelta { get; set; }
+        Matrix<float> SparseWeightsDelta { get; set; }
 
-        public Matrix<float> DenseWeights { get; set; }
-        public Matrix<float> DenseWeightsLearningRate { get; set; }
-        public virtual int SparseFeatureSize { get; set; }
-        public virtual int DenseFeatureSize { get; set; }
+        protected Matrix<float> DenseWeights { get; set; }
+        Matrix<float> DenseWeightsLearningRate { get; set; }
+
 
 
         public Matrix<float> DenseWeightsDelta { get; set; }
@@ -72,15 +96,17 @@ namespace RNNSharp
             return neuron;
         }
 
-        public virtual SimpleLayer CreateLayerSharedWegiths()
+        public virtual ILayer CreateLayerSharedWegiths()
         {
             SimpleLayer layer = new SimpleLayer(LayerConfig);
             ShallowCopyWeightTo(layer);
             return layer;
         }
 
-        public virtual void ShallowCopyWeightTo(SimpleLayer destLayer)
+        public virtual void ShallowCopyWeightTo(ILayer layer)
         {
+            SimpleLayer destLayer = layer as SimpleLayer;
+
             destLayer.DenseWeights = DenseWeights;
             destLayer.DenseWeightsDelta = DenseWeightsDelta;
             destLayer.DenseWeightsLearningRate = DenseWeightsLearningRate;
@@ -94,10 +120,12 @@ namespace RNNSharp
             destLayer.InitializeInternalTrainingParameters();
         }
 
-        public virtual void PreUpdateWeights(Neuron neuron, float[] errs)
+        public virtual void SetNeuron(Neuron neuron)
         {
             neuron.Cells.CopyTo(Cells, 0);
-            errs.CopyTo(Errs, 0);
+            //  neuron.Errs.CopyTo(Errs, 0);
+
+            Errs = neuron.Errs;
         }
 
         /// <summary>
@@ -174,29 +202,35 @@ namespace RNNSharp
             }
         }
 
-        public static SimpleLayer Load(BinaryReader br, LayerType layerType)
+        public virtual void Load(BinaryReader br, LayerType layerType, bool forTraining = false)
         {
-            LayerConfig config = new LayerConfig();
-            config.LayerSize = br.ReadInt32();
-            config.LayerType = layerType;
-            SimpleLayer layer = new SimpleLayer(config);
+            LayerConfig = new LayerConfig();
+            LayerConfig.LayerSize = br.ReadInt32();
+            LayerConfig.LayerType = layerType;
 
-            layer.SparseFeatureSize = br.ReadInt32();
-            layer.DenseFeatureSize = br.ReadInt32();
+            Cells = new float[LayerSize];
+            Errs = new float[LayerSize];
+            LabelShortList = new List<int>();
 
-            if (layer.SparseFeatureSize > 0)
+            SparseFeatureSize = br.ReadInt32();
+            DenseFeatureSize = br.ReadInt32();
+
+            if (SparseFeatureSize > 0)
             {
                 Logger.WriteLine("Loading sparse feature weights...");
-                layer.SparseWeights = RNNHelper.LoadMatrix(br);
+                SparseWeights = RNNHelper.LoadMatrix(br);
             }
 
-            if (layer.DenseFeatureSize > 0)
+            if (DenseFeatureSize > 0)
             {
                 Logger.WriteLine("Loading dense feature weights...");
-                layer.DenseWeights = RNNHelper.LoadMatrix(br);
+                DenseWeights = RNNHelper.LoadMatrix(br);
             }
 
-            return layer;
+            if (forTraining)
+            {
+                InitializeInternalTrainingParameters();
+            }
         }
 
         public virtual void CleanForTraining()
@@ -420,58 +454,22 @@ namespace RNNSharp
         {
         }
 
-        public virtual void ComputeLayerErr(SimpleLayer nextLayer, float[] destErrLayer, float[] srcErrLayer)
+        public virtual void ComputeLayerErr(float[] destErrLayer, bool cleanDest = true)
         {
-            var sampledSoftmaxLayer = nextLayer as SampledSoftmaxLayer;
-            if (sampledSoftmaxLayer != null)
-            {
-                RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, sampledSoftmaxLayer.DenseWeights, LayerSize,
-                    sampledSoftmaxLayer.negativeSampleWordList);
-            }
-            else
-            {
-                var lstmLayer = nextLayer as LSTMLayer;
-                if (lstmLayer != null)
-                {
-                    Array.Clear(destErrLayer, 0, destErrLayer.Length);
-                    for (var k = 0; k < nextLayer.LayerSize; k++)
-                    {
-                        int i = 0;
-                        float[] weights = lstmLayer.wDenseOutputGate.weights[k];
-                        float err = srcErrLayer[k];
-
-                        var moreItems = (LayerSize % Vector<float>.Count);
-                        while (i < LayerSize - moreItems)
-                        {
-                            Vector<float> vecWeights = new Vector<float>(weights, i);
-                            Vector<float> vecErrs = new Vector<float>(destErrLayer, i);
-                            vecErrs += err * vecWeights;
-
-                            vecErrs.CopyTo(destErrLayer, i);
-                            i += Vector<float>.Count;
-                        }
-
-                        while (i < LayerSize)
-                        {
-                            destErrLayer[i] += err * weights[i];
-                            i++;
-                        }
-                    }
-                }
-                else
-                {
-                    //error output->hidden for words from specific class
-                    RNNHelper.matrixXvectorADDErr(destErrLayer, srcErrLayer, nextLayer.DenseWeights, LayerSize,
-                        nextLayer.LayerSize);
-                }
-            }
-        }
-        public virtual void ComputeLayerErr(SimpleLayer nextLayer)
-        {
-            ComputeLayerErr(nextLayer, Errs, nextLayer.Errs);
+            RNNHelper.matrixXvectorADDErr(destErrLayer, Errs, DenseWeights, cleanDest);
         }
 
-        public virtual void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)
+        public virtual void ComputeLayerErr(List<float[]> destErrsList, bool cleanDest = true)
+        {
+            RNNHelper.matrixXvectorADDErr(destErrsList, Errs, DenseWeights, cleanDest);
+        }
+
+        public virtual void ComputeLayerErr(ILayer prevLayer)
+        {
+            ComputeLayerErr(prevLayer.Errs);
+        }
+
+        public virtual void ComputeOutputLoss(Matrix<float> CRFSeqOutput, State state, int timeat)
         {
             if (CRFSeqOutput != null)
             {

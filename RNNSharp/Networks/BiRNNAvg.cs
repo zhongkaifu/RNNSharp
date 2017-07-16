@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,7 @@ namespace RNNSharp.Networks
 
         }
 
-        protected override void InitOutputLayerCache()
+        protected override void InitLayersOutputCache()
         {
             layersOutput = new List<float[][]>();
             for (int i = 0; i < numOfLayers; i++)
@@ -38,17 +39,19 @@ namespace RNNSharp.Networks
 
             for (var i = 0; i < hiddenLayersConfig.Count; i++)
             {
-                SimpleLayer forwardLayer = forwardHiddenLayers[i];
-                SimpleLayer backwardLayer = backwardHiddenLayers[i];
+                ILayer forwardLayer = forwardHiddenLayers[i];
+                ILayer backwardLayer = backwardHiddenLayers[i];
 
                 var denseFeatureSize = TrainingSet.DenseFeatureSize;
+                var sparseFeatureSize = TrainingSet.SparseFeatureSize;
                 if (i > 0)
                 {
                     denseFeatureSize = forwardHiddenLayers[i - 1].LayerSize;
+                    sparseFeatureSize = 0;
                 }
 
-                forwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
-                backwardLayer.InitializeWeights(TrainingSet.SparseFeatureSize, denseFeatureSize);
+                forwardLayer.InitializeWeights(sparseFeatureSize, denseFeatureSize);
+                backwardLayer.InitializeWeights(sparseFeatureSize, denseFeatureSize);
 
                 forwardLayer.SetRunningMode(RunningMode.Training);
                 backwardLayer.SetRunningMode(RunningMode.Training);
@@ -57,7 +60,7 @@ namespace RNNSharp.Networks
             }
 
             outputLayerConfig.LayerSize = TrainingSet.TagSize;
-            SimpleLayer outputLayer = CreateOutputLayer(outputLayerConfig, TrainingSet.SparseFeatureSize, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
+            IOutputLayer outputLayer = CreateOutputLayer(outputLayerConfig, 0, forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize);
             outputLayer.SetRunningMode(RunningMode.Training);
 
             Logger.WriteLine($"Create a bi-directional recurrent neural network with {forwardHiddenLayers.Count} hidden layers. Forward and backward layers are concatnated.");
@@ -66,21 +69,21 @@ namespace RNNSharp.Networks
 
         public override RNN<T> Clone()
         {
-            List<SimpleLayer> forwardLayers = new List<SimpleLayer>();
-            List<SimpleLayer> backwardLayers = new List<SimpleLayer>();
+            List<ILayer> forwardLayers = new List<ILayer>();
+            List<ILayer> backwardLayers = new List<ILayer>();
 
-            foreach (SimpleLayer layer in forwardHiddenLayers)
+            foreach (ILayer layer in forwardHiddenLayers)
             {
                 forwardLayers.Add(layer.CreateLayerSharedWegiths());
             }
 
-            foreach (SimpleLayer layer in backwardHiddenLayers)
+            foreach (ILayer layer in backwardHiddenLayers)
             {
                 backwardLayers.Add(layer.CreateLayerSharedWegiths());
             }
 
             BiRNNAvg<T> rnn = new BiRNNAvg<T>();
-            rnn.InitCache(forwardLayers, backwardLayers, OutputLayer.CreateLayerSharedWegiths());
+            rnn.InitCache(forwardLayers, backwardLayers, (IOutputLayer)OutputLayer.CreateLayerSharedWegiths());
             rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
             rnn.bVQ = bVQ;
@@ -131,6 +134,66 @@ namespace RNNSharp.Networks
         public override int GetTopHiddenLayerSize()
         {
                 return forwardHiddenLayers[forwardHiddenLayers.Count - 1].LayerSize;
+        }
+
+
+        /// <summary>
+        ///     Pass error from the last layer to the first layer
+        /// </summary>
+        /// <param name="pSequence"></param>
+        /// <param name="seqFinalOutput"></param>
+        /// <returns></returns>
+        protected override void ComputeDeepErr(Sequence pSequence)
+        {
+            var numStates = pSequence.States.Length;
+            var numLayers = forwardHiddenLayers.Count;
+
+            //Calculate output layer error
+            for (var curState = 0; curState < numStates; curState++)
+            {
+                OutputLayer.Cells = OutputCells[curState].Cells;
+                OutputLayer.Errs = OutputCells[curState].Errs;
+                OutputLayer.ComputeOutputLoss(CRFSeqOutput, pSequence.States[curState], curState);
+            }
+
+
+            ////Now we already have err in output layer, let's pass them back to other layers
+            ////Pass error from i+1 to i layer
+            var errLayer1 = forwardCellList[numLayers - 1];
+            var errLayer2 = backwardCellList[numLayers - 1];
+
+            for (var curState = 0; curState < numStates; curState++)
+            {
+                OutputLayer.Errs = OutputCells[curState].Errs;
+                OutputLayer.ComputeLayerErr(errLayer1[curState].Errs);
+
+                errLayer1[curState].Errs.CopyTo(errLayer2[curState].Errs, 0);
+            }
+
+            for (var i = numLayers - 2; i >= 0; i--)
+            {
+                var lastForwardLayer = forwardHiddenLayers[i + 1];
+                var errLayerF = forwardCellList[i];
+                var srcErrLayerF = forwardCellList[i + 1];
+
+                var lastBackwardLayer = backwardHiddenLayers[i + 1];
+                var errLayerB = backwardCellList[i];
+                var srcErrLayerB = backwardCellList[i + 1];
+
+                for (var curState = 0; curState < numStates; curState++)
+                {
+                    var errLayerFCur = errLayerF[curState];
+                    var errLayerBCur = errLayerB[curState];
+
+                    lastForwardLayer.Errs = srcErrLayerF[curState].Errs;
+                    lastForwardLayer.ComputeLayerErr(errLayerFCur.Errs);
+
+                    lastBackwardLayer.Errs = srcErrLayerB[curState].Errs;
+                    lastBackwardLayer.ComputeLayerErr(errLayerBCur.Errs);
+                }
+
+            }
+
         }
     }
 }

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>RNNSharp</RootNamespace>
     <AssemblyName>RNNSharp</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -52,6 +52,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ISentence.cs" />
+    <Compile Include="Layers\ILayer.cs" />
+    <Compile Include="Layers\IOutputLayer.cs" />
     <Compile Include="Networks\BiRNN.cs" />
     <Compile Include="ConfigUtils.cs" />
     <Compile Include="Layers\DropoutLayer.cs" />

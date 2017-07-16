@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -35,7 +36,7 @@ namespace RNNSharp.Networks
             HiddenLayerList = CreateLayers(hiddenLayersConfig);
             for (var i = 0; i < HiddenLayerList.Count; i++)
             {
-                SimpleLayer layer = HiddenLayerList[i];
+                ILayer layer = HiddenLayerList[i];
                 layer.InitializeWeights(TrainingSet.SparseFeatureSize, i == 0 ? TrainingSet.DenseFeatureSize : HiddenLayerList[i - 1].LayerSize);
                 layer.SetRunningMode(RunningMode.Training);
 
@@ -49,7 +50,7 @@ namespace RNNSharp.Networks
             Logger.WriteLine($"Create a Forward recurrent neural network with {HiddenLayerList.Count} hidden layers");
         }
 
-        public List<SimpleLayer> HiddenLayerList { get; set; }
+        public List<ILayer> HiddenLayerList { get; set; }
 
         public override void UpdateWeights()
         {
@@ -63,16 +64,16 @@ namespace RNNSharp.Networks
 
         public override RNN<T> Clone()
         {
-            List<SimpleLayer> hiddenLayers = new List<SimpleLayer>();
+            List<ILayer> hiddenLayers = new List<ILayer>();
 
-            foreach (SimpleLayer layer in HiddenLayerList)
+            foreach (ILayer layer in HiddenLayerList)
             {
                 hiddenLayers.Add(layer.CreateLayerSharedWegiths());
             }
 
             ForwardRNN<T> rnn = new ForwardRNN<T>();
             rnn.HiddenLayerList = hiddenLayers;
-            rnn.OutputLayer = OutputLayer.CreateLayerSharedWegiths();
+            rnn.OutputLayer = (IOutputLayer)OutputLayer.CreateLayerSharedWegiths();
             rnn.CRFWeights = CRFWeights;
             rnn.MaxSeqLength = MaxSeqLength;
             rnn.bVQ = bVQ;
@@ -187,13 +188,14 @@ namespace RNNSharp.Networks
                 if (runningMode == RunningMode.Training)
                 {
                     // error propogation
-                    OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
+                    OutputLayer.ComputeOutputLoss(CRFSeqOutput, state, curState);
 
                     //propogate errors to each layer from output layer to input layer
-                    HiddenLayerList[numLayers - 1].ComputeLayerErr(OutputLayer);
-                    for (var i = numLayers - 2; i >= 0; i--)
+                    OutputLayer.ComputeLayerErr(HiddenLayerList[numLayers - 1]);
+
+                    for (var i = numLayers - 1; i > 0; i--)
                     {
-                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i + 1]);
+                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i - 1]);
                     }
 
                     //Update net weights
@@ -247,16 +249,18 @@ namespace RNNSharp.Networks
                         HiddenLayerList[i].ForwardPass(state.SparseFeature, HiddenLayerList[i - 1].Cells);
                     }
 
-                    OutputLayer.ComputeLayerErr(CRFSeqOutput, state, curState);
+                    OutputLayer.ComputeOutputLoss(CRFSeqOutput, state, curState);
 
-                    HiddenLayerList[numLayers - 1].ComputeLayerErr(OutputLayer);
-                    for (var i = numLayers - 2; i >= 0; i--)
+                    //propogate errors to each layer from output layer to input layer
+                    OutputLayer.ComputeLayerErr(HiddenLayerList[numLayers - 1]);
+
+                    for (var i = numLayers - 1; i > 0; i--)
                     {
-                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i + 1]);
+                        HiddenLayerList[i].ComputeLayerErr(HiddenLayerList[i - 1]);
                     }
 
                     //Update net weights
-                     OutputLayer.BackwardPass();
+                    OutputLayer.BackwardPass();
 
                     for (var i = 0; i < numLayers; i++)
                     { HiddenLayerList[i].BackwardPass(); }
@@ -305,17 +309,16 @@ namespace RNNSharp.Networks
             //Create cells of each layer
             var layerSize = br.ReadInt32();
             LayerType layerType = LayerType.None;
-            HiddenLayerList = new List<SimpleLayer>();
+            HiddenLayerList = new List<ILayer>();
             for (var i = 0; i < layerSize; i++)
             {
                 layerType = (LayerType)br.ReadInt32();
-                HiddenLayerList.Add(Load(layerType, br));
+                HiddenLayerList.Add(Load(layerType, br, bTrain));
 
-                SimpleLayer layer = HiddenLayerList[HiddenLayerList.Count - 1];
+                ILayer layer = HiddenLayerList[HiddenLayerList.Count - 1];
                 if (bTrain)
                 {
                     layer.SetRunningMode(RunningMode.Training);
-                    layer.InitializeInternalTrainingParameters();
                 }
                 else
                 {
@@ -325,12 +328,11 @@ namespace RNNSharp.Networks
 
             Logger.WriteLine("Create output layer");
             layerType = (LayerType)br.ReadInt32();
-            OutputLayer = Load(layerType, br);
+            OutputLayer = (IOutputLayer)Load(layerType, br, bTrain);
 
             if (bTrain)
             {
                 OutputLayer.SetRunningMode(RunningMode.Training);
-                OutputLayer.InitializeInternalTrainingParameters();
             }
             else
             {

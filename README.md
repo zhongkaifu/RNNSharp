@@ -371,3 +371,4 @@ The RNNSharp also provides some APIs for developers to leverage it into their pr
 1. [Project-Team IntuiDoc: Intuitive user interaction for document](https://www.irisa.fr/intuidoc/data/ra/intuidoc2015.pdf)
 2. [A New Pre-training Method for Training Deep Learning Models with Application to Spoken Language Understanding](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/IS2016.CameraReady-1.pdf)
 3. [Long Short-Term Memory](http://pages.cs.wisc.edu/~shavlik/cs638/lectureNotes/Long%20Short-Term%20Memory%20Networks.pdf)
+4. [Deep Learning](http://emma.memect.com/t/1e8f2b393ae2526a3c303ca6f3946e158f518d3a0ad6f5287967a2229395e9a2/Deep%20Learning.pdf)

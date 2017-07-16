@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -155,53 +156,87 @@ namespace RNNSharp
     public class LSTMNeuron : Neuron
     {
         public LSTMCell[] LSTMCells;
+
+        public LSTMNeuron(int length) : base(length)
+        {
+            LSTMCells = new LSTMCell[length];
+            LSTMCells = new LSTMCell[length];
+
+            for (int k = 0; k < length; k++)
+            {
+                LSTMCells[k] = new LSTMCell();
+                LSTMCells[k] = new LSTMCell();
+            }
+        }
     }
 
-    public class LSTMLayer : SimpleLayer
+    public class LSTMLayer : ILayer
     {
-        public LSTMCell[] LSTMCells;
+        LSTMCell[] LSTMCells;
+        LSTMCellWeight[] CellWeights;
+        LSTMCellWeightDeri[] CellWeightsDeri;
+        Vector4[] cellLearningRate;
+        Vector3[] peepholeLearningRate;
 
-        public LSTMCellWeight[] CellWeights;
-        public LSTMCellWeightDeri[] CellWeightsDeri;
-        protected Vector4[] cellLearningRate;
-        protected Vector3[] peepholeLearningRate;
-
-
-        protected Vector4[] cellDelta;
-        protected Vector3[] peepholeDelta;
-
+        Vector4[] cellDelta;
+        Vector3[] peepholeDelta;
 
         //Due to different data access patterns(random access for sparse features and continuous access for dense features), 
         //we use different data structure to keep features weights in order to improve performance 
-        protected LSTMGateWeight wDenseInputGate;
-        protected LSTMGateWeight wDenseForgetGate;
-        protected LSTMGateWeight wDenseCellGate;
-        public LSTMGateWeight wDenseOutputGate;
+        LSTMGateWeight wDenseInputGate;
+        LSTMGateWeight wDenseForgetGate;
+        LSTMGateWeight wDenseCellGate;
+        LSTMGateWeight wDenseOutputGate;
 
         //X - wInputInputGate
         //Y - wInputForgetGate
         //Z - wInputCell
         //W - wInputOutputGate
-        protected Vector4[][] sparseFeatureWeights;
-        protected Vector4[][] sparseFeatureLearningRate;
-        protected Dictionary<int, Vector3>[] sparseFeatureToHiddenDeri;
+        Vector4[][] sparseFeatureWeights;
+        Vector4[][] sparseFeatureLearningRate;
+        Dictionary<int, Vector3>[] sparseFeatureToHiddenDeri;
 
-        protected Vector4[][] sparseFeatureWeightsDelta;
+        Vector4[][] sparseFeatureWeightsDelta;
 
-        private Vector4 vecMaxGrad;
+        Vector4 vecMaxGrad;
+        Vector3 vecMaxGrad3;
+        Vector4 vecMinGrad;
+        Vector3 vecMinGrad3;
 
-        private Vector3 vecMaxGrad3;
-        private Vector4 vecMinGrad;
-        private Vector3 vecMinGrad3;
-
-        private Vector4 vecNormalLearningRate;
-        private Vector3 vecNormalLearningRate3;
+        Vector4 vecNormalLearningRate;
+        Vector3 vecNormalLearningRate3;
 
         LSTMLayerConfig config;
 
-        public LSTMLayer(LSTMLayerConfig config) : base(config)
+        public float[] Cells { get; set; }
+        public float[] Errs { get; set; }
+        public int SparseFeatureSize { get; set; }
+        public int DenseFeatureSize { get; set; }
+        public int LayerSize
+        {
+            get { return config.LayerSize; }
+            set { config.LayerSize = value; }
+        }
+
+        public LayerType LayerType
+        {
+            get { return config.LayerType; }
+            set { config.LayerType = value; }
+        }
+
+        public LayerConfig LayerConfig { get; set; }
+
+        public List<SparseVector> SparseFeatureGroups { get; set; }
+        public List<float[]> DenseFeatureGroups { get; set; }
+
+        public LSTMLayer() { }
+        public LSTMLayer(LSTMLayerConfig config)
         {
             this.config = config;
+
+            Cells = new float[LayerSize];
+            Errs = new float[LayerSize];
+
             LSTMCells = new LSTMCell[LayerSize];
             for (var i = 0; i < LayerSize; i++)
             {
@@ -209,7 +244,7 @@ namespace RNNSharp
             }
         }
 
-        public override SimpleLayer CreateLayerSharedWegiths()
+        public ILayer CreateLayerSharedWegiths()
         {
             LSTMLayer layer = new LSTMLayer(config);
             ShallowCopyWeightTo(layer);
@@ -217,7 +252,7 @@ namespace RNNSharp
             return layer;
         }
 
-        public override Neuron CopyNeuronTo(Neuron neuron)
+        public Neuron CopyNeuronTo(Neuron neuron)
         {
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
             Cells.CopyTo(lstmNeuron.Cells, 0);
@@ -229,7 +264,7 @@ namespace RNNSharp
             return lstmNeuron;
         }
 
-        public override void PreUpdateWeights(Neuron neuron, float[] errs)
+        public void SetNeuron(Neuron neuron)
         {
             LSTMNeuron lstmNeuron = neuron as LSTMNeuron;
             for (int i = 0; i < LayerSize; i++)
@@ -237,10 +272,12 @@ namespace RNNSharp
                 LSTMCells[i].Set(lstmNeuron.LSTMCells[i]);
             }
 
-            errs.CopyTo(Errs, 0);
+            //  neuron.Errs.CopyTo(Errs, 0);
+
+            Errs = neuron.Errs;
         }
 
-        public override void ShallowCopyWeightTo(SimpleLayer destLayer)
+        public void ShallowCopyWeightTo(ILayer destLayer)
         {
             LSTMLayer layer = destLayer as LSTMLayer;
             layer.SparseFeatureSize = SparseFeatureSize;
@@ -262,7 +299,7 @@ namespace RNNSharp
             layer.InitializeInternalTrainingParameters();
         }
 
-        public override void InitializeInternalTrainingParameters()
+        public void InitializeInternalTrainingParameters()
         {
             if (SparseFeatureSize > 0)
             {
@@ -303,7 +340,7 @@ namespace RNNSharp
         }
 
 
-        public override void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
+        public void InitializeWeights(int sparseFeatureSize, int denseFeatureSize)
         {
             SparseFeatureSize = sparseFeatureSize;
             DenseFeatureSize = denseFeatureSize;
@@ -649,7 +686,7 @@ namespace RNNSharp
             return m;
         }
 
-        public override void Save(BinaryWriter fo)
+        public void Save(BinaryWriter fo)
         {
             fo.Write(LayerSize);
             fo.Write(SparseFeatureSize);
@@ -680,41 +717,52 @@ namespace RNNSharp
             }
         }
 
-        public static LSTMLayer Load(BinaryReader br, LayerType layerType)
+        public void Load(BinaryReader br, LayerType layerType, bool forTraining = false)
         {
-            LSTMLayerConfig config = new LSTMLayerConfig();
+            config = new LSTMLayerConfig();
             config.LayerSize = br.ReadInt32();
             config.LayerType = layerType;
-            LSTMLayer layer = new LSTMLayer(config);
 
-            layer.SparseFeatureSize = br.ReadInt32();
-            layer.DenseFeatureSize = br.ReadInt32();
+            Cells = new float[LayerSize];
+            Errs = new float[LayerSize];
+
+            LSTMCells = new LSTMCell[LayerSize];
+            for (var i = 0; i < LayerSize; i++)
+            {
+                LSTMCells[i] = new LSTMCell();
+            }
+
+            SparseFeatureSize = br.ReadInt32();
+            DenseFeatureSize = br.ReadInt32();
 
             //Create cells of each layer
-            layer.InitializeCellWeights(br);
+            InitializeCellWeights(br);
 
             //Load weight matrix between each two layer pairs
             //weight input->hidden
-            if (layer.SparseFeatureSize > 0)
+            if (SparseFeatureSize > 0)
             {
                 Logger.WriteLine("Loading sparse feature weights...");
-                layer.sparseFeatureWeights = LoadLSTMWeights(br);
+                sparseFeatureWeights = LoadLSTMWeights(br);
             }
 
-            if (layer.DenseFeatureSize > 0)
+            if (DenseFeatureSize > 0)
             {
                 //weight fea->hidden
                 Logger.WriteLine("Loading dense feature weights...");
-                layer.wDenseInputGate = LoadLSTMGateWeights(br);
-                layer.wDenseCellGate = LoadLSTMGateWeights(br);
-                layer.wDenseForgetGate = LoadLSTMGateWeights(br);
-                layer.wDenseOutputGate = LoadLSTMGateWeights(br);
+                wDenseInputGate = LoadLSTMGateWeights(br);
+                wDenseCellGate = LoadLSTMGateWeights(br);
+                wDenseForgetGate = LoadLSTMGateWeights(br);
+                wDenseOutputGate = LoadLSTMGateWeights(br);
             }
 
-            return layer;
+            if (forTraining)
+            {
+                InitializeInternalTrainingParameters();
+            }
         }
 
-        public override void CleanForTraining()
+        public void CleanForTraining()
         {
             if (SparseFeatureSize > 0)
             {
@@ -761,8 +809,14 @@ namespace RNNSharp
             vecMinGrad3 = new Vector3(-RNNHelper.GradientCutoff, -RNNHelper.GradientCutoff, -RNNHelper.GradientCutoff);
         }
 
+        public void ForwardPass(SparseVector sparseFeature, float[] denseFeature)
+        {
+            ForwardPass(new List<SparseVector> {sparseFeature }, new List <float[]>{ denseFeature});
+
+        }
+
         // forward process. output layer consists of tag value
-        public override void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroup)
+        public void ForwardPass(List<SparseVector> sparseFeatureGroups, List<float[]> denseFeatureGroup)
         {
             //inputs(t) -> hidden(t)
             //Get sparse feature and apply it into hidden layer
@@ -914,6 +968,88 @@ namespace RNNSharp
             }
         }
 
+        public void ComputeLayerErr(ILayer prevLayer)
+        {
+            ComputeLayerErr(prevLayer.Errs);
+        }
+
+        public void ComputeLayerErr(List<float[]> destErrsList, bool cleanDest = true)
+        {
+            if (cleanDest == true)
+            {
+                foreach (float[] destErr in destErrsList)
+                {
+                    Array.Clear(destErr, 0, destErr.Length);
+                }
+            }
+
+
+            int height = wDenseOutputGate.weights.Length;
+            for (var k = 0; k < height; k++)
+            {
+                int i = 0;
+                float[] weights = wDenseOutputGate.weights[k];
+                float err = Errs[k];
+
+                foreach (float[] destErr in destErrsList)
+                {
+                    int j = 0;
+                    var moreItems = (destErr.Length % Vector<float>.Count);
+                    while (j < destErr.Length - moreItems)
+                    {
+                        Vector<float> vecWeights = new Vector<float>(weights, i);
+                        Vector<float> vecErrs = new Vector<float>(destErr, j);
+                        vecErrs += err * vecWeights;
+
+                        vecErrs.CopyTo(destErr, j);
+                        i += Vector<float>.Count;
+                        j += Vector<float>.Count;
+                    }
+
+                    while (j < destErr.Length)
+                    {
+                        destErr[j] += err * weights[i];
+                        i++;
+                        j++;
+                    }
+                }
+            }
+        }
+
+
+        public void ComputeLayerErr(float[] destErr, bool cleanDest = true)
+        {
+            if (cleanDest == true)
+            {
+                Array.Clear(destErr, 0, destErr.Length);
+            }
+            int height = wDenseOutputGate.weights.Length;
+            int weight = wDenseOutputGate.weights[0].Length;
+            for (var k = 0; k < height; k++)
+            {
+                int i = 0;
+                float[] weights = wDenseOutputGate.weights[k];
+                float err = Errs[k];
+
+                var moreItems = (weight % Vector<float>.Count);
+                while (i < weight - moreItems)
+                {
+                    Vector<float> vecWeights = new Vector<float>(weights, i);
+                    Vector<float> vecErrs = new Vector<float>(destErr, i);
+                    vecErrs += err * vecWeights;
+
+                    vecErrs.CopyTo(destErr, i);
+                    i += Vector<float>.Count;
+                }
+
+                while (i < weight)
+                {
+                    destErr[i] += err * weights[i];
+                    i++;
+                }
+            }
+        }
+
         private void UpdateGateWeights(LSTMGateWeight gateWeight, int i, float featureDerivate, float c_yForget, float err)
         {
             var j = 0;
@@ -957,7 +1093,7 @@ namespace RNNSharp
             }
         }
 
-        public override void BackwardPass()
+        public void BackwardPass()
         {
             //put variables for derivaties in weight class and cell class
 
@@ -1051,7 +1187,7 @@ namespace RNNSharp
                 LSTMCells[i] = c;
             }
         }
-        public override void UpdateWeights()
+        public void UpdateWeights()
         {
             wDenseInputGate.UpdateWeights();
             wDenseForgetGate.UpdateWeights();
@@ -1092,36 +1228,48 @@ namespace RNNSharp
                 cellWeights_i.wCellOut += vecCellDelta.W;
 
                 //Update weights for sparse features
-                var wlr_i = sparseFeatureLearningRate[i];
-                var sparseFeatureWeightsDelta_i = sparseFeatureWeightsDelta[i];
-                var sparseFeatureWeights_i = sparseFeatureWeights[i];
-                for (var j = 0; j < SparseFeatureSize; j++)
+                if (SparseFeatureSize > 0)
                 {
-                    if (sparseFeatureWeightsDelta_i[j] != Vector4.Zero)
+                    var wlr_i = sparseFeatureLearningRate[i];
+                    var sparseFeatureWeightsDelta_i = sparseFeatureWeightsDelta[i];
+                    var sparseFeatureWeights_i = sparseFeatureWeights[i];
+                    for (var j = 0; j < SparseFeatureSize; j++)
                     {
-                        Vector4 vecDelta = sparseFeatureWeightsDelta_i[j];
-                        sparseFeatureWeightsDelta_i[j] = Vector4.Zero;
+                        if (sparseFeatureWeightsDelta_i[j] != Vector4.Zero)
+                        {
+                            Vector4 vecDelta = sparseFeatureWeightsDelta_i[j];
+                            sparseFeatureWeightsDelta_i[j] = Vector4.Zero;
 
-                        vecDelta = vecDelta / RNNHelper.MiniBatchSize;
+                            vecDelta = vecDelta / RNNHelper.MiniBatchSize;
 
-                        vecDelta = Vector4.Clamp(vecDelta, vecMinGrad, vecMaxGrad);
+                            vecDelta = Vector4.Clamp(vecDelta, vecMinGrad, vecMaxGrad);
 
-                        var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[j]);
-                        sparseFeatureWeights_i[j] += vecDelta * vecLearningRate;
+                            var vecLearningRate = ComputeLearningRate(vecDelta, ref wlr_i[j]);
+                            sparseFeatureWeights_i[j] += vecDelta * vecLearningRate;
+                        }
                     }
                 }
             }
         }
 
-        public override void Reset()
+        public void Reset()
         {
             for (var i = 0; i < LayerSize; i++)
             {
                 Cells[i] = 0;
                 InitializeLSTMCell(LSTMCells[i], CellWeights[i], CellWeightsDeri[i]);
 
-                sparseFeatureToHiddenDeri[i].Clear();
+                if (SparseFeatureSize > 0)
+                {
+                    sparseFeatureToHiddenDeri[i].Clear();
+                }
             }
+        }
+
+        protected RunningMode runningMode;
+        public void SetRunningMode(RunningMode mode)
+        {
+            runningMode = mode;
         }
 
         private void InitializeLSTMCell(LSTMCell c, LSTMCellWeight cw, LSTMCellWeightDeri deri)

@@ -1,6 +1,8 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -9,23 +11,23 @@ namespace RNNSharp
 {
     internal class SampledSoftmaxLayer : SoftmaxLayer
     {
-        private readonly int NegativeSampleSize = 10;
+        private int negativeSampleSize => config.NegativeSampleSize;
         public HashSet<int> negativeSampleWordList = new HashSet<int>();
         public Random rand = new Random();
         SampledSoftmaxLayerConfig config;
 
+        public SampledSoftmaxLayer() { }
         public SampledSoftmaxLayer(SampledSoftmaxLayerConfig config) : base(config)
         {
             this.config = config;
-            NegativeSampleSize = config.NegativeSampleSize;
-            if (NegativeSampleSize > LayerSize)
+            if (negativeSampleSize > LayerSize)
             {
                 throw new ArgumentException(
-                    $"The size of negative sampling('{NegativeSampleSize}') cannot be greater than the hidden layer size('{LayerSize}').");
+                    $"The size of negative sampling('{negativeSampleSize}') cannot be greater than the hidden layer size('{LayerSize}').");
             }
         }
 
-        public override SimpleLayer CreateLayerSharedWegiths()
+        public override ILayer CreateLayerSharedWegiths()
         {
             SampledSoftmaxLayer layer = new SampledSoftmaxLayer(config);
             ShallowCopyWeightTo(layer);
@@ -46,7 +48,7 @@ namespace RNNSharp
                     negativeSampleWordList.Add(labelId);
                 }
 
-                for (var i = 0; i < NegativeSampleSize; i++)
+                for (var i = 0; i < negativeSampleSize; i++)
                 {
                     var wordId = rand.Next() % LayerSize;
                     while (negativeSampleWordList.Contains(wordId))
@@ -105,6 +107,16 @@ namespace RNNSharp
             }
         }
 
+        public override void ComputeLayerErr(float[] destErrs, bool cleanDest = true)
+        {
+            RNNHelper.matrixXvectorADDErr(destErrs, Errs, DenseWeights, negativeSampleWordList, cleanDest);
+        }
+
+        public override void ComputeLayerErr(ILayer prevLayer)
+        {
+            ComputeLayerErr(prevLayer.Errs);
+        }
+
         public override int GetBestOutputIndex()
         {
             if (runningMode == RunningMode.Training)
@@ -135,7 +147,7 @@ namespace RNNSharp
 
         }
 
-        public override void ComputeLayerErr(Matrix<float> CRFSeqOutput, State state, int timeat)
+        public override void ComputeOutputLoss(Matrix<float> CRFSeqOutput, State state, int timeat)
         {
             if (CRFSeqOutput != null)
             {

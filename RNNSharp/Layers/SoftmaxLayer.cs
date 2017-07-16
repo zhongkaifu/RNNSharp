@@ -9,6 +9,7 @@ namespace RNNSharp
 {
     class SoftmaxLayer : SimpleLayer
     {
+        public SoftmaxLayer() { }
         public SoftmaxLayer(SoftmaxLayerConfig config) : base(config)
         {
         }
@@ -46,5 +47,6 @@ namespace RNNSharp
                 i++;
             }
         }
+
     }
 }

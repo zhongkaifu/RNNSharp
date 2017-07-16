@@ -1,4 +1,5 @@
 ﻿using AdvUtils;
+using RNNSharp.Layers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,24 +11,28 @@ namespace RNNSharp
     public class DropoutNeuron : Neuron
     {
         public bool[] mask;
+        public DropoutNeuron(int length) : base(length)
+        {
+            mask = new bool[length];
+        }
     }
 
     internal class DropoutLayer : SimpleLayer
     {
-        private readonly float dropoutRatio;
-        private readonly Random rnd;
+        private float dropoutRatio => config.DropoutRatio;
+        private Random rnd;
         private bool[] mask;
         DropoutLayerConfig config;
 
+        public DropoutLayer() { }
         public DropoutLayer(DropoutLayerConfig config) : base(config)
         {
             this.config = config;
-            dropoutRatio = config.DropoutRatio;
             mask = new bool[LayerSize];
             rnd = new Random();
         }
 
-        public override SimpleLayer CreateLayerSharedWegiths()
+        public override ILayer CreateLayerSharedWegiths()
         {
             DropoutLayer layer = new DropoutLayer(config);
             ShallowCopyWeightTo(layer);
@@ -45,7 +50,7 @@ namespace RNNSharp
             return dropoutNeuron;
         }
 
-        public override void PreUpdateWeights(Neuron neuron, float[] errs)
+        public override void SetNeuron(Neuron neuron)
         {
             DropoutNeuron dropoutNeuron = neuron as DropoutNeuron;
             dropoutNeuron.Cells.CopyTo(Cells, 0);
@@ -57,7 +62,7 @@ namespace RNNSharp
                 }
                 else
                 {
-                    Errs[i] = errs[i];
+                    Errs[i] = neuron.Errs[i];
                 }
             }
         }
@@ -142,9 +147,9 @@ namespace RNNSharp
         {
         }
 
-        public override void ComputeLayerErr(SimpleLayer nextLayer)
+        public override void ComputeLayerErr(ILayer prevLayer)
         {
-            base.ComputeLayerErr(nextLayer);
+            base.ComputeLayerErr(prevLayer);
             //Apply drop out on error in hidden layer
             for (var i = 0; i < LayerSize; i++)
             {
@@ -157,33 +162,30 @@ namespace RNNSharp
 
         public override void Save(BinaryWriter fo)
         {
-            base.Save(fo);
+            fo.Write(LayerSize);
+            fo.Write(SparseFeatureSize);
+            fo.Write(DenseFeatureSize);
             fo.Write(dropoutRatio);
         }
 
-        public static DropoutLayer Load(BinaryReader br, LayerType layerType)
+        public override void Load(BinaryReader br, LayerType layerType, bool forTraining = false)
         {
-            DropoutLayer dropoutLayer;
-            DropoutLayerConfig config = new DropoutLayerConfig();
-            SimpleLayer simpleLayer = SimpleLayer.Load(br, layerType);
+            config = new DropoutLayerConfig();
+            config.LayerSize = br.ReadInt32();
+
+            mask = new bool[LayerSize];
+            rnd = new Random();
+
+            int sparseFeatureSize = br.ReadInt32();
+            int denseFeatureSize = br.ReadInt32();
             config.DropoutRatio = br.ReadSingle();
-            config.LayerSize = simpleLayer.LayerSize;
 
-            dropoutLayer = new DropoutLayer(config);
-            dropoutLayer.SparseFeatureSize = simpleLayer.SparseFeatureSize;
-            dropoutLayer.DenseFeatureSize = simpleLayer.DenseFeatureSize;
+            InitializeWeights(sparseFeatureSize, denseFeatureSize);
 
-            if (dropoutLayer.SparseFeatureSize > 0)
+            if (forTraining)
             {
-                dropoutLayer.SparseWeights = simpleLayer.SparseWeights;
+                InitializeInternalTrainingParameters();
             }
-
-            if (dropoutLayer.DenseFeatureSize > 0)
-            {
-                dropoutLayer.DenseWeights = simpleLayer.DenseWeights;
-            }
-
-            return dropoutLayer;
         }
     }
 }
