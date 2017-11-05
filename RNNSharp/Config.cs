@@ -236,24 +236,32 @@ namespace RNNSharp
 
         private void SetTFeatures()
         {
-            //Load template feature set
-            var tfeatureFilePath = GetFilePath(currentDirectory, config.GetValueRequired(TFEATURE_FILENAME));
-            Logger.WriteLine($"Loading template feature set from {tfeatureFilePath}");
-            tFeaturizer = new TemplateFeaturizer(tfeatureFilePath);
-
-            var tfeatureWeightType = config.GetValueRequired(TFEATURE_WEIGHT_TYPE);
-            tFeatureWeightType = tfeatureWeightType.Equals("binary", StringComparison.InvariantCultureIgnoreCase)
-                ? TFEATURE_WEIGHT_TYPE_ENUM.BINARY
-                : TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
-            Logger.WriteLine($"TFeature weight type: {tfeatureWeightType}");
-
-            var tfeatureContext = config.GetValueRequired(TFEATURE_CONTEXT);
-            featureContext.Add(TFEATURE_CONTEXT, new List<int>());
-            foreach (var contextOffset in tfeatureContext.Split(','))
+            string tfeatureFileName = config.GetValueOptional(TFEATURE_FILENAME);
+            if (String.IsNullOrEmpty(tfeatureFileName) == false)
             {
-                featureContext[TFEATURE_CONTEXT].Add(int.Parse(contextOffset));
+                //Load template feature set
+                var tfeatureFilePath = GetFilePath(currentDirectory, tfeatureFileName);
+                Logger.WriteLine($"Loading template feature set from {tfeatureFilePath}");
+                tFeaturizer = new TemplateFeaturizer(tfeatureFilePath);
+
+                var tfeatureWeightType = config.GetValueRequired(TFEATURE_WEIGHT_TYPE);
+                tFeatureWeightType = tfeatureWeightType.Equals("binary", StringComparison.InvariantCultureIgnoreCase)
+                    ? TFEATURE_WEIGHT_TYPE_ENUM.BINARY
+                    : TFEATURE_WEIGHT_TYPE_ENUM.FREQUENCY;
+                Logger.WriteLine($"TFeature weight type: {tfeatureWeightType}");
+
+                var tfeatureContext = config.GetValueRequired(TFEATURE_CONTEXT);
+                featureContext.Add(TFEATURE_CONTEXT, new List<int>());
+                foreach (var contextOffset in tfeatureContext.Split(','))
+                {
+                    featureContext[TFEATURE_CONTEXT].Add(int.Parse(contextOffset));
+                }
+                Logger.WriteLine($"TFeature context: {tfeatureContext}");
             }
-            Logger.WriteLine($"TFeature context: {tfeatureContext}");
+            else
+            {
+                Logger.WriteLine($"No TFeature available.");
+            }
         }
 
         private void SetPretrainedModel()
