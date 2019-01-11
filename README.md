@@ -1,3 +1,6 @@
+[Note: RNNSharp is in maintenance status and won't have new feature any more. For new neural network framework, please try Seq2SeqSharp (https://github.com/zhongkaifu/Seq2SeqSharp)]  
+
+
 # RNNSharp
 RNNSharp is a toolkit of deep recurrent neural network which is widely used for many different kinds of tasks, such as sequence labeling, sequence-to-sequence and so on. It's written by C# language and based on .NET framework 4.6 or above version.
 
