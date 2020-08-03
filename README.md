@@ -1,4 +1,5 @@
-﻿Donate a beverage to help me to keep Seq2SeqSharp up to date :) [![Support via PayPal](https://www.paypalobjects.com/en_GB/i/btn/btn_donate_SM.gif)](https://www.paypal.me/fuzhongkai/)
+﻿Donate a beverage to help me to keep Seq2SeqSharp up to date :) [![Support via PayPal](https://www.paypalobjects.com/en_GB/i/btn/btn_donate_SM.gif)](https://www.paypal.me/fuzhongkai/)  
+ 
 [Note: RNNSharp is in maintenance status and won't have new feature any more. For new neural network framework, please try Seq2SeqSharp (https://github.com/zhongkaifu/Seq2SeqSharp)]  
 
 
